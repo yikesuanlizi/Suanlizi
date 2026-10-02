@@ -1,5 +1,5 @@
 // 工具搜索能力：为 delayed binding 模式提供基于语义关键词的工具查询与可见工具绑定。
-import { ToolRegistry, type ToolDefinition } from '@nexus/tools';
+import { ToolRegistry, type ToolDefinition } from '@suanlizi/tools';
 
 // TOOL_SEARCH_TOOL_NAME：内部工具搜索工具的固定名称
 export const TOOL_SEARCH_TOOL_NAME = 'tool_search';

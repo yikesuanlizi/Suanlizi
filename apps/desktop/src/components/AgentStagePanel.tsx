@@ -30,7 +30,7 @@ export function AgentStagePanel({
   const [showNudge, setShowNudge] = useState(() => {
     if (childRows.length > 0) return false;
     try {
-      return localStorage.getItem('nexus.agentNudgeDismissed') !== '1';
+      return localStorage.getItem('suanlizi.agentNudgeDismissed') !== '1';
     } catch {
       return true;
     }
@@ -39,7 +39,7 @@ export function AgentStagePanel({
   const handleNudgeClick = useCallback(() => {
     setShowNudge(false);
     try {
-      localStorage.setItem('nexus.agentNudgeDismissed', '1');
+      localStorage.setItem('suanlizi.agentNudgeDismissed', '1');
     } catch { /* ignore */ }
   }, []);
 
@@ -54,16 +54,28 @@ export function AgentStagePanel({
         </div>
         <span>{childRows.length > 0 ? childRows.length : 1}</span>
       </div>
-      <article className={['agentStageAvatarCard', mainRow.tone].join(' ')} data-selected={selectedThreadId === mainRow.threadId ? 'true' : undefined}>
+      <article
+        className={['agentStageAvatarCard', mainRow.tone].join(' ')}
+        data-selected={selectedThreadId === mainRow.threadId ? 'true' : undefined}
+      >
+        {/* 机器人本身保留互动（点击换表情/戳一戳），整卡不再跳转详情——
+            由 "i" 按钮进入主 Agent 详情；其余区域（含叹号徽标位置）点击均进详情。
+            — Chinese: the robot avatar keeps its playful interaction; card body
+            clicks (except the avatar) open the main-agent detail via the info button. */}
+        {onSelectAgent ? (
+          <button
+            type="button"
+            className="agentStageCardClickLayer"
+            onClick={() => onSelectAgent(mainRow.threadId)}
+            aria-label={locale === 'zh' ? '查看主 Agent 详情' : 'View main agent details'}
+          />
+        ) : null}
         {onSelectAgent ? (
           <button
             type="button"
             className="agentStageInfoButton"
-            onClick={() => onSelectAgent(mainRow.threadId)}
-            aria-pressed={selectedThreadId === mainRow.threadId}
-            aria-label={selectedThreadId === mainRow.threadId
-              ? (locale === 'zh' ? '收起主 Agent 详情' : 'Collapse main agent details')
-              : (locale === 'zh' ? '查看主 Agent 详情' : 'View main agent details')}
+            onClick={(event) => { event.stopPropagation(); onSelectAgent(mainRow.threadId); }}
+            aria-label={locale === 'zh' ? '查看主 Agent 详情' : 'View main agent details'}
           >
             i
           </button>
@@ -109,6 +121,16 @@ export function AgentStagePanel({
             style={{ '--agent-depth': row.depth } as CSSProperties}
             data-selected={selectedThreadId === row.threadId ? 'true' : undefined}
           >
+            {/* 子 agent 卡整卡点击进详情（含状态徽标），机器人小头像不单独互动。
+                — Chinese: the whole child card opens the detail; the small avatar has no separate interaction. */}
+            {onSelectAgent ? (
+              <button
+                type="button"
+                className="agentStageCardClickLayer"
+                onClick={() => onSelectAgent(row.threadId)}
+                aria-label={locale === 'zh' ? `查看 ${row.title} 详情` : `View ${row.title} details`}
+              />
+            ) : null}
             <div className="agentCardTop">
               <div className="agentAvatar" aria-hidden="true">
                 <RobotMoodIcon variant={moodVariantForTone(row.tone)} />
@@ -116,26 +138,13 @@ export function AgentStagePanel({
               <span className={['agentStageBadge', row.tone].join(' ')}>
                 {row.statusLabel}
               </span>
-              {onSelectAgent ? (
-                <button
-                  type="button"
-                  className="agentStageInfoButton"
-                  onClick={() => onSelectAgent(row.threadId)}
-                  aria-pressed={selectedThreadId === row.threadId}
-                  aria-label={selectedThreadId === row.threadId
-                    ? (locale === 'zh' ? `收起 ${row.title} 详情` : `Collapse ${row.title} details`)
-                    : (locale === 'zh' ? `查看 ${row.title} 详情` : `View ${row.title} details`)}
-                >
-                  i
-                </button>
-              ) : null}
             </div>
             <div className="agentStageMain">
               <div className="agentStageTitleLine">
                 <strong>{row.title}</strong>
               </div>
-              <span className="agentStageRole">{row.role}</span>
-              <p>{row.latestAction}</p>
+              {row.role && row.role !== row.title ? <span className="agentStageRole">{row.role}</span> : null}
+              {row.latestAction ? <p>{row.latestAction}</p> : null}
             </div>
             <time>{formatTimestamp(row.updatedAt, locale)}</time>
           </article>
@@ -163,7 +172,7 @@ function moodVariantForTone(tone: AgentStageRow['tone']): RobotMoodVariant {
 function mainAgentTitle(locale: Locale): string {
   // 主 Agent 标题文本（多语言）
   // Main agent title text (i18n)
-  return locale === 'zh' ? 'Nexus 主控 Agent' : 'Nexus Primary Agent';
+  return locale === 'zh' ? 'Suanlizi 主控 Agent' : 'Suanlizi Primary Agent';
 }
 
 function mainAgentStatusText(row: AgentStageRow, locale: Locale): string {

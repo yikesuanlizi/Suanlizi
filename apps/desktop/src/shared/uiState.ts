@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 const RIGHT_PANE_MAIN_MIN = 300;
 const STANDARD_RIGHT_PANE_MIN = 220;
@@ -20,10 +20,16 @@ export interface ToastNotice {
 export function useToastNotice(timeoutMs = 1800) {
   const [toast, setToast] = useState<ToastNotice | null>(null);
   const [timerId, setTimerId] = useState<number | null>(null);
+  const lastToastRef = useRef<{ text: string; at: number }>({ text: '', at: 0 });
 
   const showToast = useCallback((text: string) => {
+    const normalized = text.trim();
+    if (!normalized) return;
+    const now = Date.now();
+    if (lastToastRef.current.text === normalized && now - lastToastRef.current.at < timeoutMs) return;
+    lastToastRef.current = { text: normalized, at: now };
     if (timerId) window.clearTimeout(timerId);
-    setToast({ id: Date.now(), text });
+    setToast({ id: now, text: normalized });
     setTimerId(window.setTimeout(() => setToast(null), timeoutMs));
   }, [timerId, timeoutMs]);
 
@@ -42,7 +48,7 @@ export function useRightPaneSizing(visible: boolean, mode: RightPaneSizingMode =
       return clampRightPaneWidth(stored || defaultFilesPaneWidth(), FILES_RIGHT_PANE_MIN);
     }
     if (mode === 'browser') {
-      const stored = Number(localStorage.getItem('nexus.browserPaneWidth') ?? 0);
+      const stored = Number(localStorage.getItem('suanlizi.browserPaneWidth') ?? 0);
       return clampRightPaneWidth(stored || defaultBrowserPaneWidth(), BROWSER_RIGHT_PANE_MIN);
     }
     if (mode === 'terminal') {
@@ -68,7 +74,7 @@ export function useRightPaneSizing(visible: boolean, mode: RightPaneSizingMode =
         return clampRightPaneWidth(stored || defaultFilesPaneWidth(), FILES_RIGHT_PANE_MIN);
       }
       if (mode === 'browser') {
-        const stored = Number(localStorage.getItem('nexus.browserPaneWidth') ?? 0);
+        const stored = Number(localStorage.getItem('suanlizi.browserPaneWidth') ?? 0);
         return clampRightPaneWidth(stored || defaultBrowserPaneWidth(), BROWSER_RIGHT_PANE_MIN);
       }
       if (mode === 'terminal') {
@@ -102,7 +108,7 @@ export function useRightPaneSizing(visible: boolean, mode: RightPaneSizingMode =
       const nextWidth = Math.min(max, Math.max(resizeMin, next));
       if (mode === 'workflow') localStorage.setItem('nexus.workflowPaneWidth', String(Math.round(nextWidth)));
       if (mode === 'files') localStorage.setItem('nexus.filesPaneWidth', String(Math.round(nextWidth)));
-      if (mode === 'browser') localStorage.setItem('nexus.browserPaneWidth', String(Math.round(nextWidth)));
+      if (mode === 'browser') localStorage.setItem('suanlizi.browserPaneWidth', String(Math.round(nextWidth)));
       if (mode === 'terminal') localStorage.setItem('nexus.terminalPaneWidth', String(Math.round(nextWidth)));
       if (mode === 'standard') localStorage.setItem('nexus.standardPaneWidth', String(Math.round(nextWidth)));
       setWidth(nextWidth);

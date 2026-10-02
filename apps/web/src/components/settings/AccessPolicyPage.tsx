@@ -1,5 +1,5 @@
 import React from 'react';
-import type { AccessKind, AccessPolicyConfig, AccessRule, AccessRuleScope, AccessTarget } from '@nexus/protocol';
+import type { AccessKind, AccessPolicyConfig, AccessRule, AccessRuleScope, AccessTarget } from '@suanlizi/protocol';
 import type { Locale } from '../../config/config.js';
 import { SettingsPageHeader } from './SettingsPageHeader.js';
 import { SectionHeader } from './SectionHeader.js';

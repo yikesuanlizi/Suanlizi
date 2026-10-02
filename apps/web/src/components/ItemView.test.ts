@@ -4,12 +4,25 @@ import { fileURLToPath } from 'node:url';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { AssistantTurnView, ItemView, summarizeToolItem } from './ItemView.js';
+import { AssistantTurnView, ItemView, TurnPreparingIndicator, sanitizeAgentMessageTextForDisplay, summarizeToolItem } from './ItemView.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
+it('keeps transcript errors visible after legacy dismissal rules', () => {
+  const styles = readFileSync(join(here, '..', 'styles.css'), 'utf-8');
+  const selector = '.appShell :is(.message.error, .assistantTurnError, .childActivityError, .workspaceFileError, .gitNexusError, .gitNexusResultError) {';
+  const ruleStart = styles.lastIndexOf(selector);
+  const ruleEnd = styles.indexOf('}', ruleStart);
+  const finalRule = styles.slice(ruleStart, ruleEnd);
+
+  expect(ruleStart).toBeGreaterThan(styles.lastIndexOf('animation: suanliziErrorNoticeDismiss'));
+  expect(finalRule).toContain('animation: none !important;');
+  expect(finalRule).toContain('opacity: 1 !important;');
+  expect(finalRule).toContain('max-height: none !important;');
+});
+
 describe('agent message avatars', () => {
-  it('renders the Nexus robot mood avatar for assistant history and streaming turns', () => {
+  it('renders the Suanlizi robot mood avatar for assistant history and streaming turns', () => {
     const source = readFileSync(join(here, 'ItemView.tsx'), 'utf-8');
 
     expect(source).toContain('messageAgentAvatar');
@@ -125,13 +138,76 @@ describe('message markdown rendering', () => {
 });
 
 describe('message action visibility', () => {
+  it('renders a compact preparing marker before the first streamed event', () => {
+    const html = renderToStaticMarkup(React.createElement(TurnPreparingIndicator, { locale: 'zh' }));
+    expect(html).toContain('role="status"');
+    expect(html).toContain('正在准备回复');
+    expect(html).toContain('turnPreparingDots');
+  });
+
+  it('only keeps the currently running expandable block open', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AssistantTurnView, {
+        group: {
+          turnId: 'turn-running',
+          status: 'running',
+          items: [
+            { id: 'reasoning-running', type: 'reasoning', turnId: 'turn-running', text: '正在思考', status: 'completed' },
+            { id: 'tool-previous', type: 'tool_call', turnId: 'turn-running', toolName: 'list_files', arguments: {}, status: 'in_progress' },
+            { id: 'tool-running', type: 'tool_call', turnId: 'turn-running', toolName: 'read_file', arguments: {}, status: 'in_progress' },
+          ],
+        },
+        locale: 'zh',
+      }),
+    );
+    expect(html).not.toMatch(/<details class="reasoningDetails"[^>]*open=""/);
+    expect(html).toMatch(/<details class="toolBatchDetails"[^>]*open=""/);
+    expect(html.match(/<details class="message tool inlineTool"[^>]*open=""/g) ?? []).toHaveLength(1);
+  });
+
+
+  it('keeps a streaming reasoning block open even before status arrives', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AssistantTurnView, {
+        group: {
+          turnId: 'turn-reasoning-running',
+          status: 'running',
+          items: [
+            { id: 'reasoning-streaming', type: 'reasoning', turnId: 'turn-reasoning-running', text: '正在思考', timestamp: '2026-08-23T00:00:00.000Z' },
+          ],
+        },
+        locale: 'zh',
+      }),
+    );
+
+    expect(html).toContain('data-running="true"');
+    expect(html).toMatch(/open=""/);
+  });
+
+  it('keeps a live tool batch open while any child is still running', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AssistantTurnView, {
+        group: {
+          turnId: 'turn-tool-running',
+          status: 'running',
+          items: [
+            { id: 'tool-active', type: 'tool_call', turnId: 'turn-tool-running', toolName: 'web_search', arguments: {}, status: 'in_progress' },
+          ],
+        },
+        locale: 'zh',
+      }),
+    );
+
+    expect(html).toMatch(/<details class="toolBatchDetails"[^>]*open=""/);
+  });
+
   it('keeps reasoning output collapsed instead of rendering its raw item payload', () => {
     const html = renderToStaticMarkup(
       React.createElement(AssistantTurnView, {
         group: {
           turnId: 'turn-reasoning',
           items: [
-            { id: 'reasoning-1', type: 'reasoning', turnId: 'turn-reasoning', text: '内部推理文本', status: 'completed', timestamp: new Date().toISOString() },
+            { id: 'reasoning-1', type: 'reasoning', turnId: 'turn-reasoning', text: '内部推理文本', status: 'completed', timestamp: new Date(Date.now() - 3000).toISOString(), completedAt: new Date().toISOString() },
           ],
         },
         locale: 'zh',
@@ -148,6 +224,20 @@ describe('message action visibility', () => {
     expect(html).not.toContain('&quot;type&quot;:&quot;reasoning&quot;');
   });
 
+  it('lets the whole reasoning summary row toggle, not only the THINK label', () => {
+    const styles = readFileSync(join(here, '..', 'styles.css'), 'utf-8');
+    const marker = '/* Chromium 在 flex summary 上只把点击算在 summary 自身（::before 的 THINK）。';
+    const start = styles.lastIndexOf(marker);
+    const rule = styles.slice(start, styles.indexOf('/* Settings density', start));
+
+    expect(start).toBeGreaterThan(styles.lastIndexOf('.appShell .reasoningDetails > summary {'));
+    expect(rule).toContain('justify-content: flex-start');
+    expect(rule).toContain('width: auto');
+    expect(rule).not.toContain('width: 100%');
+    expect(rule).toContain('pointer-events: none');
+    expect(rule).toContain('padding-right: 12px');
+  });
+
   it('shows timestamp and copy actions for error-only assistant turns', () => {
     const html = renderToStaticMarkup(
       React.createElement(AssistantTurnView, {
@@ -161,7 +251,8 @@ describe('message action visibility', () => {
       }),
     );
 
-    expect(html).toContain('OpenAI gateway error (401)');
+    expect(html).toContain('模型服务未授权');
+    expect(html).not.toContain('OpenAI gateway error (401)');
     expect(html).toContain('messageActions');
     expect(html).toContain('messageTimestamp');
     expect(html).toContain('aria-label="复制"');
@@ -197,6 +288,25 @@ describe('message action visibility', () => {
   });
 });
 
+describe('agent message display sanitizing', () => {
+  it('hides Gitee flattened tool-call transcripts from assistant history', () => {
+    const sanitized = sanitizeAgentMessageTextForDisplay([
+      '我继续处理。',
+      '',
+      '[工具调用]',
+      '名称: read_file',
+      '参数: {"filePath":"README.md"}',
+      '[工具结果]',
+      '内容: ...',
+    ].join('\n'), 'zh');
+
+    expect(sanitized).toContain('我继续处理。');
+    expect(sanitized).toContain('已隐藏模型误输出的文本工具调用');
+    expect(sanitized).not.toContain('[工具调用]');
+    expect(sanitized).not.toContain('README.md');
+  });
+});
+
 describe('assistant turn file summary', () => {
   it('renders read and changed files after assistant turn content', () => {
     const html = renderToStaticMarkup(
@@ -205,18 +315,18 @@ describe('assistant turn file summary', () => {
           turnId: 'turn-1',
           items: [
             { id: 'a1', type: 'agent_message', turnId: 'turn-1', text: '完成', status: 'completed' },
-            { id: 'r1', type: 'tool_call', turnId: 'turn-1', toolName: 'read_file', arguments: { filePath: 'apps/web/src/main.tsx' }, result: { path: 'E:\\langchain\\Nexus\\apps\\web\\src\\main.tsx' }, status: 'completed' },
+            { id: 'r1', type: 'tool_call', turnId: 'turn-1', toolName: 'read_file', arguments: { filePath: 'apps/web/src/main.tsx' }, result: { path: 'E:\\langchain\\Suanlizi\\apps\\web\\src\\main.tsx' }, status: 'completed' },
             { id: 'c1', type: 'file_change', turnId: 'turn-1', changes: [{ path: 'apps/web/src/components/ItemView.tsx', kind: 'update', addedLines: 4, removedLines: 1 }], status: 'completed' },
           ],
         },
         locale: 'zh',
-        workspaceRoot: 'E:\\langchain\\Nexus',
+        workspaceRoot: 'E:\\langchain\\Suanlizi',
       }),
     );
 
     expect(html).toContain('阅读文件');
     expect(html).toContain('修改文件');
-    expect(html).toContain('E:\\langchain\\Nexus\\apps\\web\\src\\main.tsx');
+    expect(html).toContain('E:\\langchain\\Suanlizi\\apps\\web\\src\\main.tsx');
     expect(html).toContain('+4');
     expect(html).toContain('-1');
   });
@@ -228,18 +338,18 @@ describe('assistant turn file summary', () => {
           turnId: 'turn-1',
           items: [
             { id: 'a1', type: 'agent_message', turnId: 'turn-1', text: '完成', status: 'completed' },
-            { id: 'r1', type: 'tool_call', turnId: 'turn-1', toolName: 'read_file', arguments: { filePath: 'apps/web/src/main.tsx' }, result: { path: 'E:\\langchain\\Nexus\\apps\\web\\src\\main.tsx' }, status: 'completed' },
+            { id: 'r1', type: 'tool_call', turnId: 'turn-1', toolName: 'read_file', arguments: { filePath: 'apps/web/src/main.tsx' }, result: { path: 'E:\\langchain\\Suanlizi\\apps\\web\\src\\main.tsx' }, status: 'completed' },
           ],
         },
         locale: 'zh',
         onPreviewFile: () => undefined,
-        workspaceRoot: 'E:\\langchain\\Nexus',
+        workspaceRoot: 'E:\\langchain\\Suanlizi',
       }),
     );
 
     expect(html).toContain('class="turnFileSummaryPath"');
     expect(html).toContain('type="button"');
-    expect(html).toContain('aria-label="预览文件 E:\\langchain\\Nexus\\apps\\web\\src\\main.tsx"');
+    expect(html).toContain('aria-label="预览文件 E:\\langchain\\Suanlizi\\apps\\web\\src\\main.tsx"');
   });
 
   it('keeps involved file summary text on neutral readable colors', () => {
@@ -257,7 +367,7 @@ describe('assistant turn file summary', () => {
 describe('conversation surface contract', () => {
   it('uses semantic chat and involved-file surfaces instead of a pale card stack', () => {
     const styles = readFileSync(join(here, '..', 'styles.css'), 'utf-8');
-    const finalContract = styles.slice(styles.lastIndexOf('/* Nexus conversation surface contract */'));
+    const finalContract = styles.slice(styles.lastIndexOf('/* Suanlizi conversation surface contract */'));
 
     expect(finalContract).toContain('.appShell .messageBlock.agent .message.agent');
     expect(finalContract).toContain('background: var(--nx-surface-panel);');

@@ -72,11 +72,13 @@ export function completeLocalSkillDraftItem(
 ): ThreadItem[] {
   return items.map((item) => {
     if (item.id !== statusItemId) return item;
+    const completedAt = new Date().toISOString();
     return {
       ...item,
       status,
       result: output,
       timestamp: new Date().toISOString(),
+      completedAt,
     };
   });
 }

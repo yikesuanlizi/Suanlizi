@@ -2,10 +2,10 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { appendFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { BotGateway, DingtalkAICardStream, DingtalkClient, WeixinBridgeClient, type BotInboundMessage, type DingtalkInboundMessage, type DingtalkMessageAttachment } from '@nexus/bot';
-import type { ThreadEvent, ThreadItem, Usage } from '@nexus/protocol';
-import type { ThreadStore } from '@nexus/storage';
-import { currentTimeTool, ToolRegistry } from '@nexus/tools';
+import { BotGateway, DingtalkAICardStream, DingtalkClient, WeixinBridgeClient, type BotInboundMessage, type DingtalkInboundMessage, type DingtalkMessageAttachment } from '@suanlizi/bot';
+import type { ThreadEvent, ThreadItem, Usage } from '@suanlizi/protocol';
+import type { ThreadStore } from '@suanlizi/storage';
+import { currentTimeTool, ToolRegistry } from '@suanlizi/tools';
 import {
   DINGTALK_TOOL_NAME,
   createDingtalkForwardTools,
@@ -13,6 +13,7 @@ import {
 } from '../services/dingtalkForwardTool.js';
 import { readJson, sendError, sendJson } from '../shared/http.js';
 import type { AgentRunConfig } from '../config/config.js';
+import { resolveAppLogDir } from '../config/appData.js';
 import type { AgentCreateConfig } from '../runtime/tenantRuntime.js';
 import type { ActiveRunRegistry } from '../runtime/activeRunRegistry.js';
 import {
@@ -27,7 +28,7 @@ import {
 } from '../config/botConfig.js';
 import { bindWeixinActiveThreadIfMissing } from './threadDeletion.js';
 
-const BOT_LOG_DIR = process.env.NEXUS_LOG_DIR || path.join(process.cwd(), '.nexus', 'logs');
+const BOT_LOG_DIR = resolveAppLogDir();
 const WEIXIN_BOT_LOG_PATH = path.join(BOT_LOG_DIR, 'weixin-bot.log');
 
 interface MinimalAgent {
@@ -160,8 +161,8 @@ export async function handleBotRoute(options: BotRouteOptions): Promise<boolean>
         const client = createWeixinClient(options, config);
         const health = await client.health();
         if (config.weixin.bridgeMode === 'desktop_managed' && !isManagedDesktopBridgeHealth(health)) {
-          // 桌面桥接端口被非 Nexus 服务占用 — Chinese: bridge port occupied by non-Nexus service
-          throw new Error('The configured Weixin bridge port is occupied by a non-Nexus service.');
+          // 桌面桥接端口被非 Suanlizi 服务占用 — Chinese: bridge port occupied by non-Suanlizi service
+          throw new Error('The configured Weixin bridge port is occupied by a non-Suanlizi service.');
         }
         bridgeStatus = await client.status?.().catch((error) => ({
           error: error instanceof Error ? error.message : String(error),
@@ -289,7 +290,7 @@ export async function handleBotRoute(options: BotRouteOptions): Promise<boolean>
       return true;
     }
     const convId = body.conversationId?.trim();
-    const text = body.text?.trim() || 'Nexus 钉钉机器人测试消息';
+    const text = body.text?.trim() || 'Suanlizi 钉钉机器人测试消息';
     const convType = body.conversationType === 'group' ? '2' : '1';
     if (!convId) {
       sendError(res, 400, 'conversationId is required');
@@ -297,7 +298,7 @@ export async function handleBotRoute(options: BotRouteOptions): Promise<boolean>
     }
     const client = getOrCreateDingtalkClient(options, config);
     const cardTemplateId = config.dingtalk.cardTemplateId?.trim();
-    let result: import('@nexus/bot').DingtalkSendResult;
+    let result: import('@suanlizi/bot').DingtalkSendResult;
     if (cardTemplateId) {
       result = await client.replyWithAICardMarkdown({
         conversationType: convType,
@@ -816,11 +817,11 @@ function weixinBridgeErrorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   if (/fetch failed|ECONNREFUSED|ENOTFOUND|health HTTP 404|Not found/i.test(message)) {
     // 连接失败 — Chinese: connection failure
-    return '微信桥接服务不可用。请确认 Nexus Desktop 已启动且微信桥接组件正在运行。';
+    return '微信桥接服务不可用。请确认 Suanlizi Desktop 已启动且微信桥接组件正在运行。';
   }
   if (message.includes('已连接过此') || /already connected/i.test(message)) {
     // 账号已连接 — Chinese: already connected
-    return '这个微信账号已连接过 Nexus，无需重复扫码。';
+    return '这个微信账号已连接过 Suanlizi，无需重复扫码。';
   }
   return message || '微信桥接返回了未知错误。';
 }
@@ -994,7 +995,7 @@ function createDingtalkAgentTools(
 ): ToolRegistry {
   const registry = new ToolRegistry();
   registry.register(currentTimeTool);
-  let defaultSource: 'dingtalk_dm' | 'dingtalk_group_mention' | 'nexus_chat' = 'nexus_chat';
+  let defaultSource: 'dingtalk_dm' | 'dingtalk_group_mention' | 'suanlizi_chat' = 'suanlizi_chat';
   if (message.platform === 'dingtalk') {
     defaultSource = message.chatType === 'dm' ? 'dingtalk_dm' : 'dingtalk_group_mention';
   }

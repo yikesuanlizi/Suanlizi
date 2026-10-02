@@ -23,6 +23,7 @@ export {
   getSystemStatusTool,
   requestUserDecisionTool,
 } from './builtin.js';
+export { artifactRoot } from './fileKnowledge.js';
 export {
   DOCUMENT_EXTRACTOR_VERSION,
   extractDocumentText,
@@ -67,3 +68,8 @@ export {
 } from './accessGuard.js';
 
 export const TOOLS_VERSION = '0.1.0';
+
+export {
+  terminateAllProcessTrees,
+  terminateProcessTree,
+} from './processTree.js';

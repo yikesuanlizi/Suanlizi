@@ -2,7 +2,7 @@
 // — English: PageGraph consistency guard unit tests — covers the doc 8.1 checks,
 //   normalization, and page-operation helpers (open/activate/close).
 import { describe, expect, it } from 'vitest';
-import type { PageGraph, PageNode } from '@nexus/protocol';
+import type { PageGraph, PageNode } from '@suanlizi/protocol';
 import {
   activatePage,
   checkPageGraphConsistency,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildAgentWorkbench } from './agentWorkbenchModel.js';
-import type { RunTraceEnvelope, RunTraceSummary } from '@nexus/protocol';
+import type { RunTraceEnvelope, RunTraceSummary } from '@suanlizi/protocol';
 import type { ThreadChildInfo, ThreadItem } from '../../shared/types.js';
 
 function makeThreadChild(overrides: Partial<ThreadChildInfo> = {}): ThreadChildInfo {
@@ -144,7 +144,7 @@ describe('buildAgentWorkbench', () => {
     });
 
     expect(result.currentPhase.kind).toBe('error');
-    expect(result.currentPhase.detail).toBe('Something went wrong');
+    expect(result.currentPhase.detail).toContain('Something went wrong');
   });
 
   it('elapsed 使用注入的 now 计算', () => {
@@ -313,7 +313,7 @@ describe('buildAgentWorkbench', () => {
     expect(result.recentEvents).toEqual(expect.arrayContaining([
       expect.objectContaining({
         itemId: 'main-skill-1',
-        agent: expect.objectContaining({ label: 'Nexus 主控 Agent' }),
+        agent: expect.objectContaining({ label: 'Suanlizi 主控 Agent' }),
         resource: expect.objectContaining({ kind: 'Skill', label: 'frontend-polish' }),
       }),
       expect.objectContaining({
@@ -334,7 +334,7 @@ describe('buildAgentWorkbench', () => {
         toolName: 'read_document',
         result: {
           source: { path: 'E:\\langchain\\dexin-agent\\brief.docx' },
-          artifact: { path: 'E:\\langchain\\dexin-agent\\.nexus\\documents\\brief.txt' },
+          artifact: { path: 'E:\\langchain\\dexin-agent\\.suanlizi\\documents\\brief.txt' },
         },
         status: 'completed',
         timestamp: '2025-01-01T00:02:00Z',

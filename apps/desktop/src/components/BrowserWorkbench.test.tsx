@@ -53,8 +53,9 @@ describe('BrowserWorkbench', () => {
 
   it('接收 active 状态以便切换工作台或打开覆盖层时隐藏原生视图', () => {
     const source = readFileSync(new URL('./BrowserWorkbench.tsx', import.meta.url), 'utf8');
-    expect(source).toContain('export function BrowserWorkbench({ active = true }');
-    expect(source).toContain('void api.hideAllTabs()');
+    expect(source).toContain('export function BrowserWorkbench({');
+    expect(source).toContain('active = true');
+    expect(source).toContain('api.hideAllTabs({ threadId: threadScope })');
     expect(source).toContain(".settingsLayer, .dialogLayer");
     expect(source).toContain('onFocus={(event) => event.currentTarget.select()}');
   });

@@ -8,7 +8,7 @@ export default [
       '**/node_modules/**',
       '**/src-tauri/gen/**',
       '**/src-tauri/target/**',
-      '**/.nexus/**',
+      '**/.suanlizi/**',
       '**/outputs/**',
     ],
   },

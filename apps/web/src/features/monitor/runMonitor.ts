@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
-import type { RunTraceCategory, RunTraceEnvelope } from '@nexus/protocol';
+import type { RunTraceCategory, RunTraceEnvelope, SystemMonitorStatus } from '@suanlizi/protocol';
 import type { Locale } from '../../config/config.js';
 import type { RunRecord, ThreadWithRuns } from '../../shared/types.js';
 import type { EventDraft } from '../chat/threadView.js';
@@ -67,6 +67,7 @@ export function useRunMonitor(options: {
   const zh = locale === 'zh';
   const [open, setOpen] = useState(false);
   const [state, dispatch] = useReducer(runMonitorReducer, initialRunMonitorState);
+  const [systemMonitorStatus, setSystemMonitorStatus] = useState<SystemMonitorStatus | null>(null);
   const [autoRefresh, setAutoRefreshState] = useState(() => {
     try { return localStorage.getItem(AUTO_REFRESH_KEY) === '1'; } catch { return false; }
   });
@@ -175,7 +176,11 @@ export function useRunMonitor(options: {
         allRuns = [...new Map(data.flatMap((entry) => entry.runs ?? []).map((run) => [run.runId, run])).values()];
       } else {
         const runsResponse = await fetch(runsUrl, { signal: controller.signal });
-        if (!runsResponse.ok || controller.signal.aborted) return [];
+        if (controller.signal.aborted) return [];
+        if (!runsResponse.ok) {
+          dispatch({ type: 'load-error', requestId, message: `${zh ? 'API 请求失败' : 'API request failed'} (HTTP ${runsResponse.status})` });
+          return [];
+        }
         const runsData = (await runsResponse.json()) as { runs?: RunRecord[] };
         allRuns = runsData.runs ?? [];
       }
@@ -183,8 +188,9 @@ export function useRunMonitor(options: {
       const nextRuns = threadId ? allRuns : allRuns.filter((run) => validThreadIds.has(run.threadId));
       dispatch({ type: 'runs.loaded', requestId, runs: nextRuns });
       return nextRuns;
-    } catch {
+    } catch (error) {
       if (controller.signal.aborted) return [];
+      dispatch({ type: 'load-error', requestId, message: error instanceof Error ? error.message : String(error) });
       return [];
     }
   }, [threadId, threadIdsKey]);
@@ -343,6 +349,20 @@ export function useRunMonitor(options: {
     abortControllerRef.current = null;
   }, []);
 
+  const refreshSystemMonitorStatus = useCallback(async () => {
+    try {
+      const response = await fetch('/api/system-monitor/status');
+      if (!response.ok) {
+        setSystemMonitorStatus(null);
+        return;
+      }
+      const data = (await response.json()) as { status?: SystemMonitorStatus };
+      setSystemMonitorStatus(data.status?.enabled ? data.status : null);
+    } catch {
+      setSystemMonitorStatus(null);
+    }
+  }, []);
+
   const controlRun = useCallback(async (
     action: 'interrupt' | 'resume' | 'rollback',
     run: RunRecord,
@@ -397,6 +417,16 @@ export function useRunMonitor(options: {
   }, [open, autoRefresh, autoRefreshInterval, refreshIncremental]);
 
   useEffect(() => {
+    if (!open) {
+      setSystemMonitorStatus(null);
+      return;
+    }
+    void refreshSystemMonitorStatus();
+    const timer = setInterval(() => void refreshSystemMonitorStatus(), 5000);
+    return () => clearInterval(timer);
+  }, [open, refreshSystemMonitorStatus]);
+
+  useEffect(() => {
     return () => {
       abortControllerRef.current?.abort();
     };
@@ -414,6 +444,7 @@ export function useRunMonitor(options: {
   return {
     open,
     loading: state.loading,
+    loadError: state.loadError,
     runs: state.runs,
     events: state.events,
     traces: state.traces,
@@ -424,6 +455,7 @@ export function useRunMonitor(options: {
     selectedEventId: state.selectedEventId,
     traceFocusVersion: state.traceFocusVersion,
     selectedTrace,
+    systemMonitorStatus,
     categoryFilter: state.categoryFilter,
     errorsOnly: state.errorsOnly,
     tracePage: state.tracePage,

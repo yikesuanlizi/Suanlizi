@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { StorageOptions } from '@nexus/storage';
+import type { StorageOptions } from '@suanlizi/storage';
 import { publicRunConfig, type AgentRunConfig } from '../config/config.js';
 import { sendJson } from '../shared/http.js';
 

@@ -2,11 +2,11 @@
 
 **日期：** 2026-07-23  
 **状态：** 待审阅草案  
-**范围：** Nexus runtime / tools / storage / monitor；web + desktop UI 只做可视化呈现。
+**范围：** Suanlizi runtime / tools / storage / monitor；web + desktop UI 只做可视化呈现。
 
 ## 问题
 
-Nexus 现在把文件读取和提取后的文本都当作普通工具输出处理。这样会出现一个严重问题：某一轮先把 `_v1.0.docx` 提取成 `_v1_decoded.txt`，后来用户修改了 `_v1.0.docx`，下一轮 Agent 仍然可能直接读取旧的 `_v1_decoded.txt`，然后基于过期内容回答。
+Suanlizi 现在把文件读取和提取后的文本都当作普通工具输出处理。这样会出现一个严重问题：某一轮先把 `_v1.0.docx` 提取成 `_v1_decoded.txt`，后来用户修改了 `_v1.0.docx`，下一轮 Agent 仍然可能直接读取旧的 `_v1_decoded.txt`，然后基于过期内容回答。
 
 现有机制不够：
 
@@ -74,7 +74,7 @@ MVP 支持：
 {
   source: FileFingerprint;
   artifact: {
-    path: ".nexus/artifacts/documents/<hash>.md",
+    path: ".suanlizi/artifacts/documents/<hash>.md",
     kind: "document_text",
     sha256: string,
     createdAt: string,
@@ -88,13 +88,13 @@ MVP 支持：
 
 产物位置：
 
-- 统一写到当前 workspace 下的 `.nexus/artifacts/documents/`。
+- 统一写到当前 workspace 下的 `.suanlizi/artifacts/documents/`。
 - 正常文档提取不再生成 workspace 根目录里的 `_xxx.txt`。
 - 如果读取到旧 helper 文件，生命周期层可以标记它为 unmanaged；如果能识别血缘则进一步判断 stale。
 
 ### 3. 派生产物血缘账本
 
-持久化轻量账本。后续可以接入现有 storage backend；第一版可以先在 runtime service 后面使用 workspace 内 `.nexus/artifacts/index.json`。
+持久化轻量账本。后续可以接入现有 storage backend；第一版可以先在 runtime service 后面使用 workspace 内 `.suanlizi/artifacts/index.json`。
 
 ```ts
 export interface DocumentArtifactRecord {
@@ -188,7 +188,7 @@ knowledge?: {
 
 - 现有文件回滚语义不变。
 - 回滚后，如果影响到某个文档 artifact 的源文件 hash，就把该 artifact 标记 stale。
-- `.nexus/artifacts` 不作为普通项目源码回滚，除非某个工具明确修改了它。
+- `.suanlizi/artifacts` 不作为普通项目源码回滚，除非某个工具明确修改了它。
 
 ### 7. Trace 和监控
 
@@ -294,16 +294,16 @@ flowchart TD
 
 MVP 完成后，下面这种情况不能再发生：
 
-1. 用户让 Nexus 分析 `A.docx`。
-2. Nexus 把它提取成文本 artifact。
+1. 用户让 Suanlizi 分析 `A.docx`。
+2. Suanlizi 把它提取成文本 artifact。
 3. 用户修改 `A.docx`。
-4. 用户再次让 Nexus 分析它。
-5. Nexus 静默读取旧 artifact，并基于旧内容回答。
+4. 用户再次让 Suanlizi 分析它。
+5. Suanlizi 静默读取旧 artifact，并基于旧内容回答。
 
 正确行为：
 
-- Nexus 检测到源文件 hash 已变化。
-- Nexus 自动刷新提取物，或者明确警告 / fail closed。
+- Suanlizi 检测到源文件 hash 已变化。
+- Suanlizi 自动刷新提取物，或者明确警告 / fail closed。
 - 涉及文件摘要显示 `A.docx`。
 - 监控显示 stale detection 和 refresh。
 

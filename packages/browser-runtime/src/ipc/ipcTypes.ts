@@ -5,7 +5,7 @@
 // 严格按本模块导出的接口调用。编码约束：sidecar stdout 每行一帧，日志不得混入 stdout。
 // — English: Phase 1 ships the protocol layer only (types/schemas/codec); the
 //   sidecar event loop is implemented by a separate task against these exports.
-import type { ActionIntent } from '@nexus/protocol';
+import type { ActionIntent } from '@suanlizi/protocol';
 
 // 协议版本：与帧 schema 的 z.literal 绑定，破坏性变更时递增。
 // — English: protocol version — bound to z.literal in the frame schema.

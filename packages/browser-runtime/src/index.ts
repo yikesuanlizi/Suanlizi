@@ -1,5 +1,5 @@
-// @nexus/browser-runtime 统一入口
-// — English: @nexus/browser-runtime entry
+// @suanlizi/browser-runtime 统一入口
+// — English: @suanlizi/browser-runtime entry
 export * from './port.js';
 export * from './policy.js';
 export * from './fakeRuntime.js';

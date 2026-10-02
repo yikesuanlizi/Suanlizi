@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createStore } from './index.js';
-import type { RunTraceDraft } from '@nexus/protocol';
+import type { RunTraceDraft } from '@suanlizi/protocol';
 import type { RunRecord, ThreadStore } from './store.js';
 import type { RunTraceStore } from './runTraceStore.js';
 import { mkdtempSync } from 'node:fs';
@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 function traceStore(): ThreadStore & RunTraceStore {
-  return createStore(mkdtempSync(join(tmpdir(), 'nexus-run-trace-store-'))).store as ThreadStore & RunTraceStore;
+  return createStore(mkdtempSync(join(tmpdir(), 'suanlizi-run-trace-store-'))).store as ThreadStore & RunTraceStore;
 }
 
 function runRecord(runId = 'run-a', threadId = 'thread-a'): RunRecord {

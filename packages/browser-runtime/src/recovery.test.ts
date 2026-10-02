@@ -2,7 +2,7 @@
 // — English: recovery policy unit tests — full 8-kind recovery matrix,
 //   uncertain principle and exponential backoff
 import { describe, expect, it } from 'vitest';
-import type { ClassifiedError, ClassifiedErrorKind } from '@nexus/protocol';
+import type { ClassifiedError, ClassifiedErrorKind } from '@suanlizi/protocol';
 import {
   decideRecovery,
   nextRetryDelayMs,

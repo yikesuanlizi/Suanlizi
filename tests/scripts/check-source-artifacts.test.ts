@@ -56,7 +56,7 @@ describe('findSourceArtifacts', () => {
 });
 
 async function withWorkspace(run: (workspaceRoot: string) => Promise<void>): Promise<void> {
-  const workspaceRoot = await mkdtemp(join(tmpdir(), 'nexus-source-artifacts-'));
+  const workspaceRoot = await mkdtemp(join(tmpdir(), 'suanlizi-source-artifacts-'));
   try {
     await run(workspaceRoot);
   } finally {

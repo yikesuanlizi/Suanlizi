@@ -1,6 +1,6 @@
 # Cognitive Context Layer — V1~V4 实施计划
 
-> 基于代码评审（非README猜测）制定。核心判断：Nexus runtime 已成熟，但**认知上下文（Cognitive Context）不是一级对象**，agent.ts 直接拼装所有 context。
+> 基于代码评审（非README猜测）制定。核心判断：Suanlizi runtime 已成熟，但**认知上下文（Cognitive Context）不是一级对象**，agent.ts 直接拼装所有 context。
 >
 > 目标优先级：V1 Context Engine > V2 Project Brain (GitNexus升级) > V3 Experience Engine > V4 Skill Runtime。
 
@@ -10,11 +10,11 @@
 
 | 组件 | 文件 | 当前状态 | 缺口 |
 |------|------|---------|------|
-| context注入点 | [middleware.ts:48-54](file:///e:/langchain/nexus/packages/runtime/src/middleware.ts#L48-L54) | 单一 `dynamicContextProvider?: (ctx) => Promise<string\|string[]>` | 无分层、无优先级、无结构化、无token预算 |
-| 认知状态雏形 | [goalTracker.ts:20-30](file:///e:/langchain/nexus/packages/runtime/src/harness/goalTracker.ts#L20-L30) | Harness内部有 `constraints/assumptions/successCriteria` | 只在harness模式可用，不是runtime一级对象 |
-| Memory策略 | [memory.ts](file:///e:/langchain/nexus/packages/memory/src/memory.ts) | 有 `sealEpisode/promoteToWarmMemory`，按阈值自动晋升 | 无evaluation gate，无"谁批准写"，无失败模式识别 |
-| Skill定义 | [extensions.ts](file:///e:/langchain/nexus/packages/extensions/src/extensions.ts) | `skill={instructions, tools}` 纯prompt级 | 无生命周期（prepare/execute/verify/rollback） |
-| GitNexus | [packages/gitnexus/src/index.ts](file:///e:/langchain/nexus/packages/gitnexus/src/index.ts) | 独立MCP server+CLI，有codeGraph(symbolIndex/fileIndex/callGraph)+gitLog/blame/diff | 未接入ContextProvider，是工具不是上下文 |
+| context注入点 | [middleware.ts:48-54](file:///e:/langchain/suanlizi/packages/runtime/src/middleware.ts#L48-L54) | 单一 `dynamicContextProvider?: (ctx) => Promise<string\|string[]>` | 无分层、无优先级、无结构化、无token预算 |
+| 认知状态雏形 | [goalTracker.ts:20-30](file:///e:/langchain/suanlizi/packages/runtime/src/harness/goalTracker.ts#L20-L30) | Harness内部有 `constraints/assumptions/successCriteria` | 只在harness模式可用，不是runtime一级对象 |
+| Memory策略 | [memory.ts](file:///e:/langchain/suanlizi/packages/memory/src/memory.ts) | 有 `sealEpisode/promoteToWarmMemory`，按阈值自动晋升 | 无evaluation gate，无"谁批准写"，无失败模式识别 |
+| Skill定义 | [extensions.ts](file:///e:/langchain/suanlizi/packages/extensions/src/extensions.ts) | `skill={instructions, tools}` 纯prompt级 | 无生命周期（prepare/execute/verify/rollback） |
+| GitNexus | [packages/gitnexus/src/index.ts](file:///e:/langchain/suanlizi/packages/gitnexus/src/index.ts) | 独立MCP server+CLI，有codeGraph(symbolIndex/fileIndex/callGraph)+gitLog/blame/diff | 未接入ContextProvider，是工具不是上下文 |
 
 ---
 
@@ -164,7 +164,7 @@ export interface AssembledContext {
 
 **改动1：middleware.ts — 替换 dynamicContextProvider**
 
-现状（[middleware.ts:48-54](file:///e:/langchain/nexus/packages/runtime/src/middleware.ts#L48-L54)）：
+现状（[middleware.ts:48-54](file:///e:/langchain/suanlizi/packages/runtime/src/middleware.ts#L48-L54)）：
 ```typescript
 if (dynamicContextProvider) {
   const provided = await dynamicContextProvider(runtimeTurnContext);
@@ -207,7 +207,7 @@ this.updateAgentContext(threadId, assembled.updatedAgentContext);
 
 **改动3：harness对接 — GoalTracker升级使用TaskCognition**
 
-[goalTracker.ts](file:///e:/langchain/nexus/packages/runtime/src/harness/goalTracker.ts) 当前把goal/constraints存在HarnessState里。改为：
+[goalTracker.ts](file:///e:/langchain/suanlizi/packages/runtime/src/harness/goalTracker.ts) 当前把goal/constraints存在HarnessState里。改为：
 - HarnessGoal只存objective/acceptanceCriteria
 - TaskCognition作为AgentContext.cognition.task存在context层
 - GoalTracker读写通过agentContext.cognition.task
@@ -251,7 +251,7 @@ V1只实现2个Provider（Memory Provider推迟到V3）：
 ### 1.7 持久化
 
 - AgentContext 随 HarnessContinuationItem 一起持久化（已有harness_continuation item类型）
-- 新增 `agent_context` 字段到 harnessContinuationItemSchema（[schemas.ts](file:///e:/langchain/nexus/packages/protocol/src/schemas.ts)）
+- 新增 `agent_context` 字段到 harnessContinuationItemSchema（[schemas.ts](file:///e:/langchain/suanlizi/packages/protocol/src/schemas.ts)）
 - 非harness模式下，AgentContext仅存在内存中（agentContextByThread），不持久化——因为非harness模式是短对话，不需要跨turn恢复认知状态
 
 ### 1.8 V1验收标准
@@ -407,7 +407,7 @@ export class ProjectBrain implements ContextProvider {
 
 ### 2.5 CodeGraph增强
 
-现状[codeGraph.ts](file:///e:/langchain/nexus/packages/gitnexus/src/codeGraph/codeGraph.ts)只有symbolIndex/fileIndex/callGraph，需增强：
+现状[codeGraph.ts](file:///e:/langchain/suanlizi/packages/gitnexus/src/codeGraph/codeGraph.ts)只有symbolIndex/fileIndex/callGraph，需增强：
 - 增量更新（文件保存后只更新受影响文件，而非全量重建）
 - 反向依赖图（reverseDependencies: Map<file, Set<file>>）用于影响范围分析
 - 模块边界检测（基于目录结构的模块划分）
@@ -458,7 +458,7 @@ const contextEngine = new ContextEngine({
 
 **改动1：Episode结束时引入Experience Evaluation Gate**
 
-现状[memory.ts](file:///e:/langchain/nexus/packages/memory/src/memory.ts)的`sealEpisode`是自动的（基于阈值），改为：
+现状[memory.ts](file:///e:/langchain/suanlizi/packages/memory/src/memory.ts)的`sealEpisode`是自动的（基于阈值），改为：
 
 ```typescript
 // packages/memory/src/experience/experienceEvaluator.ts
@@ -554,7 +554,7 @@ ExperienceStore独立于light/working/cold三层，是跨层的"行为策略"索
 
 **改动3：Harness结束时触发Experience Evaluation**
 
-[taskHarness.ts](file:///e:/langchain/nexus/packages/runtime/src/harness/taskHarness.ts)的HarnessLoop结束（成功/失败/取消）时，调用：
+[taskHarness.ts](file:///e:/langchain/suanlizi/packages/runtime/src/harness/taskHarness.ts)的HarnessLoop结束（成功/失败/取消）时，调用：
 
 ```typescript
 // 在goalEvaluator给出最终结果后
@@ -610,7 +610,7 @@ V3新增MemoryContextProvider，作为ContextEngine的一个Provider注册：
 
 **改动1：扩展Skill接口**
 
-现状[extensions.ts](file:///e:/langchain/nexus/packages/extensions/src/extensions.ts)的skill是prompt级：
+现状[extensions.ts](file:///e:/langchain/suanlizi/packages/extensions/src/extensions.ts)的skill是prompt级：
 ```typescript
 interface Skill {
   name: string;
@@ -715,7 +715,7 @@ class SkillRuntime {
 
 **改动4：Skill与Harness的集成点**
 
-[taskHarness.ts](file:///e:/langchain/nexus/packages/runtime/src/harness/taskHarness.ts)在Plan阶段：
+[taskHarness.ts](file:///e:/langchain/suanlizi/packages/runtime/src/harness/taskHarness.ts)在Plan阶段：
 1. TaskCognition初始化后，调用`skillRuntime.matchSkills(ctx)`
 2. 匹配到的skill的prepare()生成子goal
 3. 子goal自动成为HarnessPlanNode

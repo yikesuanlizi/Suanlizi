@@ -18,7 +18,7 @@ import type {
   TaskCognitionUpdatedEvent,
   TaskContextUpdatedEvent,
   TaskLoopUpdatedEvent,
-} from '@nexus/protocol';
+} from '@suanlizi/protocol';
 
 export type TaskRuntimeMonitorEvent =
   | TaskRuntimeUpdatedEvent

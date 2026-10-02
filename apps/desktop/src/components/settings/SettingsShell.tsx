@@ -257,7 +257,7 @@ export function SettingsShell({
         <header className="settingsHeader settingsTopbar">
           <div className="settingsBrand">
             <span className="settingsBrandMark" aria-hidden="true">N</span>
-            <strong className="settingsBrandName">Nexus</strong>
+            <strong className="settingsBrandName">Suanlizi</strong>
             <span className="settingsBrandSub">{t(locale, 'settings')}</span>
             {saveState.dirty ? (
               <span

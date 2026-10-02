@@ -3,7 +3,7 @@
 //   rules of architecture doc 10.2 (external evidence, page evidence for
 //   external/local effects, non-pending status, and no-evidence fallback).
 import { describe, expect, it } from 'vitest';
-import type { ActionRecord } from '@nexus/protocol';
+import type { ActionRecord } from '@suanlizi/protocol';
 import { reconcileAction } from './reconcile.js';
 
 // 构造最小 ActionRecord（默认：提交订单，外部不可逆副作用，结果 uncertain）

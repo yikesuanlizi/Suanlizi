@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, type Ref } from 'react';
-import type { RunTraceCategory, RunTraceEnvelope } from '@nexus/protocol';
+import type { RunTraceCategory, RunTraceEnvelope } from '@suanlizi/protocol';
 import type { RunControlCapabilities, RunRecord } from '../../shared/types.js';
 import { TraceFilters } from './TraceFilters.js';
 import {

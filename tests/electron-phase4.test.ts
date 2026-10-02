@@ -17,7 +17,7 @@ let baseUrl = '';
 beforeAll(async () => {
   site = createServer((req, res) => {
     if (req.url === '/set-cookie') {
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Set-Cookie': 'nexus_phase4=shared' });
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Set-Cookie': 'suanlizi_phase4=shared' });
       res.end('<html><body><h1>cookie set</h1></body></html>');
       return;
     }
@@ -38,7 +38,7 @@ afterAll(async () => {
 });
 
 function launchPhase0() {
-  return electron.launch({ args: [MAIN_JS], env: { ...process.env, NEXUS_ELECTRON_LOAD: 'phase0', NEXUS_DISABLE_SINGLE_INSTANCE: '1' } });
+  return electron.launch({ args: [MAIN_JS], env: { ...process.env, SUANLIZI_ELECTRON_LOAD: 'phase0', SUANLIZI_DISABLE_SINGLE_INSTANCE: '1' } });
 }
 
 type ElectronApp = Awaited<ReturnType<typeof electron.launch>>;
@@ -46,7 +46,7 @@ type ElectronApp = Awaited<ReturnType<typeof electron.launch>>;
 async function browserApi<T>(win: ElectronApp, call: string, arg?: unknown): Promise<T> {
   return win.evaluate(
     ([callExpr, argValue]) => {
-      const api = (window as unknown as { nexusDesktop: { browser: Record<string, (a: unknown) => Promise<unknown>> } }).nexusDesktop.browser;
+      const api = (window as unknown as { suanliziDesktop: { browser: Record<string, (a: unknown) => Promise<unknown>> } }).suanliziDesktop.browser;
       return api[callExpr](argValue) as Promise<unknown>;
     },
     [call, arg],
@@ -70,10 +70,10 @@ describe('Phase 4 · 单一会话 / 下载 / Tauri 卸载', () => {
         tabId: tabA.tabId,
         expression: 'document.cookie',
       });
-      expect(String(cookieA)).toContain('nexus_phase4');
+      expect(String(cookieA)).toContain('suanlizi_phase4');
 
-      // B 在同一个 persist:nexus-browser 会话里，能读到 A 种的 cookie。
-      // — English: tab B (same persist:nexus-browser session) can read it.
+      // B 在同一个 persist:suanlizi-browser 会话里，能读到 A 种的 cookie。
+      // — English: tab B (same persist:suanlizi-browser session) can read it.
       const tabB = await browserApi<{ tabId: string }>(win, 'createTab', {
         url: `${baseUrl}/`,
         bounds: { x: 0, y: 40, width: 400, height: 300 },
@@ -83,7 +83,7 @@ describe('Phase 4 · 单一会话 / 下载 / Tauri 卸载', () => {
         tabId: tabB.tabId,
         expression: 'document.cookie',
       });
-      expect(String(cookieB)).toContain('nexus_phase4');
+      expect(String(cookieB)).toContain('suanlizi_phase4');
     } finally {
       await app.close();
     }
@@ -98,9 +98,9 @@ describe('Phase 4 · 单一会话 / 下载 / Tauri 卸载', () => {
       // 记录 Renderer 收到的 browser:event 中的下载事件。
       // — English: capture download events the renderer receives.
       await win.evaluate(() => {
-        const w = window as unknown as { nexusDesktop: { browser: { subscribe: (h: (p: unknown) => void) => () => void } }; __p4Events: string[] };
+        const w = window as unknown as { suanliziDesktop: { browser: { subscribe: (h: (p: unknown) => void) => () => void } }; __p4Events: string[] };
         w.__p4Events = [];
-        w.nexusDesktop.browser.subscribe((payload) => {
+        w.suanliziDesktop.browser.subscribe((payload) => {
           const p = payload as { type?: string };
           if (typeof p?.type === 'string' && p.type.startsWith('download-')) {
             w.__p4Events.push(p.type);

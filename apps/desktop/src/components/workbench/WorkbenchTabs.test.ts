@@ -23,6 +23,7 @@ describe('WorkbenchTabs', () => {
     expect(ops).toContain('运维');
     expect(ops).toContain('workbenchPrimaryTabs');
     expect(ops).not.toContain('workbenchDynamicTab');
+    expect(ops).not.toContain('知识库');
   });
 
   it('disables utility creation when no thread is selected', () => {

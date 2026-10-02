@@ -1,7 +1,7 @@
 import type { EventDraft } from '../features/chat/threadView.js';
-import type { AccessRequest, ModelPresetConfig, ModelPresetStatus, TemporaryAccessScope } from '@nexus/protocol';
+import type { AccessRequest, ModelPresetConfig, SuanliziErrorInfo, TemporaryAccessScope } from '@suanlizi/protocol';
 
-export type { ModelPresetConfig } from '@nexus/protocol';
+export type { ModelPresetConfig } from '@suanlizi/protocol';
 
 export interface McpConfig {
   id: string;
@@ -103,9 +103,13 @@ export interface ThreadItem {
   arguments?: unknown;
   result?: unknown;
   error?: { message: string };
+  info?: SuanliziErrorInfo;
+  detail?: string;
   status?: string;
   message?: string;
   timestamp?: string;
+  /** Item lifecycle completion timestamp used for stable elapsed-time display. */
+  completedAt?: string | null;
   senderThreadId?: string;
   receiverThreadId?: string;
   newThreadId?: string;
@@ -200,6 +204,8 @@ export interface WorkspaceFilePreview {
 export interface Usage {
   inputTokens: number;
   cachedInputTokens: number;
+  cacheWriteTokens?: number;
+  cacheReported?: boolean;
   outputTokens: number;
   reasoningOutputTokens: number;
   cacheStrategy?: 'deepseek-native' | 'openai-compatible' | 'anthropic-cache-control' | 'mixed';
@@ -325,6 +331,7 @@ export interface ProviderEntry {
   protocol: 'openai' | 'anthropic';
   isLocal: boolean;
   description?: string;
+  iconUrl?: string;
 }
 
 export interface ApiKeyState {
@@ -350,7 +357,6 @@ export interface ModelPreset {
   id: string;
   name: string;
   config: ModelPresetConfig;
-  status?: ModelPresetStatus;
   createdAt: string;
   updatedAt: string;
 }

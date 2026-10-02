@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { AgentDecisionRequest } from '@nexus/protocol';
+import type { AgentDecisionRequest } from '@suanlizi/protocol';
 import { ThreadStateManager } from './state.js';
 
 const decision: AgentDecisionRequest = {

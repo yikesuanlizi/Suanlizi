@@ -25,7 +25,7 @@ import type {
   Observation,
   PageGraph,
   Postcondition,
-} from '@nexus/protocol';
+} from '@suanlizi/protocol';
 
 // ─── 可注入的 playwright 模块标识 ────────────────────────────────────────────
 // 用变量而非字面量做动态 import：TS 对非字面量 import() 不做模块解析，

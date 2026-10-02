@@ -23,22 +23,71 @@ interface CdpError {
 export class BrowserEngineAdapter {
   private readonly view: WebContentsView;
   private attached = false;
+  private attachPromise: Promise<void> | null = null;
   private agentInputDepth = 0;
   private lastAgentPointer: { x: number; y: number } | undefined;
 
   constructor(view: WebContentsView) {
     this.view = view;
+    // webContents.debugger 可能因为页面销毁、DevTools 接管或 Chromium
+    // target 重置而在本地状态未知的情况下 detach。若不清除 attached，
+    // 后续新的 sidecar 会话会跳过 attach，连续得到“无标签页/动作失败”。
+    // — English: keep the local attachment flag in sync with Chromium's
+    // debugger lifecycle so a later sidecar session can reattach safely.
+    this.view.webContents.debugger.on('detach', () => {
+      this.attached = false;
+    });
+    this.view.webContents.on('destroyed', () => {
+      this.attached = false;
+    });
   }
 
   // 附着 CDP：同一 webContents 的 debugger Target。失败时抛出清晰错误。
   // — English: attach CDP to the same webContents debugger target.
   async attach(): Promise<void> {
+    if (this.view.webContents.isDestroyed()) {
+      throw new Error('CDP attach 失败：页面已销毁');
+    }
     if (this.attached) return;
+    if (this.attachPromise !== null) return this.attachPromise;
+    this.attachPromise = (async () => {
+      try {
+        this.view.webContents.debugger.attach('1.3');
+        this.attached = true;
+      } catch (err) {
+        this.attached = false;
+        throw new Error(`CDP attach 失败：${formatCdpError(err)}`);
+      } finally {
+        this.attachPromise = null;
+      }
+    })();
+    return this.attachPromise;
+  }
+
+  /**
+   * 通过统一入口发送 CDP 命令。
+   *
+   * 任何命令抛错都意味着当前 attachment 不能再被安全复用；主动清理
+   * 本地状态并尝试 detach，让下一次 observe/navigate 能重新 attach。
+   * 当前命令不自动重放，避免 click/type 等有副作用动作被执行两次。
+   */
+  async sendCommand<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T> {
+    await this.attach();
     try {
-      this.view.webContents.debugger.attach('1.3');
-      this.attached = true;
+      return await this.view.webContents.debugger.sendCommand(method, params) as T;
     } catch (err) {
-      throw new Error(`CDP attach 失败：${String(err)}`);
+      this.resetAttachment();
+      throw err;
+    }
+  }
+
+  private resetAttachment(): void {
+    this.attached = false;
+    if (this.view.webContents.isDestroyed()) return;
+    try {
+      this.view.webContents.debugger.detach();
+    } catch {
+      // 已经 detach 或 target 正在销毁；下一次命令仍会重新尝试 attach。
     }
   }
 
@@ -64,7 +113,7 @@ export class BrowserEngineAdapter {
   async evaluate(input: BrowserEvaluateInput): Promise<unknown> {
     await this.attach();
     const { expression } = input;
-    const response = await this.view.webContents.debugger.sendCommand('Runtime.evaluate', {
+    const response = await this.sendCommand<{ exceptionDetails?: unknown; result?: unknown }>('Runtime.evaluate', {
       expression,
       returnByValue: true,
       awaitPromise: true,
@@ -92,11 +141,11 @@ export class BrowserEngineAdapter {
     const { x, y } = input;
     await this.dispatchAgentInput(async () => {
       await this.moveAgentPointer(x, y);
-      await this.view.webContents.debugger.sendCommand('Input.dispatchMouseEvent', {
+      await this.sendCommand('Input.dispatchMouseEvent', {
         type: 'mousePressed', x, y, button: 'left', clickCount: 1,
       });
       await this.flashAgentPointer(x, y);
-      await this.view.webContents.debugger.sendCommand('Input.dispatchMouseEvent', {
+      await this.sendCommand('Input.dispatchMouseEvent', {
         type: 'mouseReleased', x, y, button: 'left', clickCount: 1,
       });
     });
@@ -119,7 +168,7 @@ export class BrowserEngineAdapter {
       const progress = step / steps;
       // Ease-out keeps the pointer readable near the target without delaying the click.
       const eased = 1 - Math.pow(1 - progress, 3);
-      await this.view.webContents.debugger.sendCommand('Input.dispatchMouseEvent', {
+      await this.sendCommand('Input.dispatchMouseEvent', {
         type: 'mouseMoved',
         x: from.x + (x - from.x) * eased,
         y: from.y + (y - from.y) * eased,
@@ -136,7 +185,7 @@ export class BrowserEngineAdapter {
 
   private async renderAgentPointer(x: number, y: number, clicked: boolean): Promise<void> {
     const expression = `(() => {
-      const id = '__nexus_agent_pointer__';
+      const id = '__suanlizi_agent_pointer__';
       let pointer = document.getElementById(id);
       if (!pointer) {
         pointer = document.createElement('div');
@@ -179,7 +228,7 @@ export class BrowserEngineAdapter {
   // — English: text insertion via CDP (visible to the user).
   async insertText(text: string): Promise<void> {
     await this.attach();
-    await this.dispatchAgentInput(() => this.view.webContents.debugger.sendCommand('Input.insertText', { text }).then(() => undefined));
+    await this.dispatchAgentInput(() => this.sendCommand('Input.insertText', { text }).then(() => undefined));
   }
 
   async pressKey(key: string, modifiers: string[] = []): Promise<void> {
@@ -215,24 +264,26 @@ export class BrowserEngineAdapter {
       ...(keyCode !== undefined ? { windowsVirtualKeyCode: keyCode, nativeVirtualKeyCode: keyCode } : {}),
     };
     await this.dispatchAgentInput(async () => {
-      await this.view.webContents.debugger.sendCommand('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...payload });
-      await this.view.webContents.debugger.sendCommand('Input.dispatchKeyEvent', { type: 'keyUp', ...payload });
+      await this.sendCommand('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...payload });
+      await this.sendCommand('Input.dispatchKeyEvent', { type: 'keyUp', ...payload });
     });
   }
 
   detach(): void {
-    if (!this.attached) return;
-    try {
-      this.view.webContents.debugger.detach();
-    } catch {
-      // 已 detach 或 webContents 已销毁
-    }
-    this.attached = false;
+    this.resetAttachment();
   }
 
   isCdpError(err: unknown): err is CdpError {
     return typeof err === 'object' && err !== null && 'code' in err && 'message' in err;
   }
+}
+
+function formatCdpError(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'object' && err !== null) {
+    try { return JSON.stringify(err); } catch { return Object.prototype.toString.call(err); }
+  }
+  return String(err);
 }
 
 function delay(ms: number): Promise<void> {

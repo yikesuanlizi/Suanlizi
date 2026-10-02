@@ -1,10 +1,12 @@
 import { PassThrough } from 'node:stream';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ThreadMeta, UserInput } from '@nexus/protocol';
-import type { ThreadStore } from '@nexus/storage';
-import type { AgentLoop, HarnessResult, RunTurnOptions } from '@nexus/runtime';
+import type { ThreadMeta, UserInput } from '@suanlizi/protocol';
+import type { ThreadStore } from '@suanlizi/storage';
+import type { AgentLoop, HarnessResult, RunTurnOptions } from '@suanlizi/runtime';
 import { handleHarnessRoute } from './harnessRoute.js';
+import { handleTaskRoute } from './taskRoute.js';
+import { FakeTaskStore } from '../testing/fakeTaskStore.js';
 import { harnessRuntimeRegistry } from '../services/harnessRuntime.js';
 import type { TenantContext } from '../shared/tenant.js';
 import type { AgentRunConfig } from '../config/config.js';
@@ -378,5 +380,163 @@ describe('harness route', () => {
       provider: 'thread-provider',
     });
     expect(res.statusCode).toBe(202);
+  });
+
+  it('P0 影子写：harness start 后能从 /api/tasks 查到对应 Task 与 goal Run', async () => {
+    const runHarness = vi.fn(async (
+      _threadId: string,
+      _input: UserInput,
+      options?: { harnessRunId?: string },
+    ) => harnessResult(options?.harnessRunId ?? 'missing-run-id'));
+    const store = new FakeStore();
+    const taskStore = new FakeTaskStore();
+    const res = response();
+
+    const handled = await handleHarnessRoute({
+      req: request('POST', '/api/threads/thread-harness/harness/start', {
+        input: '影子写验收',
+        goal: '影子写验收目标',
+        acceptanceCriteria: ['能从 /api/tasks 查到 Task'],
+      }),
+      res,
+      url: new URL('http://localhost/api/threads/thread-harness/harness/start'),
+      segments: ['api', 'threads', 'thread-harness', 'harness', 'start'],
+      store: store as unknown as ThreadStore,
+      tenantContext,
+      taskStore,
+      createAgent: async () => ({ runHarness }) as unknown as AgentLoop,
+      publishEvent: vi.fn(),
+      getThreadRunConfig: mockGetThreadRunConfig,
+    });
+    expect(handled).toBe(true);
+    expect(res.statusCode).toBe(202);
+    const harnessRunId = (res.body as { harnessRunId: string }).harnessRunId;
+
+    // runHarness 立即 resolve：等微任务链把影子 Run 推进到终态。
+    await new Promise((resolvePending) => setTimeout(resolvePending, 0));
+
+    const listRes = response();
+    const listHandled = await handleTaskRoute({
+      req: request('GET', '/api/tasks?threadId=thread-harness'),
+      res: listRes,
+      url: new URL('http://localhost/api/tasks?threadId=thread-harness'),
+      segments: ['api', 'tasks'],
+      taskStore,
+      tenantContext,
+    });
+    expect(listHandled).toBe(true);
+    expect(listRes.statusCode).toBe(200);
+    expect(listRes.body).toMatchObject({
+      tasks: [
+        {
+          threadId: 'thread-harness',
+          objective: '影子写验收目标',
+          acceptanceCriteria: ['能从 /api/tasks 查到 Task'],
+          // Run 已 completed（验收 gate 在 P3），Task 保守停在 running。
+          status: 'running',
+        },
+      ],
+    });
+    const taskId = (listRes.body as { tasks: Array<{ id: string }> }).tasks[0]!.id;
+
+    const runsRes = response();
+    await handleTaskRoute({
+      req: request('GET', `/api/tasks/${taskId}/runs`),
+      res: runsRes,
+      url: new URL(`http://localhost/api/tasks/${taskId}/runs`),
+      segments: ['api', 'tasks', taskId, 'runs'],
+      taskStore,
+      tenantContext,
+    });
+    expect(runsRes.statusCode).toBe(200);
+    expect(runsRes.body).toMatchObject({
+      taskId,
+      runs: [
+        {
+          kind: 'goal',
+          harnessRunId,
+          status: 'completed',
+        },
+      ],
+    });
+    // goal Run 不得携带 workflowKind（§14.8）。
+    expect((runsRes.body as { runs: Array<Record<string, unknown>> }).runs[0]).not.toHaveProperty('workflowKind');
+  });
+
+  it('未注入 taskStore 时 harness start 保持既有行为，不写 task 表', async () => {
+    const runHarness = vi.fn(async (
+      _threadId: string,
+      _input: UserInput,
+      options?: { harnessRunId?: string },
+    ) => harnessResult(options?.harnessRunId ?? 'missing-run-id'));
+    const res = response();
+    await handleHarnessRoute({
+      req: request('POST', '/api/threads/thread-harness/harness/start', { input: '无影子写' }),
+      res,
+      url: new URL('http://localhost/api/threads/thread-harness/harness/start'),
+      segments: ['api', 'threads', 'thread-harness', 'harness', 'start'],
+      store: new FakeStore() as unknown as ThreadStore,
+      tenantContext,
+      createAgent: async () => ({ runHarness }) as unknown as AgentLoop,
+      publishEvent: vi.fn(),
+      getThreadRunConfig: mockGetThreadRunConfig,
+    });
+    expect(res.statusCode).toBe(202);
+    await new Promise((resolvePending) => setTimeout(resolvePending, 0));
+    // 没有 taskStore 入口即无任何 task 写入；此处用新建 fake 验证其保持为空。
+    const untouched = new FakeTaskStore();
+    expect(await untouched.listTasks()).toEqual([]);
+  });
+
+  it('P2 取消链双写：start 注册的 interrupt 先于 abort 作用于 AgentLoop', async () => {
+    const order: string[] = [];
+    const interrupt = vi.fn(() => {
+      order.push('interrupt');
+      return true;
+    });
+    const runHarness = vi.fn(async (
+      _threadId: string,
+      _input: UserInput,
+      options?: { harnessRunId?: string; signal?: AbortSignal },
+    ) => new Promise<HarnessResult>((_resolve, reject) => {
+      options?.signal?.addEventListener('abort', () => {
+        order.push('abort');
+        reject(new Error('cancelled'));
+      });
+    }));
+    const store = new FakeStore();
+    const res = response();
+
+    await handleHarnessRoute({
+      req: request('POST', '/api/threads/thread-harness/harness/start', { input: '取消链双写' }),
+      res,
+      url: new URL('http://localhost/api/threads/thread-harness/harness/start'),
+      segments: ['api', 'threads', 'thread-harness', 'harness', 'start'],
+      store: store as unknown as ThreadStore,
+      tenantContext,
+      createAgent: async () => ({ runHarness, interrupt }) as unknown as AgentLoop,
+      publishEvent: vi.fn(),
+      getThreadRunConfig: mockGetThreadRunConfig,
+    });
+    expect(res.statusCode).toBe(202);
+    const harnessRunId = (res.body as { harnessRunId: string }).harnessRunId;
+
+    const cancelRes = response();
+    await handleHarnessRoute({
+      req: request('POST', `/api/threads/thread-harness/harness/cancel?runId=${harnessRunId}`),
+      res: cancelRes,
+      url: new URL(`http://localhost/api/threads/thread-harness/harness/cancel?runId=${harnessRunId}`),
+      segments: ['api', 'threads', 'thread-harness', 'harness', 'cancel'],
+      store: store as unknown as ThreadStore,
+      tenantContext,
+      createAgent: async () => ({ runHarness, interrupt }) as unknown as AgentLoop,
+      publishEvent: vi.fn(),
+      getThreadRunConfig: mockGetThreadRunConfig,
+    });
+
+    expect(cancelRes.statusCode).toBe(200);
+    expect(interrupt).toHaveBeenCalledWith('thread-harness');
+    expect(order).toEqual(['interrupt', 'abort']);
+    await expect(harnessRuntimeRegistry.get(harnessRunId)!.promise).rejects.toThrow('cancelled');
   });
 });

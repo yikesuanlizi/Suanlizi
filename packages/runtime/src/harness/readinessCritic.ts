@@ -9,12 +9,13 @@
 // 4. criteria_evidence: 每条 acceptanceCriteria 至少有 1 个 evidenceReceipt 支撑（Gap 8）
 // 5. no_storm: StormBreaker 未触发
 
-import type { ThreadItem } from '@nexus/protocol';
+import type { ThreadItem } from '@suanlizi/protocol';
 import type {
   EvidenceLedger,
 } from './evidenceLedger.js';
 import type { GoalTracker } from './goalTracker.js';
 import type {
+  EvidenceReceiptKind,
   ReadinessGate,
   ReadinessResult,
   StormBreakerResult,
@@ -45,6 +46,25 @@ const VERIFICATION_COMMAND_PATTERNS: RegExp[] = [
 export function isVerificationCommand(command: string): boolean {
   const trimmed = command.trim();
   return VERIFICATION_COMMAND_PATTERNS.some(re => re.test(trimmed));
+}
+
+// ─── P3 证据 kind 白名单 ───────────────────────────────────────────────────
+// readiness gate 只承认已知 kind 的证据；未知/伪造 kind 的收据一律视为无效证据
+// （fail-closed），不得支撑 criteria 或 mutation 验收（计划 §7 P3）。
+
+export const EVIDENCE_KIND_WHITELIST: readonly EvidenceReceiptKind[] = [
+  'tool',
+  'file_change',
+  'command',
+  'test',
+  'checkpoint',
+  'mcp',
+  'error',
+  'workflow_result',
+];
+
+function isWhitelistedEvidence(receipt: { kind: string }): boolean {
+  return EVIDENCE_KIND_WHITELIST.includes(receipt.kind as EvidenceReceiptKind);
 }
 
 // ─── ReadinessCritic ─────────────────────────────────────────────────────────
@@ -107,9 +127,10 @@ export class ReadinessCritic {
       return { name: 'mutation_verified', passed: true, detail: 'no mutations' };
     }
 
-    // 必须有 isVerificationCommand = true 的成功 command 证据
+    // 必须有 isVerificationCommand = true 的成功 command 证据（kind 白名单内）
     const verifiedCommands = this.ledger
       .getRecentEvidence(50)
+      .filter(isWhitelistedEvidence)
       .filter(r => r.kind === 'command' && r.status === 'passed')
       .filter(r => isVerificationCommand(r.refs.command ?? ''));
 
@@ -145,7 +166,9 @@ export class ReadinessCritic {
     if (this.ledger.size() === 0) {
       return { name: 'criteria_evidence', passed: true, detail: 'no structured evidence; defer to evaluator' };
     }
-    const missing = criteria.filter(c => this.ledger.getEvidenceForCriteria(c).length === 0);
+    const missing = criteria.filter(c =>
+      this.ledger.getEvidenceForCriteria(c).filter(isWhitelistedEvidence).length === 0,
+    );
     if (missing.length > 0) {
       return {
         name: 'criteria_evidence',

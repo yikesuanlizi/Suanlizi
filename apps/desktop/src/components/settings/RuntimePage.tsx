@@ -52,6 +52,29 @@ export function RuntimePage({ locale, config, setConfig, markDirty, onSave }: Ru
             <span className="settingsFieldLabel">{text(locale, '单次工具超时', 'Tool timeout')}</span>
             <div className="settingsInputWithSuffix"><input type="number" min={10} max={600} value={config.toolTimeoutSeconds} onChange={(e) => update('toolTimeoutSeconds', Number(e.target.value))} /><span className="settingsInputSuffix">s</span></div>
           </label>
+          <label className="settingsField">
+            <span className="settingsFieldLabel">{text(locale, '模型响应超时', 'Model response timeout')}</span>
+            <div className="settingsInputWithSuffix"><input type="number" min={10} max={3600} value={config.modelTimeoutSeconds} onChange={(e) => update('modelTimeoutSeconds', Number(e.target.value))} /><span className="settingsInputSuffix">s</span></div>
+          </label>
+          <label className="settingsField">
+            <span className="settingsFieldLabel">{text(locale, '上下文压缩阈值', 'Compaction threshold')}</span>
+            <div className="settingsInputWithSuffix">
+              <input
+                type="number"
+                min={30}
+                max={95}
+                step={1}
+                value={Math.round((config.compactionThreshold ?? 0.8) * 100)}
+                onChange={(e) => {
+                  const pct = Number(e.target.value);
+                  const ratio = Number.isFinite(pct) ? Math.min(0.95, Math.max(0.3, pct / 100)) : 0.8;
+                  update('compactionThreshold', ratio);
+                }}
+              />
+              <span className="settingsInputSuffix">%</span>
+            </div>
+            <small>{text(locale, '占模型上下文窗口的比例，达到即压缩。', 'Share of the model context window; compaction triggers at this level.')}</small>
+          </label>
         </div>
       </div>
     </section>

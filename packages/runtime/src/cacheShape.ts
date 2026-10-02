@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { ChatMessage, ToolDefinition } from '@nexus/model-gateway';
+import type { ChatMessage, ToolDefinition } from '@suanlizi/model-gateway';
 
 // 提示词缓存形状描述：用于判断两次模型调用的 system prompt / tool schema 是否稳定
 export interface PromptCacheShape {

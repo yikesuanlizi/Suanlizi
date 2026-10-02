@@ -1,7 +1,7 @@
 // DWS Agent 工具 — 让 Agent 通过 dws CLI 操作钉钉企业数据
 // Chinese: DWS Agent tool — lets Agent operate DingTalk enterprise data via dws CLI
-import { dwsExec, dwsSchema, dwsAuthStatus, isDwsAvailable } from '@nexus/bot';
-import type { ToolContext, ToolDefinition, ToolResult } from '@nexus/tools';
+import { dwsExec, dwsSchema, dwsAuthStatus, isDwsAvailable } from '@suanlizi/bot';
+import type { ToolContext, ToolDefinition, ToolResult } from '@suanlizi/tools';
 import type { DwsCliConfig } from '../config/botConfig.js';
 
 export const DWS_EXEC_TOOL_NAME = 'dws_exec';

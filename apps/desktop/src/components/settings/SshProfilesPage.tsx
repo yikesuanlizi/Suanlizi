@@ -44,7 +44,7 @@ export function SshProfilesPage({ locale }: { locale: Locale }) {
     }
   }
   return <section className="settingsSection" id="settings-ssh-profiles">
-    <SettingsPageHeader eyebrow={label(locale, '运维连接', 'Ops')} title={label(locale, 'SSH 配置', 'SSH profiles')} description={label(locale, '仅保存连接元数据和系统凭据引用。密码与私钥不会进入 Nexus。', 'Store connection metadata and OS credential references only. Passwords and private keys never enter Nexus.')} />
+    <SettingsPageHeader eyebrow={label(locale, '运维连接', 'Ops')} title={label(locale, 'SSH 配置', 'SSH profiles')} description={label(locale, '仅保存连接元数据和系统凭据引用。密码与私钥不会进入 Suanlizi。', 'Store connection metadata and OS credential references only. Passwords and private keys never enter Suanlizi.')} />
     <div className="settingsSectionBlock"><SectionHeader title={label(locale, '保存配置', 'Saved profiles')} /><div className="settingsFormGrid three">
       <label className="settingsField"><span className="settingsFieldLabel">{label(locale, '名称', 'Name')}</span><input value={draft.name} onChange={(e) => patch({ name: e.target.value })} /></label>
       <label className="settingsField"><span className="settingsFieldLabel">Host</span><input value={draft.host} onChange={(e) => patch({ host: e.target.value })} /></label>

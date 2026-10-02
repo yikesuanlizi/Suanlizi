@@ -10,7 +10,7 @@
 //   unmappable events are skipped, input order is preserved. The input is a
 //   narrowed union of protocol events (BrowserTaskEvent) and Sidecar events
 //   (IpcEvent); Phase 1 only cares about these.
-import type { BrowserActionKind } from '@nexus/protocol';
+import type { BrowserActionKind } from '@suanlizi/protocol';
 
 export type ProgressTone = 'info' | 'ok' | 'warn' | 'error';
 

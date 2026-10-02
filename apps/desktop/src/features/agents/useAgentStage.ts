@@ -32,7 +32,7 @@ export function buildAgentTree(options: {
   const latestMainItem = runtimeItems[runtimeItems.length - 1];
   const mainAgent: AgentNode = {
     id: activeThreadId || 'main',
-    name: locale === 'zh' ? 'Nexus 主控 Agent' : 'Nexus Primary Agent',
+    name: locale === 'zh' ? 'Suanlizi 主控 Agent' : 'Suanlizi Primary Agent',
     role: locale === 'zh' ? '主 Agent' : 'Main Agent',
     status: busy ? 'running' : 'idle',
     currentStep: latestMainItem

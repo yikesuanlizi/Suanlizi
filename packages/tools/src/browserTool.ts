@@ -9,15 +9,15 @@
 //   WebContentsView with the user (same DOM/Cookie/session). Writes
 //   (navigate/act) are gated by requiresApproval plus a per-host
 //   requestAccess; ctx.signal flows through to cancellation.
-import type { AccessDecision, AccessRequest, ActionIntent, Observation, PageGraph } from '@nexus/protocol';
+import type { AccessDecision, AccessRequest, ActionIntent, Observation, PageGraph } from '@suanlizi/protocol';
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { type ToolContext, type ToolDefinition, type ToolResult } from './registry.js';
 
-// 默认端口与 Main 的 browserServer 一致；NEXUS_BROWSER_PORT 覆盖（测试/多实例）。
-// — English: the default port matches Main's browserServer; NEXUS_BROWSER_PORT
+// 默认端口与 Main 的 browserServer 一致；SUANLIZI_BROWSER_PORT 覆盖（测试/多实例）。
+// — English: the default port matches Main's browserServer; SUANLIZI_BROWSER_PORT
 //   overrides it (tests / multiple instances).
 const DEFAULT_BROWSER_PORT = 19230;
 
@@ -45,7 +45,7 @@ interface BrowserMemoryEntry {
 }
 
 function browserPort(): number {
-  const raw = process.env.NEXUS_BROWSER_PORT;
+  const raw = process.env.SUANLIZI_BROWSER_PORT;
   const parsed = raw === undefined ? NaN : Number(raw);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_BROWSER_PORT;
 }
@@ -54,7 +54,7 @@ function browserPort(): number {
 // — English: the capability token start-desktop injects per desktop session;
 //   when missing, the server rejects the handshake.
 function browserToken(): string {
-  return process.env.NEXUS_BROWSER_TOKEN ?? '';
+  return process.env.SUANLIZI_BROWSER_TOKEN ?? '';
 }
 
 // 每个线程持有独立 TCP 会话和标签；Main 侧按线程租约串行化真实输入。
@@ -92,8 +92,8 @@ function browserMemoryPath(workspaceRoot: string, threadId: string): string {
   const suffix = createHash('sha256').update(threadId).digest('hex').slice(0, 12);
   const safeThreadId = `${safePrefix}-${suffix}`;
   const workspaceId = createHash('sha256').update(workspaceRoot).digest('hex').slice(0, 16);
-  const dataRoot = process.env.LOCALAPPDATA ?? join(homedir(), '.nexus');
-  return join(dataRoot, 'Nexus', 'browser-memory', workspaceId, `${safeThreadId}.json`);
+  const dataRoot = process.env.LOCALAPPDATA ?? join(homedir(), '.suanlizi');
+  return join(dataRoot, 'Suanlizi', 'browser-memory', workspaceId, `${safeThreadId}.json`);
 }
 
 function memoryEntry(observation: Observation): BrowserMemoryEntry {
@@ -194,7 +194,7 @@ async function getClient(taskId: string): Promise<BrowserSessionHandleShape> {
       // 运行时仍经 node_modules 解析到 dist。
       // — English: a variable specifier keeps tsc from resolving the package to
       //   its src via paths (rootDir conflict); at runtime node_modules/dist wins.
-      const { createTcpSidecarTransport, createSidecarClient } = await import('@nexus/browser-runtime');
+      const { createTcpSidecarTransport, createSidecarClient } = await import('@suanlizi/browser-runtime');
       const { transport, ready } = createTcpSidecarTransport({
         port: browserPort(),
         authToken: browserToken(),

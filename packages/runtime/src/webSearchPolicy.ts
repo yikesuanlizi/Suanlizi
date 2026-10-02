@@ -1,4 +1,4 @@
-import type { UserInput } from '@nexus/protocol';
+import type { UserInput } from '@suanlizi/protocol';
 
 // 网页搜索模式：auto 表示根据用户输入内容自动判断；on 表示强制开启；off 表示强制关闭
 export type WebSearchMode = 'auto' | 'on' | 'off';

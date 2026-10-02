@@ -5,7 +5,7 @@ const GENERATED_TITLES = new Set([
   '未命名对话',
   'Untitled workflow project',
   '未命名工作流项目',
-  'Nexus',
+  'Suanlizi',
 ]);
 
 export function shouldRetitleThread(title: string | undefined): boolean {

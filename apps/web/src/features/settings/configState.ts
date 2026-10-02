@@ -1,4 +1,4 @@
-import type { ThreadRunConfigKey, ThreadRunConfigOverrides } from '@nexus/protocol';
+import type { ThreadRunConfigKey, ThreadRunConfigOverrides } from '@suanlizi/protocol';
 import type { RunConfig } from '../../config/config.js';
 
 export type AppearanceConfig = Pick<RunConfig,
@@ -119,7 +119,11 @@ export function effectiveRunConfig(
 export function globalRuntimePayload(config: Partial<RunConfig>): Partial<GlobalRuntimeConfig> {
   const result: Partial<GlobalRuntimeConfig> = {};
   for (const [key, value] of Object.entries(config)) {
-    if (!APPEARANCE_KEYS.includes(key as keyof AppearanceConfig) && value !== undefined) {
+    if ((key === 'modelContextTokens' || key === 'modelMaxOutputTokens') && value === undefined) {
+      // `undefined` is dropped by JSON.stringify; use null so the API can
+      // intentionally clear a previously configured model-specific limit.
+      (result as Record<string, unknown>)[key] = null;
+    } else if (!APPEARANCE_KEYS.includes(key as keyof AppearanceConfig) && value !== undefined) {
       (result as Record<string, unknown>)[key] = value;
     }
   }

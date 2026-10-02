@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RUN_TRACE_VERSION, type RunTraceDraft, type RunTraceEnvelope, type RunTraceObservation } from '@nexus/protocol';
+import { RUN_TRACE_VERSION, type RunTraceDraft, type RunTraceEnvelope, type RunTraceObservation } from '@suanlizi/protocol';
 import { RunTraceSession, type RunTraceSink } from './runTraceSession.js';
 
 function observation(index: number): RunTraceObservation {

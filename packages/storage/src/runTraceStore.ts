@@ -1,4 +1,4 @@
-import type { RunTraceCategory, RunTraceDraft, RunTraceEnvelope, RunTracePage } from '@nexus/protocol';
+import type { RunTraceCategory, RunTraceDraft, RunTraceEnvelope, RunTracePage } from '@suanlizi/protocol';
 
 export interface RunTraceQuery {
   before?: number;

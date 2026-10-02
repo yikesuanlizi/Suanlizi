@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { PersistentAccessScope, TemporaryAccessScope } from '@nexus/protocol';
+import type { PersistentAccessScope, TemporaryAccessScope } from '@suanlizi/protocol';
 import type { Locale } from '../config/config.js';
 import type { ApprovalRequest } from '../shared/types.js';
 import { ApprovalDiffPreview } from './ApprovalDiffPreview.js';

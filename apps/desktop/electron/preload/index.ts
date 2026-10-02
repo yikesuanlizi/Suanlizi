@@ -8,7 +8,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { DesktopCapabilitiesContract } from '../contracts/browserTypes.js';
 
-export interface NexusDesktopApi {
+export interface SuanliziDesktopApi {
   browser: {
     createTab(input: unknown): Promise<unknown>;
     setBounds(input: unknown): Promise<void>;
@@ -25,10 +25,11 @@ export interface NexusDesktopApi {
     click(input: unknown): Promise<void>;
     insertText(input: unknown): Promise<void>;
     closeTab(input: unknown): Promise<void>;
-    closeAllTabs(): Promise<void>;
-    hideAllTabs(): Promise<void>;
-    listTabs(): Promise<unknown>;
+    closeAllTabs(input?: unknown): Promise<void>;
+    hideAllTabs(input?: unknown): Promise<void>;
+    listTabs(input?: unknown): Promise<unknown>;
     hasPendingAgentRequest(): Promise<boolean>;
+    pendingAgentRequestTaskIds(): Promise<string[]>;
     subscribe(handler: (event: unknown) => void): () => void;
   };
   // 窗口控制（替换 Tauri window.getCurrentWindow）。
@@ -63,7 +64,7 @@ export interface NexusDesktopApi {
   };
 }
 
-const api: NexusDesktopApi = {
+const api: SuanliziDesktopApi = {
   browser: {
     createTab: (input) => ipcRenderer.invoke('browser:createTab', input),
     setBounds: (input) => ipcRenderer.invoke('browser:setBounds', input),
@@ -80,10 +81,11 @@ const api: NexusDesktopApi = {
     click: (input) => ipcRenderer.invoke('browser:click', input),
     insertText: (input) => ipcRenderer.invoke('browser:insertText', input),
     closeTab: (input) => ipcRenderer.invoke('browser:closeTab', input),
-    closeAllTabs: () => ipcRenderer.invoke('browser:closeAll'),
-    hideAllTabs: () => ipcRenderer.invoke('browser:hideAll'),
-    listTabs: () => ipcRenderer.invoke('browser:listTabs'),
+    closeAllTabs: (input) => ipcRenderer.invoke('browser:closeAll', input),
+    hideAllTabs: (input) => ipcRenderer.invoke('browser:hideAll', input),
+    listTabs: (input) => ipcRenderer.invoke('browser:listTabs', input),
     hasPendingAgentRequest: () => ipcRenderer.invoke('browser:hasPendingAgentRequest'),
+    pendingAgentRequestTaskIds: () => ipcRenderer.invoke('browser:pendingAgentRequestTaskIds'),
     subscribe: (handler) => {
       const listener = (_event: unknown, payload: unknown): void => {
         handler(payload);
@@ -127,4 +129,4 @@ const api: NexusDesktopApi = {
   },
 };
 
-contextBridge.exposeInMainWorld('nexusDesktop', api);
+contextBridge.exposeInMainWorld('suanliziDesktop', api);

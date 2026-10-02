@@ -9,7 +9,7 @@ import {
   saveApiKey,
   saveProviderApiKeyEnvVar,
   saveRuntimeEnvironmentVariables,
-} from '@nexus/model-gateway';
+} from '@suanlizi/model-gateway';
 import type { ApiKeyState } from '../config/config.js';
 import { readJson, sendError, sendJson } from '../shared/http.js';
 

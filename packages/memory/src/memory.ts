@@ -7,9 +7,9 @@ import type {
   ThreadItem,
   TurnMeta,
   ThreadMeta,
-} from '@nexus/protocol';
-import type { ThreadStore } from '@nexus/storage';
-import type { ModelGateway } from '@nexus/model-gateway';
+} from '@suanlizi/protocol';
+import type { ThreadStore } from '@suanlizi/storage';
+import type { ModelGateway } from '@suanlizi/model-gateway';
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -19,7 +19,7 @@ import * as path from 'node:path';
 const LOCAL_COMPACTION_EXCERPT_CHARS = 40;
 // CODEX_MEMENTO_COMPACTION_PROMPT — Codex Memento 风格的上下文检查点压缩提示词：
 //   你正在执行 Codex Memento 风格的上下文检查点压缩。
-//   为另一个将要恢复 Nexus 任务的 LLM 创建一份简明、结构化的交接摘要。
+//   为另一个将要恢复 Suanlizi 任务的 LLM 创建一份简明、结构化的交接摘要。
 //   严格使用三个带中文标签和冒号的顶级分区：当前进度、关键上下文、待办事项。
 //   当前进度：覆盖目标、已完成工作和关键决策。
 //   关键上下文：覆盖重要约束、用户偏好、文件/产物、工具结果和子代理结论。
@@ -27,7 +27,7 @@ const LOCAL_COMPACTION_EXCERPT_CHARS = 40;
 //   优先使用具体细节而非笼统描述，以便下一个 LLM 无需重阅完整的压缩历史即可继续。
 const CODEX_MEMENTO_COMPACTION_PROMPT = [
   'You are performing a Codex Memento style context checkpoint compaction.',
-  'Create a concise, structured handoff summary for another LLM that will resume the Nexus task.',
+  'Create a concise, structured handoff summary for another LLM that will resume the Suanlizi task.',
   '',
   'Use exactly these three top-level sections with Chinese labels and colons:',
   '当前进度：',
@@ -108,6 +108,20 @@ export function shouldCompact(
   return getCompactionPressure(items, opts).status === 'hard';
 }
 
+function estimateMemoryTextTokens(text: string): number {
+  if (!text) return 0;
+  let cjk = 0;
+  let other = 0;
+  for (const character of text) {
+    const code = character.codePointAt(0) ?? 0;
+    if ((code >= 0x3040 && code <= 0x30ff)
+      || (code >= 0x3400 && code <= 0x9fff)
+      || (code >= 0xf900 && code <= 0xfaff)) cjk += 1;
+    else other += 1;
+  }
+  return Math.ceil(cjk * 1.5 + other / 4);
+}
+
 export function getCompactionPressure(
   items: ThreadItem[],
   opts: Partial<CompactOptions> = {},
@@ -120,11 +134,13 @@ export function getCompactionPressure(
   status: 'ok' | 'soft' | 'hard';
 } {
   const resolved = { ...DEFAULT_COMPACT_OPTIONS, ...opts };
-  const totalChars = items.reduce((sum, item) => {
+  const estimatedTokens = items.reduce((sum, item) => {
     const text = extractItemText(item);
-    return sum + text.length;
+    // Keep custom rates as a lower bound for compatibility, but use a denser
+    // estimate for CJK/code-heavy content so compaction happens before the
+    // provider tokenizer rejects the request.
+    return sum + Math.max(text.length * resolved.tokensPerChar, estimateMemoryTextTokens(text));
   }, 0);
-  const estimatedTokens = totalChars * resolved.tokensPerChar;
   const softThreshold = resolved.maxTokens * resolved.softCompactRatio;
   const hardThreshold = resolved.maxTokens * resolved.hardCompactRatio;
   return {
@@ -210,8 +226,10 @@ export async function compactThread(
     .flatMap((range) => range.compactedTurnIds));
   const effectiveItems = items.filter((item) => isEffectiveCompactionItem(item, previousCompactedTurnIds));
 
-  const totalChars = effectiveItems.reduce((sum, i) => sum + extractItemText(i).length, 0);
-  const tokensBefore = resolved.tokensBeforeOverride ?? totalChars * resolved.tokensPerChar;
+  const tokensBefore = resolved.tokensBeforeOverride ?? effectiveItems.reduce((sum, item) => {
+    const text = extractItemText(item);
+    return sum + Math.max(text.length * resolved.tokensPerChar, estimateMemoryTextTokens(text));
+  }, 0);
   const pressure = getCompactionPressure(effectiveItems, resolved);
 
   if (!resolved.force && (resolved.trigger === 'auto' ? pressure.status !== 'hard' : tokensBefore <= resolved.maxTokens)) {
@@ -234,18 +252,33 @@ export async function compactThread(
   const allItems = await store.getItems(threadId);
   const conversationText = buildCompactionConversationText(compactableTurns, allItems, resolved);
 
+  let degradedCompaction: { message: string; code: string } | undefined;
   const modelSummary = resolved.strategy === 'local'
     ? ''
-    : messageContentToText((await model.chat({
-        messages: [
-          {
-            role: 'system',
-            content: CODEX_MEMENTO_COMPACTION_PROMPT,
-          },
-          { role: 'user', content: conversationText },
-        ],
-        max_tokens: 1000,
-      })).choices[0]?.message?.content).trim();
+    : await (async () => {
+        try {
+          return messageContentToText((await model.chat({
+            messages: [
+              {
+                role: 'system',
+                content: CODEX_MEMENTO_COMPACTION_PROMPT,
+              },
+              { role: 'user', content: conversationText },
+            ],
+            max_tokens: 1000,
+          })).choices[0]?.message?.content).trim();
+        } catch (error) {
+          // Automatic compaction must not make the thread unusable when the
+          // provider returns an HTML error page or otherwise invalid response.
+          // Fall back to the deterministic local summary and record degradation.
+          // — Chinese: 自动压缩不能因模型摘要失败而阻塞后续对话；降级为本地摘要并记录原因。
+          degradedCompaction = {
+            message: error instanceof Error ? error.message : String(error),
+            code: 'COMPACTION_LLM_FALLBACK_LOCAL',
+          };
+          return '';
+        }
+      })();
   const summary = resolved.strategy === 'local' || !modelSummary
     ? buildLocalCompactionSummary(compactableTurns, allItems)
     : modelSummary;
@@ -254,7 +287,17 @@ export async function compactThread(
   const retainedChars = allItems.reduce((sum, item) => (
     item.turnId && retainedTurnIdSet.has(item.turnId) ? sum + extractItemText(item).length : sum
   ), 0);
-  const tokensAfter = Math.ceil((summary.length + retainedChars) * resolved.tokensPerChar);
+  const estimatedTokensAfter = Math.ceil(
+    Math.max(summary.length * resolved.tokensPerChar, estimateMemoryTextTokens(summary))
+    + Math.max(retainedChars * resolved.tokensPerChar, estimateMemoryTextTokens(allItems
+      .filter((item) => item.turnId && retainedTurnIdSet.has(item.turnId))
+      .map(extractItemText)
+      .join('\n'))),
+  );
+  // A summary is itself a compressed representation. Cap the reported size at
+  // the pre-compaction estimate so a conservative CJK estimate cannot make a
+  // successful compaction look larger and immediately retrigger compaction.
+  const tokensAfter = Math.max(0, Math.min(Math.ceil(tokensBefore) - 1, estimatedTokensAfter));
   const now = new Date().toISOString();
   const item: ContextCompactionItem = {
     id: resolved.compactionItemId ?? `compact_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -267,6 +310,7 @@ export async function compactThread(
     summary: structuredSummary,
     tokensBefore: Math.ceil(tokensBefore),
     tokensAfter,
+    ...(degradedCompaction ? { degraded: true, error: degradedCompaction } : {}),
     timestamp: now,
   };
 
@@ -283,6 +327,7 @@ export async function compactThread(
     createdAt: now,
     trigger: resolved.trigger,
     strategy: resolved.strategy,
+    ...(degradedCompaction ? { strategy: 'local' satisfies CompactionStrategy } : {}),
   };
   await store.updateThreadMetadata(threadId, {
     status: 'compacted',

@@ -9,8 +9,8 @@ import type {
   ThreadWorkingSetSnapshot,
   TurnMeta,
   UserInput,
-} from '@nexus/protocol';
-import type { ThreadStore } from '@nexus/storage';
+} from '@suanlizi/protocol';
+import type { ThreadStore } from '@suanlizi/storage';
 import { handleMemoryRoute } from './memoryRoute.js';
 import type { AgentRunConfig } from '../config/config.js';
 

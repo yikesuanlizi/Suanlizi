@@ -30,7 +30,7 @@ export function AgentStagePanel({
   const [showNudge, setShowNudge] = useState(() => {
     if (childRows.length > 0) return false;
     try {
-      return localStorage.getItem('nexus.agentNudgeDismissed') !== '1';
+      return localStorage.getItem('suanlizi.agentNudgeDismissed') !== '1';
     } catch {
       return true;
     }
@@ -39,7 +39,7 @@ export function AgentStagePanel({
   const handleNudgeClick = useCallback(() => {
     setShowNudge(false);
     try {
-      localStorage.setItem('nexus.agentNudgeDismissed', '1');
+      localStorage.setItem('suanlizi.agentNudgeDismissed', '1');
     } catch { /* ignore */ }
   }, []);
 
@@ -163,7 +163,7 @@ function moodVariantForTone(tone: AgentStageRow['tone']): RobotMoodVariant {
 function mainAgentTitle(locale: Locale): string {
   // 主 Agent 标题文本（多语言）
   // Main agent title text (i18n)
-  return locale === 'zh' ? 'Nexus 主控 Agent' : 'Nexus Primary Agent';
+  return locale === 'zh' ? 'Suanlizi 主控 Agent' : 'Suanlizi Primary Agent';
 }
 
 function mainAgentStatusText(row: AgentStageRow, locale: Locale): string {

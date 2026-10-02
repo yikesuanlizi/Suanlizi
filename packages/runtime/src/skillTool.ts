@@ -1,5 +1,5 @@
-import type { ToolDefinition, ToolResult } from '@nexus/tools';
-import type { LoadedSkill } from '@nexus/extensions';
+import type { ToolDefinition, ToolResult } from '@suanlizi/tools';
+import type { LoadedSkill } from '@suanlizi/extensions';
 import { SkillExecutor } from './skillExecutor.js';
 
 export const USE_SKILL_TOOL_NAME = 'use_skill';

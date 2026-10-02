@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { EpisodeRecord } from '@nexus/protocol';
-import type { ThreadStore } from '@nexus/storage';
+import type { EpisodeRecord } from '@suanlizi/protocol';
+import type { ThreadStore } from '@suanlizi/storage';
 import { buildEpisodeSearchTerms, retrieveEpisodesForWorkingSet } from './episodeRetrieval.js';
 import { createEpisodeRecord, saveEpisodeRecord } from './episode.js';
 
@@ -98,7 +98,7 @@ describe('episode retrieval', () => {
       {
         threadId: 'thread-1',
         currentTurnId: 'turn-0',
-        workspaceRoot: 'E:/langchain/Nexus',
+        workspaceRoot: 'E:/langchain/Suanlizi',
         userInput: 'hello',
         taskFingerprint: 'abc',
       },
@@ -110,7 +110,7 @@ describe('episode retrieval', () => {
   it('ranks an explicitly referenced episode highest', async () => {
     const store = new RetrievalStore();
     const ep1 = createEpisodeRecord({
-      workspaceRoot: 'E:/langchain/Nexus',
+      workspaceRoot: 'E:/langchain/Suanlizi',
       sourceThreadId: 'other-thread',
       sourceTurnStart: 'turn-0',
       sourceTurnEnd: 'turn-0',
@@ -122,7 +122,7 @@ describe('episode retrieval', () => {
     ep1.lifecycle = 'sealed';
     ep1.summary = 'Implemented JWT auth';
     const ep2 = createEpisodeRecord({
-      workspaceRoot: 'E:/langchain/Nexus',
+      workspaceRoot: 'E:/langchain/Suanlizi',
       sourceThreadId: 'other-thread',
       sourceTurnStart: 'turn-1',
       sourceTurnEnd: 'turn-1',
@@ -141,7 +141,7 @@ describe('episode retrieval', () => {
       {
         threadId: 'thread-1',
         currentTurnId: 'turn-0',
-        workspaceRoot: 'E:/langchain/Nexus',
+        workspaceRoot: 'E:/langchain/Suanlizi',
         userInput: 'Tell me about the Auth service',
         taskFingerprint: 'auth',
       },
@@ -156,7 +156,7 @@ describe('episode retrieval', () => {
   it('excludes already injected episodes', async () => {
     const store = new RetrievalStore();
     const ep = createEpisodeRecord({
-      workspaceRoot: 'E:/langchain/Nexus',
+      workspaceRoot: 'E:/langchain/Suanlizi',
       sourceThreadId: 'other-thread',
       sourceTurnStart: 'turn-0',
       sourceTurnEnd: 'turn-0',
@@ -173,7 +173,7 @@ describe('episode retrieval', () => {
       {
         threadId: 'thread-1',
         currentTurnId: 'turn-0',
-        workspaceRoot: 'E:/langchain/Nexus',
+        workspaceRoot: 'E:/langchain/Suanlizi',
         userInput: 'utility',
         taskFingerprint: 'utility',
         injectedEpisodeIds: [ep.id],
@@ -185,9 +185,9 @@ describe('episode retrieval', () => {
   });
 
   it('builds safe search terms from Windows paths and file paths', () => {
-    const terms = buildEpisodeSearchTerms('E:/langchain/Nexus/src/foo.ts');
+    const terms = buildEpisodeSearchTerms('E:/langchain/Suanlizi/src/foo.ts');
     expect(terms).toContain('langchain');
-    expect(terms).toContain('nexus');
+    expect(terms).toContain('suanlizi');
     expect(terms).toContain('src');
     expect(terms).toContain('foo');
     expect(terms).toContain('foo.ts');
@@ -204,7 +204,7 @@ describe('episode retrieval', () => {
   it('recalls episodes from path-like user input', async () => {
     const store = new RetrievalStore();
     const ep = createEpisodeRecord({
-      workspaceRoot: 'E:/langchain/Nexus',
+      workspaceRoot: 'E:/langchain/Suanlizi',
       sourceThreadId: 'other-thread',
       sourceTurnStart: 'turn-0',
       sourceTurnEnd: 'turn-0',
@@ -222,8 +222,8 @@ describe('episode retrieval', () => {
       {
         threadId: 'thread-1',
         currentTurnId: 'turn-0',
-        workspaceRoot: 'E:/langchain/Nexus',
-        userInput: 'E:/langchain/Nexus/src/foo.ts',
+        workspaceRoot: 'E:/langchain/Suanlizi',
+        userInput: 'E:/langchain/Suanlizi/src/foo.ts',
         taskFingerprint: 'path',
       },
       { ftsCandidateLimit: 10, injectLimit: 2, tokenBudget: 800, rerankEnabled: false },

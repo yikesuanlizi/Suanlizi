@@ -1,5 +1,5 @@
 /**
- * 文件用途：锁定 Nexus 桌面端深色主题的基础视觉令牌，防止后续局部规则重新引入白色表面。
+ * 文件用途：锁定 Suanlizi 桌面端深色主题的基础视觉令牌，防止后续局部规则重新引入白色表面。
  * 业务归属：桌面客户端视觉系统。
  */
 import { readFileSync } from 'node:fs';
@@ -12,7 +12,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 /** 读取最终 CSS 守卫，确保断言覆盖位于旧规则之后的最终优先级。 */
 function readVisualContract(): string {
   const styles = readFileSync(join(here, 'styles.css'), 'utf-8').replace(/\r\n/g, '\n');
-  return styles.slice(styles.lastIndexOf('/* Nexus visual contract:'));
+  return styles.slice(styles.lastIndexOf('/* Suanlizi visual contract:'));
 }
 
 describe('dark theme skin', () => {

@@ -5,6 +5,7 @@ import {
   compactWorkspaceRoots,
   forgetWorkspaceRoot,
   rememberWorkspaceRoots,
+  threadsInWorkspace,
   WORKSPACE_ROOTS_STORAGE_KEY,
 } from './workspaces.js';
 import type { ThreadMeta } from '../../shared/types.js';
@@ -50,6 +51,21 @@ describe('workspace root memory', () => {
     expect(remembered).toEqual(['E:/langchain', 'D:/old']);
     expect(JSON.parse(storage.get(WORKSPACE_ROOTS_STORAGE_KEY) ?? '[]')).toEqual(remembered);
     expect(forgetWorkspaceRoot(remembered, 'e:/LANGCHAIN')).toEqual(['D:/old']);
+  });
+});
+
+describe('threadsInWorkspace', () => {
+  it('selects the matching root, its descendants, and leaves other workspaces', () => {
+    const selected = threadsInWorkspace([
+      thread('parent', 'E:/langchain'),
+      thread('child', 'D:/elsewhere', 'parent'),
+      thread('grandchild', '', 'child'),
+      thread('other', 'D:/work'),
+      thread('other-child', 'D:/work', 'other'),
+      thread('plain', ''),
+    ], 'e:\\langchain\\');
+
+    expect(selected.map((item) => item.threadId)).toEqual(['parent', 'child', 'grandchild']);
   });
 });
 

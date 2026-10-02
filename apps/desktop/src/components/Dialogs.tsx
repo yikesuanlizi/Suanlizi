@@ -106,30 +106,12 @@ export function SettingsHelpDialog({ locale, onClose }: { locale: Locale; onClos
       items: [
         zh
           ? {
-              name: '缓存优先',
-              desc: '保持提示词和工具结构稳定，尽量延迟压缩，提高 DeepSeek / OpenAI 兼容模型缓存命中率。',
-            }
-          : {
-              name: 'Cache first',
-              desc: 'Keeps prompt structure stable, delays compaction for higher cache hit rates on DeepSeek / OpenAI compatible models.',
-            },
-        zh
-          ? {
-              name: '长运行',
-              desc: '使用 Runtime OS 策略，优先保证长任务、多智能体、工具调用、压缩和中断恢复可追踪。',
-            }
-          : {
-              name: 'Long-running',
-              desc: 'Runtime OS strategy prioritizes long tasks, multi-agent, tool calls, compaction, and resumability.',
-            },
-        zh
-          ? {
               name: '思考程度',
-              desc: '快速适合简单问答；均衡适合日常编码；深度适合复杂设计、排查和长链路推理，会消耗更多输出 token。',
+              desc: '快速关闭思考；均衡、深度、更深和最高逐级增强推理；动态工作流固定使用最高档。',
             }
           : {
               name: 'Reasoning effort',
-              desc: 'Fast for simple turns, Balanced for everyday coding, Deep for complex design/debugging with higher token use.',
+              desc: 'Fast disables reasoning; Balanced, Deep, Deeper and Max increase reasoning step by step; Dynamic Workflow always uses Max.',
             },
         zh
           ? {
@@ -152,11 +134,11 @@ export function SettingsHelpDialog({ locale, onClose }: { locale: Locale; onClos
         zh
           ? {
               name: '上下文压缩',
-              desc: '压缩会把旧轮次写成可追踪摘要，释放上下文窗口。缓存优先会更晚压缩；长运行会更主动压缩以保证恢复和多 Agent 稳定。',
+              desc: '压缩会把旧轮次写成可追踪摘要，释放上下文窗口。压缩阈值在“运行参数”里按模型上下文窗口的百分比设置。',
             }
           : {
               name: 'Context compaction',
-              desc: 'Rewrites old turns into a traceable summary. Cache first delays it; Long-running uses it earlier for stability.',
+              desc: 'Rewrites old turns into a traceable summary. Set the threshold as a share of the model context window under Runtime settings.',
             },
       ],
     },

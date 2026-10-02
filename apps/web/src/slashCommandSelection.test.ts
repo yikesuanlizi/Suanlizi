@@ -87,7 +87,7 @@ describe('slash command selection UI', () => {
     // mcpDraftSourceUrl 已迁到 McpConfigDialog.tsx
     expect(mcpDialog).toContain('mcpDraftSourceUrl');
     expect(mcpDialog).toContain('mcpSourceNotice');
-    expect(mcpDialog).toContain('Nexus 不会把 URL 直接当作命令执行');
+    expect(mcpDialog).toContain('Suanlizi 不会把 URL 直接当作命令执行');
     expect(mcpDialog).toContain('disabled={!mcpCanSave}');
     expect(styles).toContain('.mcpSourceNotice');
   });

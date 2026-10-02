@@ -27,7 +27,7 @@ describe('app module structure', () => {
 
   it('creates a titled workflow project shell without saving an empty workflow definition', () => {
     const source = readFileSync(join(here, 'main.tsx'), 'utf-8');
-    const createDraft = source.match(/const createWorkflowProjectDraft[\s\S]*?\n\n  useEffect/)?.[0] ?? '';
+    const createDraft = source.match(/const createWorkflowProjectDraft[\s\S]*?\r?\n\r?\n  useEffect/)?.[0] ?? '';
     expect(createDraft).toContain("setWorkspaceView('workflow')");
     expect(createDraft).toContain('createWorkflowThread(');
     expect(createDraft).toContain('未命名工作流项目');
@@ -99,14 +99,15 @@ describe('app module structure', () => {
     expect(startOpsTask).toContain('const reportStartError =');
   });
 
-  it('does not expose Ops without a thread workspace or global workspace', () => {
+  it('keeps Ops behind an explicit start action', () => {
     const source = readFileSync(join(here, 'main.tsx'), 'utf-8');
 
     expect(source).toContain("const activeWorkspaceRoot = threadId");
     expect(source).toContain("activeThread?.tags?.conversationKind === 'chat' ? ''");
-    expect(source).toContain('const opsModeAvailable = Boolean(activeWorkspaceRoot.trim())');
-    expect(source).toContain('opsModeAvailable={opsModeAvailable}');
-    expect(source).toContain("if (mode === 'ops' && !activeWorkspaceRoot.trim())");
+    expect(source).toContain('showOps={hasActiveThread && opsSessionActive}');
+    expect(source).toContain("case 'ops':");
+    expect(source).toContain("return submitExecutionMode('ops', command.args, attachments)");
+    expect(source).not.toContain('handleThreadModeChange');
   });
 
   it('uses stable transcript keys so streaming updates do not remount messages', () => {
@@ -116,5 +117,15 @@ describe('app module structure', () => {
     expect(transcriptRender).toContain('key={group.item.id}');
     expect(transcriptRender).toContain('key={group.id}');
     expect(transcriptRender).not.toContain('-${index}');
+  });
+
+  it('follows one end sentinel frame without resize-driven transcript forcing', () => {
+    const source = readFileSync(join(here, 'main.tsx'), 'utf-8');
+
+    expect(source).toContain('const transcriptEndRef = useRef<HTMLDivElement | null>(null);');
+    expect(source).toContain("transcriptEndRef.current?.scrollIntoView({ block: 'end' });");
+    expect(source).toContain('className="transcriptEndSentinel"');
+    expect(source).not.toContain('ResizeObserver');
+    expect(source).not.toContain('transcript.scrollTop = transcript.scrollHeight');
   });
 });

@@ -1,4 +1,4 @@
-import type { ThreadId } from '@nexus/protocol';
+import type { ThreadId } from '@suanlizi/protocol';
 import type { ThreadItem } from '../../shared/types.js';
 
 export type CanonicalTranscriptEntry = { source: 'canonical'; item: ThreadItem };

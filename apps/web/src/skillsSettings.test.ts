@@ -145,29 +145,31 @@ describe('skills settings', () => {
     expect(styles).not.toContain('grid-cols-[minmax(0,1fr)_minmax(180px,320px)]');
   });
 
-  it('keeps provider dropdown options focused on provider names only', () => {
+  it('shows registered custom providers with optional favicon branding', () => {
     const shared = readFileSync(join(here, 'components', 'settings', 'shared.ts'), 'utf-8');
     // providerDropdownOptions 已迁到 settings/shared.ts
-    const providerOptions = shared.slice(shared.indexOf('function providerDropdownOptions'));
+    const helperIndex = shared.indexOf('ProviderBrandIcon');
+    const providerOptions = shared.slice(helperIndex >= 0 ? helperIndex : shared.indexOf('function providerDropdownOptions'));
 
     expect(providerOptions).toContain('label: provider.name');
     expect(providerOptions).toContain("provider.id === 'openai_compatible'");
-    expect(providerOptions).toContain("!provider.id.startsWith('custom_')");
-    expect(providerOptions).not.toContain("t(locale, 'customProvider')");
+    expect(providerOptions).toContain("provider.id.startsWith('custom_')");
+    expect(providerOptions).toContain("t(locale, 'customProvider')");
+    expect(providerOptions).toContain('ProviderBrandIcon');
     expect(providerOptions).not.toContain('detail: provider');
     expect(providerOptions).not.toContain('apiKeyEnvVar');
     expect(providerOptions).not.toContain('baseUrl.replace');
   });
 
-  it('loads model presets inside the model page without applying them immediately', () => {
+  it('loads and applies model presets inside the model page', () => {
     const models = readFileSync(join(here, 'components', 'settings', 'ModelsPage.tsx'), 'utf-8');
     const settingsDrawer = readFileSync(join(here, 'components', 'SettingsDrawer.tsx'), 'utf-8');
 
     // 模型 section UI 已迁到 ModelsPage.tsx
     expect(settingsDrawer).not.toContain("{ id: 'presets'");
-    expect(models).toContain('modelPresetDraftOptions');
+    expect(models).toContain('modelPresets.map((preset)');
     expect(models).toContain('<DropdownSelect');
-    expect(models).toContain('loadModelPresetIntoDraft');
+    expect(models).toContain('beginEdit(preset)');
     expect(models).not.toContain('applyModelPreset(preset)');
     expect(models).not.toContain('saveModelPreset()');
   });

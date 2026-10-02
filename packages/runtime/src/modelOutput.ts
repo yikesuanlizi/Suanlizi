@@ -1,5 +1,5 @@
-import type { ItemId, NexusErrorInfo, ThreadItem, TurnId } from '@nexus/protocol';
-import { NexusRuntimeError } from './runtimeError.js';
+import type { ItemId, SuanliziErrorInfo, ThreadItem, TurnId } from '@suanlizi/protocol';
+import { SuanliziRuntimeError } from './runtimeError.js';
 
 // 模型输出的可识别事件类型：消息增量、最终文本、工具调用、工具结果、思考过程、工作流事件、流式错误
 export type ModelOutputItem =
@@ -9,7 +9,7 @@ export type ModelOutputItem =
   | { type: 'tool_result'; callId: string; toolName: string; output: string }
   | { type: 'reasoning'; itemId: ItemId; turnId: TurnId; text: string }
   | { type: 'workflow_event'; workflowId: string; nodeId?: string; eventType: string; payload?: unknown }
-  | { type: 'stream_error'; message: string; recoverable: boolean; info?: NexusErrorInfo };
+  | { type: 'stream_error'; message: string; recoverable: boolean; info?: SuanliziErrorInfo };
 
 // 验证通过的模型输出：返回 ok=true 及 items
 export interface ValidatedModelOutput {
@@ -20,7 +20,7 @@ export interface ValidatedModelOutput {
 // 被拒绝的模型输出：返回 ok=false 及错误对象
 export interface RejectedModelOutput {
   ok: false;
-  error: NexusRuntimeError;
+  error: SuanliziRuntimeError;
 }
 
 // 校验模型输出：防止工具协议文本泄漏到 assistant 内容中，检查 tool_call 与 tool_result 的 callId 是否配对，检查 workflow_event 必备字段
@@ -75,7 +75,10 @@ const TRANSCRIPT_TOOL_NAMES = [
   'write_file',
 ];
 
-// 判断内容是否泄漏了工具协议文本：匹配 <|...|> 标签、DSML、JSON tool_calls、function_call、[Tool xxx] 等典型模式
+// 判断内容是否泄漏了工具协议文本：匹配 <|...|> 标签、DSML、JSON tool_calls、function_call、
+// [Tool xxx] 以及 Gitee 压平历史消息时使用的 [工具调用]/[工具结果] 记录。
+// 这些文本不是用户可见回答；一旦进入 assistant 内容，后续上下文会把它当成
+// 普通对话继续回显，必须在 runtime 边界拒绝并触发一次结构化重试。
 export function leaksToolProtocol(content: unknown): boolean {
   if (typeof content !== 'string') return false;
   const trimmed = content.trim();
@@ -91,19 +94,29 @@ export function leaksToolProtocol(content: unknown): boolean {
     || /"function_call"\s*:/.test(trimmed)
     || /"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:/.test(trimmed);
   const hasToolTranscript = leaksTextToolTranscript(trimmed);
+  const hasGiteeToolTranscript = leaksGiteeToolTranscript(trimmed);
   return /\[(?:Tool|tool)\s+[\w.-]+(?:\s+(?:completed|failed|running|pending))?\]/.test(trimmed)
     || /\[(?:调用|call)\s+[\w.-]+\]\s*(?:\{|\[|$)/i.test(trimmed)
     || /^工具调用\s*[:：]\s*[\w.-]+\s*$/i.test(trimmed)
+    || hasGiteeToolTranscript
     || hasTaggedToolSyntax
     || hasJsonToolSyntax
     || hasToolTranscript;
+}
+
+function leaksGiteeToolTranscript(text: string): boolean {
+  // Gitee 的 OpenAI 兼容接口要求把历史 tool_calls 压成普通 assistant 文本；
+  // 部分模型会把这段协议原样回显。兼容单行和多行、中文/英文字段名。
+  return /\[工具调用\]|\[工具结果(?:\s*[:：][^\]\r\n]*)?\]/i.test(text)
+    && /(?:名称|name)\s*[:：]\s*[\w./:-]+/i.test(text)
+    && /(?:参数|arguments?|args)\s*[:：]/i.test(text);
 }
 
 // 构造一个拒绝响应：统一使用 BadRequest 类型的错误
 function rejected(message: string): RejectedModelOutput {
   return {
     ok: false,
-    error: new NexusRuntimeError(message, { kind: 'BadRequest' }),
+    error: new SuanliziRuntimeError(message, { kind: 'BadRequest' }),
   };
 }
 

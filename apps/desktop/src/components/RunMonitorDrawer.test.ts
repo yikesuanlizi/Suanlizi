@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { RunMonitorDrawer } from './RunMonitorDrawer.js';
-import type { RunTraceCategory, RunTraceEnvelope } from '@nexus/protocol';
+import type { RunTraceCategory, RunTraceEnvelope } from '@suanlizi/protocol';
 import type { RunEvent, RunRecord, ThreadWithRuns } from '../shared/types.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -96,6 +96,7 @@ const baseProps = {
   autoRefresh: false,
   autoRefreshInterval: 5000,
   loading: false,
+  loadError: null,
   allCategories,
   onClose: vi.fn(),
   onRefresh: vi.fn(),

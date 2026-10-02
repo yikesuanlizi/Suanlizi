@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Locale } from '../../config/config.js';
 import type { ThreadChildInfo, ThreadItem, ThreadMeta } from '../../shared/types.js';
-import type { RunControlCapabilities, RunTraceEnvelope, RunTraceSummary } from '@nexus/protocol';
+import type { RunControlCapabilities, RunTraceEnvelope, RunTraceSummary } from '@suanlizi/protocol';
 import type { ExternalPreviewRequest } from '../WorkspaceFilesPanel.js';
 import { WorkspaceFilesPanel } from '../WorkspaceFilesPanel.js';
 import { Icon } from '../Icon.js';
@@ -15,14 +15,15 @@ import {
   type WorkbenchTab,
 } from './WorkbenchTabs.js';
 import { LiveActivityHud } from './LiveActivityHud.js';
-import { AgentInspector } from './AgentInspector.js';
+import { AgentConversationView } from './AgentConversationView.js';
+import { CommandTerminalPane } from './CommandTerminalPane.js';
 import { AgentStagePanel } from '../AgentStagePanel.js';
 import { BrowserWorkbench } from '../BrowserWorkbench.js';
 import { TerminalPanel } from './TerminalPanel.js';
 import { OpsTaskInspector, type OpsTaskTimelineEvent } from './OpsTaskInspector.js';
 import { OpsKnowledgeStatus } from './OpsKnowledgeStatus.js';
 import type { KnowledgeScopeSelection } from '../../api/knowledgeClient.js';
-import type { OpsTaskSession } from '@nexus/protocol';
+import type { OpsTaskSession } from '@suanlizi/protocol';
 
 export function WorkspaceWorkbench({
   activeThread,
@@ -52,6 +53,8 @@ export function WorkspaceWorkbench({
   onAddFileToConversation,
   responsiveMode,
   onCloseRequest,
+  agentDetailRequest,
+  onOpenCommandTerminal,
   suspendBrowser = false,
   showOps = false,
   opsTask = null,
@@ -90,6 +93,12 @@ export function WorkspaceWorkbench({
   onAddFileToConversation?(path: string): void;
   responsiveMode?: 'side' | 'overlay' | 'sheet';
   onCloseRequest?(): void;
+  /** 气泡/卡片点击打开 agent 详情的请求；nonce 变化时选中对应 agent 进入详情视图 */
+  // — Chinese: agent detail request; a nonce change selects the agent and opens the detail view
+  agentDetailRequest?: { threadId: string; nonce: number } | null;
+  /** 注册"打开命令终端面板"的回调，供气泡命令块调用 */
+  // — Chinese: register the open-command-terminal handler for bubble command blocks
+  onOpenCommandTerminal?(handler: (itemId: string) => void): void;
   suspendBrowser?: boolean;
   showOps?: boolean;
   opsTask?: OpsTaskSession | null;
@@ -104,24 +113,53 @@ export function WorkspaceWorkbench({
   const zh = locale === 'zh';
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [terminalRoots, setTerminalRoots] = useState<Record<string, string>>({});
-  const [browserNavigationRequest, setBrowserNavigationRequest] = useState<{ url: string; nonce: number } | null>(null);
+  // 命令终端预览：气泡命令块"终端"按钮选中的命令条目 id（null = 面板关闭）
+  // — Chinese: command-terminal preview state — the selected command item id (null = closed)
+  const [commandTerminalItemId, setCommandTerminalItemId] = useState<string | null>(null);
+  const [browserNavigationRequest, setBrowserNavigationRequest] = useState<{ url: string; nonce: number; threadId: string } | null>(null);
   const browserNavigationNonceRef = useRef(0);
   const handledPreviewRequestKeyRef = useRef('');
   const hasActiveThread = Boolean(activeThreadId && activeThread);
-  const opsVisible = hasActiveThread && (showOps || activeThread?.mode === 'ops' || Boolean(opsTask));
+  // A persisted thread mode is only historical metadata. Render Ops only
+  // when the caller has an explicit active session or task detail.
+  const opsVisible = hasActiveThread && (showOps || Boolean(opsTask));
   const mainAgentThreadId = activeThreadId || 'main';
 
   useEffect(() => {
     setSelectedAgentId(null);
   }, [activeThreadId]);
 
+  // agent 详情请求 → 若该 agent 在节点树中，选中并进入详情视图
+  // — Chinese: agent detail request → select the agent (if present) and open its detail view
+  const handledAgentDetailNonceRef = useRef(0);
+  useEffect(() => {
+    if (!agentDetailRequest || agentDetailRequest.nonce === handledAgentDetailNonceRef.current) return;
+    handledAgentDetailNonceRef.current = agentDetailRequest.nonce;
+    if (!hasActiveThread) return;
+    setSelectedAgentId((current) => current === agentDetailRequest.threadId ? current : agentDetailRequest.threadId);
+  }, [agentDetailRequest, hasActiveThread]);
+
   useEffect(() => {
     setTerminalRoots({});
-    if (!hasActiveThread) {
-      setBrowserNavigationRequest(null);
-      handledPreviewRequestKeyRef.current = '';
-    }
+    // Navigation and preview requests belong to one thread/workspace. Clear
+    // both on every scope change so a new thread cannot consume stale work.
+    setBrowserNavigationRequest(null);
+    setCommandTerminalItemId(null);
+    handledPreviewRequestKeyRef.current = '';
   }, [activeThreadId, hasActiveThread, terminalWorkspaceRoot, workspaceRoot]);
+
+  // 气泡命令块"终端"按钮 → 打开右侧命令终端面板并选中该命令
+  // — Chinese: bubble "Terminal" button → open the right command-terminal pane
+  const handlePreviewCommand = (itemId: string): void => {
+    if (!hasActiveThread) return;
+    setCommandTerminalItemId(itemId);
+  };
+
+  // 把打开回调注册给上层（气泡里的命令块经此触发）
+  // — Chinese: register the open handler upward so bubble command blocks can trigger it
+  useEffect(() => {
+    onOpenCommandTerminal?.(handlePreviewCommand);
+  }, [onOpenCommandTerminal]);
 
   const handleOpenTerminalAt = (directory: string): void => {
     if (!hasActiveThread) return;
@@ -136,7 +174,7 @@ export function WorkspaceWorkbench({
     if (!hasActiveThread || !workspaceRoot || !path) return;
     const url = workspaceFileToUrl(workspaceRoot, path);
     browserNavigationNonceRef.current += 1;
-    setBrowserNavigationRequest({ url, nonce: browserNavigationNonceRef.current });
+    setBrowserNavigationRequest({ url, nonce: browserNavigationNonceRef.current, threadId: activeThreadId });
     onOpenUtilityTab('browser');
   };
 
@@ -179,6 +217,26 @@ export function WorkspaceWorkbench({
     return workbench.nodes.find(n => n.threadId === selectedAgentId) ?? null;
   }, [workbench.nodes, selectedAgentId]);
 
+  // 详情视图数据：子 agent 取 child.items，主 agent 取 runtimeItems
+  // — Chinese: detail-view data — child.items for sub-agents, runtimeItems for the primary agent
+  const selectedAgentItems = useMemo<ThreadItem[]>(() => {
+    if (!selectedAgentId) return [];
+    if (selectedAgentId === mainAgentThreadId) return runtimeItems;
+    return threadChildren.find((child) => child.thread.threadId === selectedAgentId)?.items ?? [];
+  }, [selectedAgentId, mainAgentThreadId, runtimeItems, threadChildren]);
+
+  const selectedAgentInstruction = useMemo(() => {
+    if (!selectedAgentId || selectedAgentId === mainAgentThreadId) return undefined;
+    const child = threadChildren.find((entry) => entry.thread.threadId === selectedAgentId);
+    if (!child) return undefined;
+    const turnInput = child.latestTurn?.userInput;
+    if (turnInput && typeof turnInput === 'object' && 'type' in turnInput && (turnInput as { type?: string; text?: string }).type === 'text') {
+      const text = (turnInput as { text?: string }).text;
+      if (text?.trim()) return text;
+    }
+    return child.latestCollabItem?.prompt ?? undefined;
+  }, [selectedAgentId, mainAgentThreadId, threadChildren]);
+
   const memoryExcluded = activeThread?.tags?.memoryExcluded === 'true';
   const shouldRenderFilesPanel = hasActiveThread && openUtilityTabs.includes('files');
   const shouldRenderBrowserWorkbench = hasActiveThread && openUtilityTabs.includes('browser');
@@ -190,10 +248,6 @@ export function WorkspaceWorkbench({
 
   const handleSelectAgent = (threadId: string) => {
     setSelectedAgentId((current) => current === threadId ? null : threadId);
-  };
-
-  const handleJumpToAgentMonitor = (threadId: string) => {
-    onJumpToMonitor?.({ threadId });
   };
 
   const handleJumpToTrace = (opts: { itemId: string; runId: string; eventId?: string }) => {
@@ -252,24 +306,30 @@ export function WorkspaceWorkbench({
           aria-hidden={activeTab !== 'agents'}
           inert={activeTab !== 'agents'}
         >
-          {hasActiveThread ? <div className="workbenchAgentTreeWrap">
-            <AgentStagePanel
-              locale={locale}
-              rows={agentStageRows}
-              selectedThreadId={selectedAgentId}
-              onSelectAgent={handleSelectAgent}
-            />
-          </div> : null}
-          {selectedNode ? (
-            hasActiveThread ? (
-              <div className="workbenchAgentInspectorWrap">
-                <AgentInspector
-                  node={selectedNode}
-                  onJumpToMonitor={handleJumpToAgentMonitor}
+          {hasActiveThread ? (
+            // 卡片视图与详情视图互斥显示：点卡片/气泡名字进详情，"返回卡片"回列表
+            // — Chinese: card view and detail view are mutually exclusive; a card or
+            //   bubble name opens the detail, "back" returns to the cards.
+            selectedNode ? (
+              <div className="workbenchAgentDetailWrap">
+                <AgentConversationView
                   locale={locale}
+                  node={selectedNode}
+                  items={selectedAgentItems}
+                  instruction={selectedAgentInstruction}
+                  onBack={() => setSelectedAgentId(null)}
                 />
               </div>
-            ) : null
+            ) : (
+              <div className="workbenchAgentTreeWrap">
+                <AgentStagePanel
+                  locale={locale}
+                  rows={agentStageRows}
+                  selectedThreadId={selectedAgentId}
+                  onSelectAgent={handleSelectAgent}
+                />
+              </div>
+            )
           ) : null}
         </div>
 
@@ -302,6 +362,18 @@ export function WorkspaceWorkbench({
           </div>
         ) : null}
 
+        {commandTerminalItemId ? (
+          <div className="workbenchCommandTerminal">
+            <CommandTerminalPane
+              locale={locale}
+              items={runtimeItems}
+              selectedItemId={commandTerminalItemId}
+              onSelectItem={setCommandTerminalItemId}
+              onClose={() => setCommandTerminalItemId(null)}
+            />
+          </div>
+        ) : null}
+
         {shouldRenderFilesPanel ? (
           <div
             className={workbenchPanelClassName('files', activeTab)}
@@ -330,6 +402,7 @@ export function WorkspaceWorkbench({
           >
             <BrowserWorkbench
               active={activeTab === 'browser' && !suspendBrowser}
+              threadId={activeThreadId}
               navigationRequest={browserNavigationRequest}
             />
           </div>
@@ -346,6 +419,7 @@ export function WorkspaceWorkbench({
             <TerminalPanel
               active={activeTab === tabId}
               locale={locale}
+              threadId={activeThreadId}
               workspaceRoot={terminalRoots[tabId] ?? (hasActiveThread ? terminalWorkspaceRoot ?? workspaceRoot : '')}
             />
           </div>

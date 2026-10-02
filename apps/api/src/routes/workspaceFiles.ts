@@ -7,7 +7,7 @@ import { sendError, sendJson } from '../shared/http.js';
 
 // 忽略的目录列表（构建产物/缓存等） — Chinese: ignored directories (build artifacts, caches)
 const IGNORED_DIRS = new Set([
-  '.nexus',
+  '.suanlizi',
   '.cache',
   '.git',
   '.mypy_cache',
@@ -321,9 +321,6 @@ function sendRawFile(res: ServerResponse, buffer: Buffer, name: string, mimeType
     'Content-Type': mimeType,
     'Content-Length': buffer.length,
     'Content-Disposition': `inline; filename="${safeName}"; filename*=UTF-8''${encodedName}`,
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
   });
   res.end(buffer);
 }

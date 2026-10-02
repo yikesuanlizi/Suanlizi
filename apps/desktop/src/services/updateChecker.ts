@@ -1,5 +1,5 @@
-const RELEASE_API_URL = 'https://api.github.com/repos/yikesuanlizi/Nexus/releases/latest';
-const RELEASE_FALLBACK_URL = 'https://github.com/yikesuanlizi/Nexus/releases/latest';
+const RELEASE_API_URL = 'https://api.github.com/repos/yikesuanlizi/Suanlizi/releases/latest';
+const RELEASE_FALLBACK_URL = 'https://github.com/yikesuanlizi/Suanlizi/releases/latest';
 const CACHE_KEY = 'nexus.updateCheck';
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 10_000;

@@ -1,6 +1,7 @@
 import type { AppDialogState } from '../../components/Dialogs.js';
 import type { Locale } from '../../config/config.js';
 import type { ThreadMeta } from '../../shared/types.js';
+import { formatSuanliziErrorMessage } from '@suanlizi/protocol';
 
 export const WORKSPACE_ROOTS_STORAGE_KEY = 'nexus.workspaceRoots.v1';
 export const MAX_REMEMBERED_WORKSPACE_ROOTS = 30;
@@ -9,6 +10,8 @@ export type ThreadActivityState = 'idle' | 'running' | 'unread';
 
 export interface WorkspaceThreadGroup {
   context: string;
+  /** 只在本地记住、可被用户移除；来自当前工作区或线程的分组不允许误删。 */
+  pinned?: boolean;
   label: string;
   threads: ThreadMeta[];
   workspaceRoot: string;
@@ -47,7 +50,7 @@ export function workspacePickerNotice(locale: Locale, error: unknown): AppDialog
   return {
     kind: 'decision',
     title: locale === 'zh' ? '无法选择目录' : 'Cannot select directory',
-    message: error instanceof Error ? error.message : String(error),
+    message: formatSuanliziErrorMessage(undefined, error instanceof Error ? error.message : String(error), locale),
     actionLabel: locale === 'zh' ? '知道了' : 'OK',
     cancelLabel: locale === 'zh' ? '关闭' : 'Close',
     resolve: () => {},
@@ -63,7 +66,7 @@ export function normalizeWorkspaceRoot(value?: string | null): string {
   return stripped || trimmed;
 }
 
-function workspaceKey(value: string): string {
+export function workspaceKey(value: string): string {
   return normalizeWorkspaceRoot(value).replace(/\\/g, '/').toLowerCase();
 }
 
@@ -111,6 +114,30 @@ export function rememberWorkspaceRoots(current: readonly string[], roots: readon
 export function forgetWorkspaceRoot(current: readonly string[], root: string): string[] {
   const key = workspaceKey(root);
   return saveRememberedWorkspaceRoots(current.filter((item) => workspaceKey(item) !== key));
+}
+
+/** 移除工作区时要删除的线程：根目录匹配的对话，以及这些对话的子线程。 */
+export function threadsInWorkspace(threads: readonly ThreadMeta[], workspaceRoot: string): ThreadMeta[] {
+  const target = workspaceKey(workspaceRoot);
+  if (!target) return [];
+  const childrenByParent = new Map<string, ThreadMeta[]>();
+  for (const thread of threads) {
+    const parentId = thread.parentThreadId;
+    if (!parentId) continue;
+    const list = childrenByParent.get(parentId) ?? [];
+    list.push(thread);
+    childrenByParent.set(parentId, list);
+  }
+  const selected = new Set<string>();
+  const visit = (thread: ThreadMeta) => {
+    if (selected.has(thread.threadId)) return;
+    selected.add(thread.threadId);
+    for (const child of childrenByParent.get(thread.threadId) ?? []) visit(child);
+  };
+  for (const thread of threads) {
+    if (workspaceKey(thread.workspaceRoot ?? '') === target) visit(thread);
+  }
+  return threads.filter((thread) => selected.has(thread.threadId));
 }
 
 export function isPlainChatThread(thread: ThreadMeta): boolean {
@@ -172,6 +199,7 @@ export function buildWorkspaceThreadGroups(options: {
     group.threads.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
+  const pinnedKeys = new Set(compactWorkspaceRoots(options.rememberedRoots ?? []).map(workspaceKey));
   const groups = Array.from(map.values()).filter((group) => {
     if (!query) return true;
     const groupHaystack = [group.workspaceRoot, group.label, group.context].join('\n').toLowerCase();
@@ -188,5 +216,6 @@ export function buildWorkspaceThreadGroups(options: {
   // 当前线程切换会同步其工作区配置；不能再用 currentRoot 调整顺序，
   // 否则选中任意对话都会把整个工作区组顶到列表第一项。
   // 组顺序只由稳定的工作区名称决定，选择只改变行的 active 状态。
+  for (const group of groups) group.pinned = pinnedKeys.has(workspaceKey(group.workspaceRoot));
   return groups.sort((a, b) => a.label.localeCompare(b.label));
 }

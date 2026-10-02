@@ -32,14 +32,14 @@ import type {
   AgentDecisionRequest,
   AgentDecisionResponse,
   ThreadExecutionStatus,
-} from '@nexus/protocol';
-import { RUN_TRACE_VERSION } from '@nexus/protocol';
-import { ModelGateway, type ChatMessage, type ToolCall } from '@nexus/model-gateway';
-import { ToolRegistry, type ToolContext, type ToolDefinition, type ToolResult, type WebProviderRouterOptions, BUILTIN_TOOLS } from '@nexus/tools';
-import { Sandbox, resolveSandboxEffective, type SandboxConfig, type SandboxLevel, DenyAllApprovalHandler } from '@nexus/sandbox';
-import type { ApprovalHandler } from '@nexus/sandbox';
-import type { PermissionPreset } from '@nexus/sandbox';
-import type { RunEvent, RunEventLevel, RunRecord, RunTraceStore, ThreadStore } from '@nexus/storage';
+} from '@suanlizi/protocol';
+import { RUN_TRACE_VERSION } from '@suanlizi/protocol';
+import { ModelGateway, type AnthropicContentBlock, type ChatMessage, type ToolCall, type LlamaSlotLeaseManager } from '@suanlizi/model-gateway';
+import { artifactRoot, ToolRegistry, type ToolContext, type ToolDefinition, type ToolResult, type WebProviderRouterOptions, BUILTIN_TOOLS } from '@suanlizi/tools';
+import { Sandbox, resolveSandboxEffective, type SandboxConfig, type SandboxLevel, DenyAllApprovalHandler } from '@suanlizi/sandbox';
+import type { ApprovalHandler } from '@suanlizi/sandbox';
+import type { PermissionPreset } from '@suanlizi/sandbox';
+import type { RunEvent, RunEventLevel, RunRecord, RunTraceStore, ThreadStore } from '@suanlizi/storage';
 import type { RemoteAgentClient } from './a2aClient/remoteAgentClient.js';
 import {
   DEFAULT_MEMORY_SETTINGS,
@@ -64,14 +64,14 @@ import {
   listLightMemories,
   type MemorySettings,
   type EpisodeMemorySettings,
-} from '@nexus/memory';
-import { loadAgentsMd, LocalSkillRegistry, LocalHookRegistry } from '@nexus/extensions';
-import type { HookRegistry, SkillRegistry } from '@nexus/extensions';
-import { createI18n, systemPromptKey } from '@nexus/i18n';
-import type { Locale, I18n } from '@nexus/i18n';
+} from '@suanlizi/memory';
+import { loadAgentsMd, LocalSkillRegistry, LocalHookRegistry } from '@suanlizi/extensions';
+import type { HookRegistry, SkillRegistry } from '@suanlizi/extensions';
+import { createI18n, systemPromptKey } from '@suanlizi/i18n';
+import type { Locale, I18n } from '@suanlizi/i18n';
 import { ThreadStateManager } from './state.js';
 import type { ThreadState } from './state.js';
-import type { Checkpoint } from '@nexus/protocol';
+import type { Checkpoint } from '@suanlizi/protocol';
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -81,7 +81,7 @@ import { buildPromptCacheShape, comparePromptCacheShape, type PromptCacheShape }
 import { buildFreshnessPreflightNotice } from './fileFreshnessPreflight.js';
 import { compactionOptionsForModelContext, contextBudgetForRunProfile, normalizeRunProfile, type RunProfile } from './runProfile.js';
 import { leaksToolProtocol, validateThreadItemsForPersistence } from './modelOutput.js';
-import { NexusRuntimeError, isRecoverableStreamError, toNexusErrorInfo } from './runtimeError.js';
+import { SuanliziRuntimeError, isRecoverableStreamError, toSuanliziErrorInfo } from './runtimeError.js';
 import type { RunTurnOptions, HarnessItemFields, HarnessResult } from './harness/types.js';
 import { TaskHarnessEngine, type HarnessAgentLoop, type HarnessStateChangeCallback } from './harness/taskHarness.js';
 import { DEFAULT_HARNESS_CONFIG } from './harness/types.js';
@@ -104,9 +104,10 @@ import {
   TOOL_SEARCH_TOOL_NAME,
 } from './toolSearch.js';
 import { createToolGovernanceMiddleware, type ToolGovernanceConfig } from './toolGovernance.js';
+import { createStrictToolFinalizationMiddleware } from './strictToolFinalization.js';
 import { createGuardianMiddleware, type GuardianConfig } from './guardian.js';
-import { SystemMonitor, DEFAULT_SYSTEM_MONITOR_CONFIG, type SystemMonitorConfig } from './systemMonitor.js';
-import type { SystemMonitorLevel, SystemMonitorStatus } from '@nexus/protocol';
+import { SystemMonitor, DEFAULT_SYSTEM_MONITOR_CONFIG, createEmptySystemMonitorStatus, type SystemMonitorConfig } from './systemMonitor.js';
+import type { SystemMonitorLevel, SystemMonitorStatus } from '@suanlizi/protocol';
 import {
   createContextEngine,
   createInitialAgentContext,
@@ -121,14 +122,14 @@ import {
   type ContextProvider,
   type ExperienceStore,
   type ProjectBrainEnricher,
-} from '@nexus/context';
+} from '@suanlizi/context';
 import {
   discoverSkills,
   loadAllSkillModules,
   registerSkillsToRegistry,
   buildSkillsIndexBlock,
   type LoadedSkill,
-} from '@nexus/extensions';
+} from '@suanlizi/extensions';
 import { SkillExecutor } from './skillExecutor.js';
 import { createUseSkillTool, USE_SKILL_TOOL_NAME } from './skillTool.js';
 import { RunTraceSession } from './runTraceSession.js';
@@ -138,6 +139,10 @@ const RUNNING_CHECKPOINT_TTL_MS = 30 * 60 * 1000;
 const MAX_WEB_SEARCH_CALLS_PER_TURN = 6;
 const MAX_DUPLICATE_WEB_SEARCH_QUERY_PER_TURN = 2;
 const MODEL_HISTORY_TOKEN_BUDGET = 40_000;
+const DEFAULT_MODEL_OUTPUT_TOKEN_BUDGET = 4_096;
+const MODEL_REQUEST_OVERHEAD_TOKENS = 256;
+const MODEL_REQUEST_SAFETY_MARGIN_TOKENS = 64;
+const MIN_MODEL_INPUT_TOKEN_BUDGET = 512;
 
 function runtimeApprovalId(): string {
   return `approval_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
@@ -268,6 +273,8 @@ export interface AgentConfig {
   runProfile?: RunProfile;
   /** Current model context window in tokens. Used for compaction pressure and UI pressure events. */
   modelContextTokens?: number;
+  /** Maximum completion tokens reserved in the model context window. */
+  modelMaxOutputTokens?: number;
   // 中文注释：父线程下允许打开的已生成子 agent 最大数量。
   /** Maximum open spawned subagents below a parent thread. */
   maxSubagents?: number;
@@ -328,6 +335,7 @@ export interface AgentConfig {
   //           并在工具执行/子 agent 委派时自动限流。
   /** System monitor config (toggleable). When enabled, the agent receives proactive
    *  host CPU/memory/disk pressure notifications and auto-throttles tool execution / subagent delegation. */
+  llamaSlotLeaseManager?: LlamaSlotLeaseManager;
   systemMonitor?: Partial<SystemMonitorConfig>;
   // 中文注释：经验引擎配置。开启后会在回合内自动记录 failure_pattern / successful_workflow / gotcha 等 SAO 经验。
   /** Experience engine config. When enabled, records SAO-format experiences (failure patterns,
@@ -345,11 +353,13 @@ export interface AgentConfig {
   skillsDirs?: string[];
 }
 
-type ResolvedAgentConfig = Required<Omit<AgentConfig, 'memory' | 'a2aClientEnabled' | 'a2aRemotes' | 'systemMonitor' | 'experiences' | 'skillsDirs' | 'modelContextTokens'>> & {
+type ResolvedAgentConfig = Required<Omit<AgentConfig, 'memory' | 'a2aClientEnabled' | 'a2aRemotes' | 'systemMonitor' | 'experiences' | 'skillsDirs' | 'modelContextTokens' | 'modelMaxOutputTokens' | 'llamaSlotLeaseManager'>> & {
   modelContextTokens?: number;
+  modelMaxOutputTokens?: number;
   memory: MemorySettings;
   a2aClientEnabled?: boolean;
   a2aRemotes?: string[];
+  llamaSlotLeaseManager?: LlamaSlotLeaseManager;
   systemMonitor: SystemMonitorConfig;
   experiences: { enabled: boolean; storageDir?: string; maxEntries: number };
   skillsDirs: string[];
@@ -456,7 +466,7 @@ export class AgentLoop {
       tools: config.tools ?? createDefaultRegistry(),
       mcpTools: config.mcpTools ?? [],
       approvalHandler: config.approvalHandler ?? new DenyAllApprovalHandler(),
-      maxIterations: config.maxIterations ?? 100,
+      maxIterations: Math.max(1, Math.floor(Number(config.maxIterations ?? 100))) || 100,
       maxActiveTasks: Math.max(1, Math.floor(config.maxActiveTasks ?? 4)),
       systemPrompt: config.systemPrompt ?? this.i18n.t(systemPromptKey(locale)),
       skills: config.skills ?? new LocalSkillRegistry(),
@@ -466,11 +476,12 @@ export class AgentLoop {
       webProvider: config.webProvider ?? { provider: 'native_fetch' },
       runProfile: normalizeRunProfile(config.runProfile),
       modelContextTokens: positiveInteger(config.modelContextTokens),
+      modelMaxOutputTokens: positiveInteger(config.modelMaxOutputTokens),
       maxSubagents: config.maxSubagents ?? 4,
       runtimeMiddleware: config.runtimeMiddleware ?? [],
       dynamicContextProvider: config.dynamicContextProvider ?? (async () => []),
       maxRepeatedToolCalls: config.maxRepeatedToolCalls ?? 3,
-      maxConsecutiveToolErrors: config.maxConsecutiveToolErrors ?? 3,
+      maxConsecutiveToolErrors: config.maxConsecutiveToolErrors ?? 100,
       toolBindingMode: config.toolBindingMode ?? 'eager',
       initialTools: config.initialTools ?? [],
       maxToolSearchResults: config.maxToolSearchResults ?? 8,
@@ -516,7 +527,8 @@ export class AgentLoop {
 
     let experienceStore: ExperienceStore | undefined;
     if (this.config.experiences.enabled) {
-      const dir = this.config.experiences.storageDir ?? path.join(this.config.workspaceRoot, '.nexus');
+      const dir = this.config.experiences.storageDir
+        ?? path.join(artifactRoot(this.config.workspaceRoot), 'experiences');
       experienceStore = new JsonExperienceStore(dir, 'experiences.json');
     }
     this._experienceEngine = new ExperienceEngine({
@@ -672,6 +684,7 @@ export class AgentLoop {
         },
       },
       ...this.config.runtimeMiddleware,
+      createStrictToolFinalizationMiddleware(),
     ]);
     // 中文注释：初始化系统监控。仅当 enabled=true 时启动后台采样，并订阅级别变化用于主动通知。
     // — Chinese: init system monitor; only starts background sampling when enabled, subscribes for proactive notification
@@ -1183,7 +1196,7 @@ export class AgentLoop {
     const requestId = `rollback_${generateId()}`;
     await this.beginControlRun(requestId, threadId, 'Thread rollback');
     const fail = async (message: string, error?: unknown): Promise<never> => {
-      const info = toNexusErrorInfo(error ?? new Error(message));
+      const info = toSuanliziErrorInfo(error ?? new Error(message));
       this.emit({
         type: 'thread.rollback.failed',
         threadId,
@@ -1532,7 +1545,7 @@ export class AgentLoop {
         return { items: collectedItems, usage: null };
       }
       if (isRecoverableStreamError(err)) {
-        const info = toNexusErrorInfo(err);
+        const info = toSuanliziErrorInfo(err);
         const message = err instanceof Error ? err.message : String(err);
         const turns = await this.config.store.getTurns(threadId);
         const turn = turns.find((candidate) => candidate.turnId === turnId);
@@ -1568,7 +1581,7 @@ export class AgentLoop {
         return { items: collectedItems, usage: null };
       }
       const errorMsg = String(err);
-      const errorInfo = toNexusErrorInfo(err);
+      const errorInfo = toSuanliziErrorInfo(err);
       this.stateManager.failTurn(threadId, turnId, {
         message: errorMsg,
         timestamp: new Date().toISOString(),
@@ -2133,6 +2146,33 @@ export class AgentLoop {
     return null;
   }
 
+  private async appendFileChangeRunMonitorEvents(
+    turnId: TurnId,
+    itemId: ItemId,
+    toolName: 'write_file' | 'apply_patch',
+    changes: NormalizedFileChange[],
+  ): Promise<void> {
+    for (const change of changes) {
+      const action = change.kind === 'delete'
+        ? 'delete'
+        : toolName === 'write_file'
+          ? 'write'
+          : 'patch';
+      await this.appendRunMonitorEvent(turnId, {
+        category: 'file',
+        type: `file.${action}`,
+        message: `${action} file ${change.path}`,
+        metadata: {
+          itemId,
+          action,
+          path: change.path,
+          addedLines: change.addedLines ?? 0,
+          removedLines: change.removedLines ?? 0,
+        },
+      });
+    }
+  }
+
   private async appendFileLifecycleRunMonitorEvents(
     turnId: TurnId,
     itemId: ItemId,
@@ -2532,17 +2572,6 @@ export class AgentLoop {
     // Episode working set preparation (after turn_start hook, before compaction).
     await this.prepareEpisodeWorkingSet(thread, turnId, turnIndex, userInput);
 
-    // Pre-turn auto compaction: visible item, then compacted summary enters context.
-    // 回合前自动压缩：可见条目，然后压缩摘要进入上下文。
-    await this.maybeAutoCompact(threadId, turnId);
-    const refreshedThread = await this.config.store.getThread(threadId) ?? thread;
-
-    // Build messages
-    // 构建消息
-    const webSearchRecommended = shouldEnableWebSearch(this.config.webSearchMode, userInput);
-    const webSearchToolAvailable = this.shouldOfferWebSearchTool();
-    const messages = await this.buildMessages(threadId, userInput, refreshedThread, webSearchRecommended);
-    const recentKnowledgeItems = await this.config.store.getRecentItems(threadId, 80);
     const userItem: ThreadItem = {
       id: generateItemId(turnId, 0),
       type: 'user_message',
@@ -2560,19 +2589,33 @@ export class AgentLoop {
     await this.persistItems(threadId, [userItem]);
     this.refreshRunningCheckpoint(checkpoint, threadId, turnId, collectedItems.length);
     await this.writeCheckpoint(threadId, checkpoint);
-    const runtimeContext = await this.createRuntimeTurnContext(
-      threadId,
-      turnId,
-      refreshedThread,
-      userInput,
-      checkpoint,
-      collectedItems,
-    );
 
-    // Main agent loop
-    // 主 agent 循环
+    let runtimeContext: RuntimeTurnContext | null = null;
     let terminalTurnResult: RuntimeTurnResult | null = null;
     try {
+      // Pre-turn auto compaction: visible item, then compacted summary enters context.
+      // 回合前自动压缩：可见条目，然后压缩摘要进入上下文。
+      await this.maybeAutoCompact(threadId, turnId);
+      const refreshedThread = await this.config.store.getThread(threadId) ?? thread;
+
+      // Build messages
+      // 构建消息
+      const webSearchRecommended = shouldEnableWebSearch(this.config.webSearchMode, userInput);
+      const webSearchToolAvailable = this.shouldOfferWebSearchTool();
+      const messages = await this.buildMessages(threadId, userInput, refreshedThread, webSearchRecommended);
+      const recentKnowledgeItems = await this.config.store.getRecentItems(threadId, 80);
+
+      runtimeContext = await this.createRuntimeTurnContext(
+        threadId,
+        turnId,
+        refreshedThread,
+        userInput,
+        checkpoint,
+        collectedItems,
+      );
+
+      // Main agent loop
+      // 主 agent 循环
       await this.appendRunMonitorEvent(turnId, {
         category: 'middleware',
         type: 'middleware.beforeTurn',
@@ -2611,7 +2654,7 @@ export class AgentLoop {
       if (extractMemory) {
         await this.maybeExtractColdMemories(refreshedThread, turnId, userInput, collectedItems);
       }
-      await this.finishTurnLifecycle(runtimeContext, terminalTurnResult);
+      if (runtimeContext) await this.finishTurnLifecycle(runtimeContext, terminalTurnResult);
       return result;
     } catch (err) {
       if (terminalTurnResult) throw err;
@@ -2627,11 +2670,11 @@ export class AgentLoop {
         this.emitTaskRuntimeUpdated(threadId, turnId, 'idle', 'interrupted');
         terminalTurnResult = { status: 'interrupted', usage: null, error: err };
         await this.finishRunMonitor(turnId, 'interrupted', null, err);
-        await this.finishTurnLifecycle(runtimeContext, terminalTurnResult);
+        if (runtimeContext) await this.finishTurnLifecycle(runtimeContext, terminalTurnResult);
         return { items: collectedItems, usage: null };
       }
       if (isRecoverableStreamError(err)) {
-        const info = toNexusErrorInfo(err);
+        const info = toSuanliziErrorInfo(err);
         const message = err instanceof Error ? err.message : String(err);
         turn.status = 'interrupted';
         turn.completedAt = new Date().toISOString();
@@ -2670,17 +2713,24 @@ export class AgentLoop {
         });
         terminalTurnResult = { status: 'interrupted', usage: null, error: err };
         await this.finishRunMonitor(turnId, 'interrupted', null, err);
-        await this.finishTurnLifecycle(runtimeContext, terminalTurnResult);
+        if (runtimeContext) await this.finishTurnLifecycle(runtimeContext, terminalTurnResult);
         return { items: collectedItems, usage: null };
       }
       const errorMsg = err instanceof Error ? err.message : String(err);
-      const errorInfo = toNexusErrorInfo(err);
+      const errorInfo = toSuanliziErrorInfo(err);
+      const rawCause = err instanceof Error && err.cause instanceof Error ? err.cause.message : undefined;
+      const errorDetail = rawCause
+        ?? (err as { detail?: unknown }).detail as string | undefined
+        ?? (err instanceof Error && /model request timed out/i.test(err.message)
+          ? 'The operation was aborted due to timeout'
+          : undefined);
       const errorItem: ThreadItem = {
         id: generateItemId(turnId, collectedItems.length),
         type: 'error',
         turnId,
         message: errorMsg,
         info: errorInfo,
+        ...(errorDetail ? { detail: errorDetail } : {}),
         timestamp: new Date().toISOString(),
       };
       collectedItems.push(errorItem);
@@ -2707,7 +2757,7 @@ export class AgentLoop {
       terminalTurnResult = { status: 'failed', usage: null, error: err };
       await this.finishRunMonitor(turnId, 'failed', null, err);
       try {
-        await this.finishTurnLifecycle(runtimeContext, terminalTurnResult);
+        if (runtimeContext) await this.finishTurnLifecycle(runtimeContext, terminalTurnResult);
       } catch {
         // Preserve the original turn failure after afterTurn has had a chance to run.
         // 在 afterTurn 有机会执行后保留原始回合失败信息。
@@ -2812,6 +2862,85 @@ export class AgentLoop {
     return engine.runHarness(threadId, userInput, options);
   }
 
+  /** Resume a previously persisted harness/goal run through TaskHarnessEngine. */
+  async resumeHarness(
+    threadId: ThreadId,
+    options?: {
+      signal?: AbortSignal;
+      suspendSignal?: AbortSignal;
+      harnessRunId?: string;
+      workflow?: import('./harness/taskHarness.js').HarnessWorkflowOptions;
+    },
+  ): Promise<HarnessResult> {
+    const evaluatorModel: EvaluatorModelGateway = {
+      completeOnce: async (prompt, opts) => {
+        const response = await this.config.model.chat(
+          { messages: [{ role: 'user', content: prompt }] },
+          { signal: opts?.signal },
+        );
+        const content = response.choices[0]?.message?.content;
+        return typeof content === 'string' ? content : '';
+      },
+    };
+    const onHarnessStateChange: HarnessStateChangeCallback = ({ threadId: tid, harnessRunId, state, evaluation, evidenceCount }) => {
+      this.emit({
+        type: 'harness.state.updated',
+        threadId: tid,
+        harnessRunId,
+        status: state.status,
+        iteration: state.iteration,
+        maxContinuations: state.goal.maxContinuations,
+        noProgressCount: state.noProgressCount,
+        maxNoProgress: state.goal.maxNoProgress,
+        goal: state.goal.objective,
+        acceptanceCriteria: state.goal.acceptanceCriteria,
+        satisfied: state.status === 'satisfied',
+        blocker: state.lastEvaluation?.blocker,
+        failedCriteria: evaluation?.failedCriteria ?? state.lastEvaluation?.failedCriteria ?? [],
+        evidenceCount,
+        planNodes: state.plan.map((n) => ({ id: n.id, description: n.description, status: n.status })),
+        activeNodeId: state.activeNodeId,
+        nextHint: evaluation?.nextHint,
+        startedAt: state.startedAt,
+        updatedAt: state.updatedAt,
+      });
+      const loopStatus: 'active' | 'satisfied' | 'blocked' | 'no_progress' | 'max_continuations' =
+        state.status === 'cancelled' ? 'blocked' : state.status;
+      const activeTurnId = this.stateManager.get(tid)?.activeTurnId;
+      this.emit({
+        type: 'task.loop.updated',
+        threadId: tid,
+        turnId: activeTurnId ?? undefined,
+        loopId: harnessRunId,
+        iteration: state.iteration,
+        maxIterations: state.goal.maxContinuations,
+        noProgressCount: state.noProgressCount,
+        continuationReason: state.lastEvaluation?.status,
+        status: loopStatus,
+        timestamp: new Date().toISOString(),
+      });
+    };
+    const engine = new TaskHarnessEngine(
+      this as unknown as HarnessAgentLoop,
+      evaluatorModel,
+      this.config.store,
+      DEFAULT_HARNESS_CONFIG,
+      this._experienceEngine,
+      onHarnessStateChange,
+    );
+    return engine.resumeHarness(threadId, options);
+  }
+
+  /** Expose the shared/current system monitor status for API callers. */
+  getSystemMonitorStatus(): SystemMonitorStatus {
+    return this._systemMonitor?.getStatus() ?? createEmptySystemMonitorStatus(false);
+  }
+
+  /** Release a llama.cpp slot lease bound to a thread when the thread is deleted. */
+  releaseLlamaSlot(threadId: ThreadId): void {
+    this.config.llamaSlotLeaseManager?.releaseThread(threadId);
+  }
+
   // ─── Agent Loop Core ──────────────────────────────────────────────────────
   private async agentLoop(
     threadId: ThreadId,
@@ -2825,6 +2954,7 @@ export class AgentLoop {
     recentKnowledgeItems: ThreadItem[],
   ): Promise<{ items: ThreadItem[]; usage: Usage | null }> {
     let iteration = 0;
+    let plainTextToolPlaceholderRetries = 0;
     let usage: Usage | null = null;
     let webSearchDisabled = false;
     let freshnessPreflightApplied = false;
@@ -2908,11 +3038,24 @@ export class AgentLoop {
       );
       usage = streamed.usage;
       const message = streamed.message;
-
       // If no tool calls, this is the final response
       // 如果没有工具调用，就是最终响应
       if (!message.tool_calls || message.tool_calls.length === 0) {
         if (isTextToolPlaceholder(message.content) && iteration < this.config.maxIterations) {
+          plainTextToolPlaceholderRetries += 1;
+          if (plainTextToolPlaceholderRetries > 1) {
+            const repeatedProviderDiagnostics = this.modelProviderDiagnostics();
+            const repeatedError = new Error('PLAIN_TEXT_TOOL_CALL_REPEATED');
+            await this.appendRunMonitorEvent(turnId, {
+              category: 'model',
+              type: 'model.output.rejected',
+              level: 'error',
+              message: 'Repeated plain-text tool placeholder hard-stopped the turn',
+              model: repeatedProviderDiagnostics.model,
+              metadata: { ...repeatedProviderDiagnostics, iteration, reason: 'plain_text_tool_placeholder' },
+            });
+            throw repeatedError;
+          }
           const providerDiagnostics = this.modelProviderDiagnostics();
           await this.appendRunMonitorEvent(turnId, {
             category: 'model',
@@ -2952,6 +3095,8 @@ export class AgentLoop {
         assistantToolMessage.reasoning_content = message.reasoning_content;
       }
       if (message.providerFrame?.format === 'anthropic_messages') {
+        assistantToolMessage.providerFrame = message.providerFrame;
+      } else if (message.providerFrame?.format === 'openai_responses') {
         assistantToolMessage.providerFrame = message.providerFrame;
       }
       messages.push(assistantToolMessage);
@@ -3046,6 +3191,7 @@ export class AgentLoop {
       messages,
       tools,
       tool_choice: 'auto',
+      max_tokens: this.config.modelMaxOutputTokens,
       signal,
     };
     await this.appendRunMonitorEvent(turnId, {
@@ -3055,6 +3201,15 @@ export class AgentLoop {
       metadata: { messageCount: messages.length, toolCount: tools.length },
     });
     modelRequest = await this.runtimeMiddleware.beforeModel(runtimeContext, modelRequest);
+    const contextTokens = this.config.modelContextTokens ?? MODEL_HISTORY_TOKEN_BUDGET;
+    const outputBudget = Math.max(1, Math.floor(
+      Number(modelRequest.max_tokens ?? this.config.modelMaxOutputTokens ?? DEFAULT_MODEL_OUTPUT_TOKEN_BUDGET),
+    ) || DEFAULT_MODEL_OUTPUT_TOKEN_BUDGET);
+    const inputBudget = Math.max(
+      MIN_MODEL_INPUT_TOKEN_BUDGET,
+      contextTokens - outputBudget - MODEL_REQUEST_OVERHEAD_TOKENS - MODEL_REQUEST_SAFETY_MARGIN_TOKENS,
+    );
+    modelRequest.messages = fitMessagesToBudget(modelRequest.messages, inputBudget);
     // 发 task.runtime.updated phase=model — 让 monitor 知道当前进入模型调用阶段
     this.emitTaskRuntimeUpdated(threadId, turnId, 'model', 'running');
     const cacheShape = buildPromptCacheShape(modelRequest.messages, modelRequest.tools ?? []);
@@ -3103,6 +3258,7 @@ export class AgentLoop {
         messages: request.messages,
         tools: request.tools,
         tool_choice: request.tool_choice ?? 'auto',
+        max_tokens: request.max_tokens,
       }, {
         signal: requestSignal,
         onRetry: (notice) => {
@@ -3186,6 +3342,7 @@ export class AgentLoop {
             ? {
                 inputTokens: event.usage.prompt_tokens,
                 cachedInputTokens: event.usage.cached_tokens ?? 0,
+                cacheReported: event.usage.cache_reported === undefined ? undefined : event.usage.cache_reported,
                 outputTokens: event.usage.completion_tokens,
                 reasoningOutputTokens: 0,
                 cacheStrategy: event.usage.cache_strategy,
@@ -3196,9 +3353,11 @@ export class AgentLoop {
         }
       }
       } catch (error) {
-        if (reasoningItem && reasoningContent.trim() && (isRecoverableStreamError(error) || isTurnCancelledError(error))) {
+        if (reasoningItem && reasoningContent.trim()) {
           const reasoningValidation = validateThreadItemsForPersistence([reasoningItem]);
           if (reasoningValidation.ok) {
+            const reasoningCompletedAt = new Date().toISOString();
+            (reasoningItem as { completedAt?: string }).completedAt = reasoningCompletedAt;
             this.emit({ type: 'item.completed', threadId, turnId, item: reasoningItem });
             void this.appendItemRunMonitorEvent(threadId, turnId, reasoningItem, 'item.completed');
             await this.persistItems(threadId, [reasoningItem]);
@@ -3206,7 +3365,7 @@ export class AgentLoop {
             this.discardTransientItem(threadId, turnId, collectedItems, reasoningItem.id);
           }
         }
-        if (agentItem && content.trim() && (isRecoverableStreamError(error) || isTurnCancelledError(error))) {
+        if (agentItem && content.trim()) {
           const partialValidation = validateThreadItemsForPersistence([agentItem]);
           if (partialValidation.ok) {
             this.emit({ type: 'item.completed', threadId, turnId, item: agentItem });
@@ -3230,12 +3389,31 @@ export class AgentLoop {
             });
           }
         }
-        const info = toNexusErrorInfo(error);
-        throw new NexusRuntimeError(error instanceof Error ? error.message : String(error), info, { cause: error });
+        const info = toSuanliziErrorInfo(error);
+        throw new SuanliziRuntimeError(error instanceof Error ? error.message : String(error), info, { cause: error });
       }
 
-      const plainTextToolPlaceholder = agentItem && toolCalls.size === 0 && isTextToolPlaceholder(content);
+      const plainTextToolPlaceholder = agentItem
+        && toolCalls.size === 0
+        && isTextToolPlaceholder(content);
       if (plainTextToolPlaceholder) {
+        const placeholderMessage = this.config.locale === 'zh'
+          ? '普通文本工具调用占位输出已被系统拒绝，不会作为最终回答。'
+          : 'Plain-text tool-call placeholder output was rejected and will not be treated as the final answer.';
+        this.emit({
+          type: 'model.output.rejected',
+          threadId,
+          turnId,
+          message: placeholderMessage,
+          error: { message: placeholderMessage, info: { kind: 'BadRequest', reason: 'protocol' } },
+        });
+        await this.appendRunMonitorEvent(turnId, {
+          category: 'model',
+          type: 'model.output.rejected',
+          level: 'warning',
+          message: placeholderMessage,
+          metadata: { reason: 'plain_text_tool_placeholder' },
+        });
         this.discardTransientItem(threadId, turnId, collectedItems, agentItem?.id);
         if (reasoningItem) {
           this.discardTransientItem(threadId, turnId, collectedItems, reasoningItem.id);
@@ -3261,6 +3439,9 @@ export class AgentLoop {
             });
             throw reasoningValidation.error;
           }
+          // Include the terminal marker in both the event and persisted copy so the
+          // UI cannot mistake a just-completed reasoning item for still streaming.
+          (reasoningItem as { completedAt?: string }).completedAt = new Date().toISOString();
           this.emit({ type: 'item.completed', threadId, turnId, item: reasoningItem });
           void this.appendItemRunMonitorEvent(threadId, turnId, reasoningItem, 'item.completed');
           await this.persistItems(threadId, [reasoningItem]);
@@ -3342,7 +3523,7 @@ export class AgentLoop {
         if (providerFrame.format === 'anthropic_messages') {
           assistantMessage.providerFrame = {
             format: 'anthropic_messages',
-            contentBlocks: providerFrame.contentBlocks as NonNullable<ChatMessage['providerFrame']>['contentBlocks'],
+            contentBlocks: providerFrame.contentBlocks,
           };
         }
       }
@@ -3668,19 +3849,70 @@ export class AgentLoop {
       message: `beforeTool middleware started for ${toolName}`,
       toolName,
     });
+    const middlewareItem = {
+      id: generateItemId(turnId, collectedItems.length),
+      type: 'tool_call',
+      turnId,
+      toolName,
+      arguments: args,
+      modelToolCallId: toolCall.id,
+      modelToolName: toolCall.function.name,
+      providerToolCall: {
+        format: 'openai_chat',
+        id: toolCall.id,
+        name: toolCall.function.name,
+        arguments: args,
+        raw: toolCall,
+      },
+      status: 'in_progress',
+      timestamp: new Date().toISOString(),
+    } as ThreadItem;
+    collectedItems.push(middlewareItem);
+    this.emit({ type: 'item.started', threadId, turnId, item: middlewareItem });
+    void this.appendItemRunMonitorEvent(threadId, turnId, middlewareItem, 'item.started');
+    await this.appendRunMonitorEvent(turnId, {
+      category: 'tool',
+      type: 'tool.started',
+      message: `Tool ${toolName} started`,
+      toolName,
+      metadata: {
+        itemId: middlewareItem.id,
+        callId: toolCall.id,
+        argsSummary: redactMonitorArgs(args),
+        ...resourceMetadataForToolCall(toolName, args, null),
+      },
+    });
     const middlewareShortCircuit = await this.runtimeMiddleware.beforeTool(runtimeContext, runtimeToolRequest);
     // 发 task.runtime.updated phase=tool — 进入工具调用阶段
     this.emitTaskRuntimeUpdated(threadId, turnId, 'tool', 'running');
     if (middlewareShortCircuit) {
       await this.runtimeMiddleware.afterTool(runtimeContext, runtimeToolRequest, middlewareShortCircuit);
-      const output = await this.recordMiddlewareToolResponse(
-        threadId,
-        turnId,
-        toolName,
-        args,
-        collectedItems,
-        middlewareShortCircuit,
-      );
+      if (isCollabTool(toolName)) {
+        const output = await this.recordMiddlewareToolResponse(threadId, turnId, toolName, args, collectedItems, middlewareShortCircuit);
+        await this.appendRunMonitorEvent(turnId, {
+          category: 'tool',
+          type: middlewareShortCircuit.status === 'failed' ? 'tool.failed' : 'tool.completed',
+          level: middlewareShortCircuit.status === 'failed' ? 'warning' : 'info',
+          message: middlewareShortCircuit.output,
+          toolName,
+          metadata: { status: middlewareShortCircuit.status, shortCircuited: true },
+        });
+        return { output, disableWebSearch: middlewareShortCircuit.disableWebSearch };
+      }
+      const middlewareToolItem = middlewareItem as ThreadItem & {
+        status: RuntimeToolResponse['status'];
+        error?: { message: string; code?: string };
+        result?: unknown;
+        completedAt?: string;
+      };
+      middlewareToolItem.status = middlewareShortCircuit.status;
+      middlewareToolItem.error = middlewareShortCircuit.error;
+      middlewareToolItem.result = middlewareShortCircuit.data ?? middlewareShortCircuit.output;
+      middlewareToolItem.completedAt = new Date().toISOString();
+      this.emit({ type: 'item.completed', threadId, turnId, item: middlewareToolItem });
+      void this.appendItemRunMonitorEvent(threadId, turnId, middlewareToolItem, 'item.completed');
+      await this.persistItems(threadId, [middlewareToolItem]);
+      const output = middlewareShortCircuit.output;
       await this.appendRunMonitorEvent(turnId, {
         category: 'tool',
         type: middlewareShortCircuit.status === 'failed' ? 'tool.failed' : 'tool.completed',
@@ -3729,13 +3961,14 @@ export class AgentLoop {
     }
 
     if (isCollabTool(toolName)) {
-      const itemCountBeforeWrap = collectedItems.length;
+      const middlewareItemIndex = collectedItems.indexOf(middlewareItem);
+      if (middlewareItemIndex >= 0) collectedItems.splice(middlewareItemIndex, 1);
       const response = await this.runtimeMiddleware.wrapTool(runtimeContext, runtimeToolRequest, async () => {
         const result = await this.executeCollabToolCall(threadId, turnId, toolName, args, collectedItems);
         return { output: result.output, status: 'completed' };
       });
       await this.runtimeMiddleware.afterTool(runtimeContext, runtimeToolRequest, response);
-      if (collectedItems.length === itemCountBeforeWrap) {
+      if (!collectedItems.some((item) => item.type === 'collab_tool_call')) {
         const output = await this.recordMiddlewareToolResponse(
           threadId,
           turnId,
@@ -3814,11 +4047,32 @@ export class AgentLoop {
 
     // Execute
     // 执行
-    const result = await this.runtimeMiddleware.wrapTool(
-      runtimeContext,
-      runtimeToolRequest,
-      (request) => this.tools.execute(request.toolName, request.args, request.toolContext),
-    );
+    let result: RuntimeToolResponse;
+    try {
+      result = await this.runtimeMiddleware.wrapTool(
+        runtimeContext,
+        runtimeToolRequest,
+        (request) => this.tools.execute(request.toolName, request.args, request.toolContext),
+      );
+    } catch (error) {
+      const failedToolItem = toolItem as ThreadItem & {
+        status: 'failed';
+        error?: { message: string; code?: string };
+        result?: unknown;
+        completedAt?: string;
+      };
+      failedToolItem.status = 'failed';
+      failedToolItem.error = {
+        message: error instanceof Error ? error.message : String(error),
+        code: (error as { code?: string } | undefined)?.code,
+      };
+      failedToolItem.result = { error: failedToolItem.error.message, code: failedToolItem.error.code };
+      failedToolItem.completedAt = new Date().toISOString();
+      this.emit({ type: 'item.completed', threadId, turnId, item: failedToolItem });
+      void this.appendItemRunMonitorEvent(threadId, turnId, failedToolItem, 'item.completed');
+      await this.persistItems(threadId, [failedToolItem]);
+      throw error;
+    }
 
     // Update item
     // 更新条目
@@ -3865,6 +4119,7 @@ export class AgentLoop {
         void this.appendItemRunMonitorEvent(threadId, turnId, fileItem, 'item.started');
         void this.appendItemRunMonitorEvent(threadId, turnId, fileItem, 'item.completed');
         await this.persistItems(threadId, [fileItem]);
+        await this.appendFileChangeRunMonitorEvents(turnId, itemId, toolName, changes);
         const projectCheckpoint = await createProjectCheckpointItem({
           threadId,
           turnId,
@@ -5620,7 +5875,7 @@ export class AgentLoop {
       return compacted;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      const info = toNexusErrorInfo(error);
+      const info = toSuanliziErrorInfo(error);
       this.emit({
         type: 'thread.compacted.v2',
         threadId,
@@ -5785,6 +6040,7 @@ export class AgentLoop {
       outputTokens: sum.outputTokens + entry.usage.outputTokens,
       reasoningOutputTokens: sum.reasoningOutputTokens + entry.usage.reasoningOutputTokens,
       cacheStrategy: combineCacheStrategy(sum.cacheStrategy, entry.usage.cacheStrategy),
+      cacheReported: combineCacheReported(sum.cacheReported, entry.usage.cacheReported),
     }), emptyUsage());
     const next: ThreadUsage = {
       threadId,
@@ -6022,6 +6278,15 @@ function combineCacheStrategy(
   if (!left) return right;
   if (!right || left === right) return left;
   return 'mixed';
+}
+
+function combineCacheReported(
+  left: Usage['cacheReported'],
+  right: Usage['cacheReported'],
+): Usage['cacheReported'] {
+  if (left === false || right === false) return false;
+  if (left === true && right === true) return true;
+  return undefined;
 }
 
 function parseThreadUsage(threadId: ThreadId, raw: string | undefined): ThreadUsage {
@@ -6404,11 +6669,11 @@ const BUILTIN_AGENT_ROLE_PROFILES: AgentRoleProfiles = {
     ].join('\n'),
   },
   worker: {
-    description: 'General-purpose worker role for compatibility with existing Nexus subagent prompts.',
+    description: 'General-purpose worker role for compatibility with existing Suanlizi subagent prompts.',
     instructions: 'Complete the delegated task independently under the inherited runtime constraints.',
   },
   subagent: {
-    description: 'Legacy Nexus subagent role alias.',
+    description: 'Legacy Suanlizi subagent role alias.',
     instructions: 'Complete the delegated task independently under the inherited runtime constraints.',
   },
 };
@@ -6524,7 +6789,7 @@ function createCollabToolDefinitions(options?: { a2aClientEnabled?: boolean; a2a
           agentRole: { type: 'string', description: 'Agent role profile, such as default, reviewer, researcher, implementer, or a configured role.' },
           agent_type: { type: 'string', description: 'Codex-compatible role label alias for agentRole.' },
           agentNickname: { type: 'string', description: 'Optional display nickname for the child agent.' },
-          model: { type: 'string', description: 'Optional requested model metadata. Nexus child agents still inherit the parent model.' },
+          model: { type: 'string', description: 'Optional requested model metadata. Suanlizi child agents still inherit the parent model.' },
           reasoningEffort: { type: 'string', description: 'Optional requested reasoning effort metadata.' },
           reasoning_effort: { type: 'string', description: 'Codex-compatible reasoning effort alias.' },
         },
@@ -6707,15 +6972,37 @@ function threadItemsToModelMessages(items: ThreadItem[]): ChatMessage[] {
 }
 
 function itemToStructuredToolHistoryMessages(item: ThreadItem): ChatMessage[] | null {
+  if (item.type === 'agent_message' && item.rejectedReason === 'plain_text_tool_placeholder') {
+    return [];
+  }
+
   if (item.type === 'agent_message' && item.providerFrame?.format === 'anthropic_messages') {
     return [{
       role: 'assistant',
       content: item.text,
       providerFrame: {
         format: 'anthropic_messages',
-        contentBlocks: item.providerFrame.contentBlocks as NonNullable<ChatMessage['providerFrame']>['contentBlocks'],
+        contentBlocks: item.providerFrame.contentBlocks as AnthropicContentBlock[],
       },
     }];
+  }
+
+  if (item.type === 'agent_message' && item.providerFrame?.format === 'openai_responses') {
+    const toolCalls = item.providerFrame.outputItems
+      .filter((entry): entry is { type: 'function_call'; call_id: string; name: string; arguments: string } =>
+        !!entry && typeof entry === 'object' && (entry as any).type === 'function_call')
+      .map((entry) => ({
+        id: entry.call_id,
+        type: 'function' as const,
+        function: { name: entry.name, arguments: entry.arguments ?? '{}' },
+      }));
+    const message: ChatMessage = {
+      role: 'assistant',
+      content: '',
+      providerFrame: { format: 'openai_responses', outputItems: item.providerFrame.outputItems },
+    };
+    if (toolCalls.length > 0) message.tool_calls = toolCalls;
+    return [message];
   }
 
   if (item.type === 'agent_message' && item.providerFrame?.format === 'openai_chat') {
@@ -6762,9 +7049,31 @@ function buildProviderFrameForToolCalls(
   content: string | null,
   reasoningContent: string,
   toolCalls: ToolCall[],
-): NonNullable<Extract<ThreadItem, { type: 'agent_message' }>['providerFrame']> {
+): NonNullable<ChatMessage['providerFrame']> {
+  if (toolHistoryMode === 'openai_responses') {
+    const outputItems: unknown[] = [];
+    if (reasoningContent.trim()) {
+      outputItems.push({
+        type: 'reasoning',
+        summary: [{ type: 'summary_text', text: reasoningContent }],
+        content: [{ type: 'input_text', text: reasoningContent }],
+      });
+    }
+    if (content?.trim()) {
+      outputItems.push({ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: content }] });
+    }
+    for (const toolCall of toolCalls) {
+      outputItems.push({
+        type: 'function_call',
+        call_id: toolCall.id,
+        name: toolCall.function.name,
+        arguments: toolCall.function.arguments || '{}',
+      });
+    }
+    return { format: 'openai_responses', outputItems };
+  }
   if (toolHistoryMode === 'anthropic_blocks') {
-    const contentBlocks: unknown[] = [];
+    const contentBlocks: AnthropicContentBlock[] = [];
     if (reasoningContent.trim()) {
       contentBlocks.push({ type: 'thinking', thinking: reasoningContent });
     }
@@ -6910,6 +7219,13 @@ function itemToMessage(item: ThreadItem): ChatMessage | null {
     case 'user_message':
       return { role: 'user', content: item.text };
     case 'agent_message':
+      if (
+        item.rejectedReason === 'plain_text_tool_placeholder'
+        && typeof item.timestamp === 'string'
+        && Date.now() - Date.parse(item.timestamp) < 60_000
+      ) {
+        return null;
+      }
       if (leaksToolProtocol(item.text)) {
         return {
           role: 'assistant',
@@ -6999,7 +7315,7 @@ function isTextToolPlaceholder(content: unknown): boolean {
   if (typeof content !== 'string') return false;
   const trimmed = content.trim();
   if (!trimmed) return false;
-  return /\[(?:Tool|tool)\s+[\w.-]+\]/.test(trimmed)
+  return /\[(?:Tool|tool)\s+[\w.-]+(?:\s+(?:completed|failed|running|pending))?\]/.test(trimmed)
     || /^工具调用\s*[:：]\s*[\w.-]+\s*$/i.test(trimmed)
     || leaksToolProtocol(trimmed);
 }

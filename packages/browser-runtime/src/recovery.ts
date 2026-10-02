@@ -5,7 +5,7 @@
 // llm 修复重试不超 2 次；policy 不重试；budget 挂起请求继续授权；
 // side_effect 对账不能盲目重试；cancelled 直接结束。
 // 本模块只做纯函数决策，不含任何定时器 / DOM 实现。
-import type { ActionEffect, ClassifiedError } from '@nexus/protocol';
+import type { ActionEffect, ClassifiedError } from '@suanlizi/protocol';
 
 // 恢复动作：重试 / 重新观测 / 重新规划 / 对账 / 中止
 // — English: recovery actions — retry / reobserve / replan / reconcile / abort

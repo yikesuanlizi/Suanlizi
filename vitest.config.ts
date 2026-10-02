@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 export default defineConfig({
   plugins: [
     {
-      name: 'nexus-source-imports',
+      name: 'suanlizi-source-imports',
       enforce: 'pre',
       resolveId(source, importer) {
         if (importer === undefined || !source.startsWith('.') || !source.endsWith('.js')) return null;
@@ -16,19 +16,19 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      '@nexus/protocol': resolve(__dirname, 'packages/protocol/src/index.ts'),
-      '@nexus/context': resolve(__dirname, 'packages/context/src/index.ts'),
-      '@nexus/model-gateway': resolve(__dirname, 'packages/model-gateway/src/index.ts'),
-      '@nexus/sandbox': resolve(__dirname, 'packages/sandbox/src/index.ts'),
-      '@nexus/storage': resolve(__dirname, 'packages/storage/src/index.ts'),
-      '@nexus/tools': resolve(__dirname, 'packages/tools/src/index.ts'),
-      '@nexus/memory': resolve(__dirname, 'packages/memory/src/index.ts'),
-      '@nexus/extensions': resolve(__dirname, 'packages/extensions/src/index.ts'),
-      '@nexus/i18n': resolve(__dirname, 'packages/i18n/src/index.ts'),
-      '@nexus/bot': resolve(__dirname, 'packages/bot/src/index.ts'),
-      '@nexus/runtime': resolve(__dirname, 'packages/runtime/src/index.ts'),
-      '@nexus/browser-runtime': resolve(__dirname, 'packages/browser-runtime/src/index.ts'),
-      '@nexus/wiki-core': resolve(__dirname, 'packages/wiki-core/src/index.ts'),
+      '@suanlizi/protocol': resolve(__dirname, 'packages/protocol/src/index.ts'),
+      '@suanlizi/context': resolve(__dirname, 'packages/context/src/index.ts'),
+      '@suanlizi/model-gateway': resolve(__dirname, 'packages/model-gateway/src/index.ts'),
+      '@suanlizi/sandbox': resolve(__dirname, 'packages/sandbox/src/index.ts'),
+      '@suanlizi/storage': resolve(__dirname, 'packages/storage/src/index.ts'),
+      '@suanlizi/tools': resolve(__dirname, 'packages/tools/src/index.ts'),
+      '@suanlizi/memory': resolve(__dirname, 'packages/memory/src/index.ts'),
+      '@suanlizi/extensions': resolve(__dirname, 'packages/extensions/src/index.ts'),
+      '@suanlizi/i18n': resolve(__dirname, 'packages/i18n/src/index.ts'),
+      '@suanlizi/bot': resolve(__dirname, 'packages/bot/src/index.ts'),
+      '@suanlizi/runtime': resolve(__dirname, 'packages/runtime/src/index.ts'),
+      '@suanlizi/browser-runtime': resolve(__dirname, 'packages/browser-runtime/src/index.ts'),
+      '@suanlizi/wiki-core': resolve(__dirname, 'packages/wiki-core/src/index.ts'),
     },
   },
   test: {
@@ -52,7 +52,7 @@ export default defineConfig({
       '**/node_modules/**',
       '**/dist/**',
       '**/dist-types/**',
-      '**/.nexus/**',
+      '**/.suanlizi/**',
       '**/outputs/**',
     ],
   },

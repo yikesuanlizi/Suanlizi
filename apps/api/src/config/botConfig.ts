@@ -302,10 +302,10 @@ function isMaskedValue(value: unknown): boolean {
   return typeof value === 'string' && value.includes('...');
 }
 
-// 推断微信桥接 URL：优先 NEXUS_WEIXIN_BRIDGE_URL，否则使用端口默认值 — Chinese: default WeChat bridge URL
+// 推断微信桥接 URL：优先 SUANLIZI_WEIXIN_BRIDGE_URL，否则使用端口默认值 — Chinese: default WeChat bridge URL
 function defaultWeixinBridgeUrl(): string {
-  const explicit = process.env.NEXUS_WEIXIN_BRIDGE_URL?.trim();
+  const explicit = process.env.SUANLIZI_WEIXIN_BRIDGE_URL?.trim();
   if (explicit) return explicit;
-  const port = process.env.NEXUS_WEIXIN_BRIDGE_PORT?.trim() || '18790';
+  const port = process.env.SUANLIZI_WEIXIN_BRIDGE_PORT?.trim() || '18790';
   return `http://127.0.0.1:${port}/api/v1/admin/rpc`;
 }

@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { getSlashCommandOptions, parseSlashCommand } from './slashCommands.js';
 
 describe('parseSlashCommand', () => {
+  it('parses Goal and Dynamic Workflow as independent creation commands', () => {
+    expect(parseSlashCommand('/goal 重构认证模块')).toEqual({ kind: 'goal', args: '重构认证模块' });
+    expect(parseSlashCommand('/workflow 并行分析仓库')).toEqual({ kind: 'workflow', args: '并行分析仓库' });
+  });
+
   it('parses skills and mcp add commands with natural language arguments', () => {
     expect(parseSlashCommand('/skills add 创建一个代码审查 skill')).toEqual({
       kind: 'skills.add',

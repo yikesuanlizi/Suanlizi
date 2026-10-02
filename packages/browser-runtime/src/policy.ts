@@ -19,8 +19,8 @@ import type {
   ActionIntent,
   ActionRisk,
   ApprovalRequest,
-} from '@nexus/protocol';
-import { normalizeAccessPolicyConfig } from '@nexus/protocol';
+} from '@suanlizi/protocol';
+import { normalizeAccessPolicyConfig } from '@suanlizi/protocol';
 
 // 决策结果：allow / confirm（带审批请求）/ deny（带机器可读 reason 码）
 // — English: decision — allow, confirm (with ApprovalRequest), or deny (with machine-readable reason).

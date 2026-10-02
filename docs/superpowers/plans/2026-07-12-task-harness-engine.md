@@ -189,7 +189,7 @@ interface HarnessContextSlice {
 
 **内容**: 上述所有接口和类型定义。
 
-**依赖**: `@nexus/protocol` (ThreadId, TurnId, ItemId, ThreadItem, CompactionSummary)
+**依赖**: `@suanlizi/protocol` (ThreadId, TurnId, ItemId, ThreadItem, CompactionSummary)
 
 **不改动任何现有文件。**
 
@@ -1606,7 +1606,7 @@ Step 11: harnessRoute + server.ts      [+ Gap 1 API 入口]
 
 ### 实施点 1 — `updateThreadMetadata(tags)` 是全量替换，必须 merge（影响 Gap 6）
 
-**问题**：[store.ts:660-663](file:///e:/langchain/Nexus/packages/storage/src/store.ts#L660-L663) 的实现是：
+**问题**：[store.ts:660-663](file:///e:/langchain/Suanlizi/packages/storage/src/store.ts#L660-L663) 的实现是：
 
 ```typescript
 if (patch.tags !== undefined) {
@@ -1977,7 +1977,7 @@ export const harnessContinuationItemSchema = z.object({
 export type {
   GoalEvaluation,
   HarnessContinuationItem,
-} from '@nexus/protocol';
+} from '@suanlizi/protocol';
 ```
 
 避免 `runtime/types.ts` 和 `protocol/types.ts` 双份漂移。

@@ -90,7 +90,7 @@ export function buildAgentStageRows(options: {
 }): AgentStageRow[] {
   const mainStatus = options.busy ? 'running' : 'idle';
   const labels = statusLabels[options.locale];
-  const mainAgentTitle = options.locale === 'zh' ? 'Nexus 主控 Agent' : 'Nexus Primary Agent';
+  const mainAgentTitle = options.locale === 'zh' ? 'Suanlizi 主控 Agent' : 'Suanlizi Primary Agent';
   return [
     {
       kind: 'main',
@@ -116,11 +116,17 @@ export function buildAgentStageRows(options: {
 function toStatusRow(child: ThreadChildInfo, depth: number, locale: Locale): SubagentStatusRow {
   const status = resolveStatus(child);
   const labels = statusLabels[locale];
+  // 卡片标题 = 任务摘要（spawn 时从 prompt 生成），角色徽标 = agentRole/昵称。
+  // — Chinese: card title = the task summary; the role line shows the agent role.
+  const taskTitle = child.thread.title || child.thread.agentNickname || child.thread.agentRole || child.thread.threadId;
+  const roleLabel = child.thread.agentNickname && child.thread.agentNickname !== taskTitle
+    ? child.thread.agentNickname
+    : (child.thread.agentRole && child.thread.agentRole !== taskTitle ? child.thread.agentRole : '');
   return {
     threadId: child.thread.threadId,
     parentThreadId: child.edge.parentThreadId,
-    title: child.thread.agentNickname || child.thread.title || child.thread.agentRole || child.thread.threadId,
-    role: child.thread.agentRole || child.thread.title || '',
+    title: taskTitle,
+    role: roleLabel,
     depth,
     status,
     statusLabel: labels[status as keyof typeof labels] ?? status,
@@ -130,14 +136,16 @@ function toStatusRow(child: ThreadChildInfo, depth: number, locale: Locale): Sub
   };
 }
 
-function resolveStatus(child: ThreadChildInfo): string {
+// 导出给气泡 Agent 行 / 右侧详情视图复用：状态解析 + userInput 文本提取
+// — Chinese: exported for bubble agent rows / right detail view: status resolve + userInput text
+export function resolveStatus(child: ThreadChildInfo): string {
   if (child.state.status && child.state.status !== 'idle') return child.state.status;
   if (child.latestTurn?.status && child.latestTurn.status !== 'completed') return child.latestTurn.status;
   if (child.edge.status === 'closed') return 'closed';
   return child.latestTurn?.status ?? child.edge.status;
 }
 
-function latestAction(child: ThreadChildInfo, locale: Locale): string {
+export function latestAction(child: ThreadChildInfo, locale: Locale): string {
   const tool = child.latestCollabItem?.tool;
   if (tool && tool in actionLabels[locale]) {
     return actionLabels[locale][tool as keyof typeof actionLabels[typeof locale]];
@@ -149,7 +157,7 @@ function latestAction(child: ThreadChildInfo, locale: Locale): string {
   return locale === 'zh' ? '等待状态更新' : 'Waiting for updates';
 }
 
-function userInputText(input: unknown): string {
+export function userInputText(input: unknown): string {
   if (!input || typeof input !== 'object' || !('type' in input)) return '';
   const typed = input as { type?: string; text?: string };
   return typed.type === 'text' ? (typed.text ?? '') : '';

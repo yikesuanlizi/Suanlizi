@@ -4,7 +4,7 @@ import { RUN_CONFIG_STORAGE_KEY, mergeRunConfigDefaults, type RunConfig, type We
 import { Icon } from './components/Icon.js';
 import { AppDialog, SettingsHelpDialog, SkillDraftDialog, type AppDialogState } from './components/Dialogs.js';
 import { ComposerBar, type PaletteOption } from './components/ComposerBar.js';
-import { AssistantTurnView, ItemView } from './components/ItemView.js';
+import { AssistantTurnView, ItemView, TurnPreparingIndicator } from './components/ItemView.js';
 import { TranscriptTurnRail, type TranscriptTurnRailEntry } from './components/TranscriptTurnRail.js';
 import { ApprovalPanel } from './components/ApprovalPanel.js';
 import { AgentDecisionCard } from './components/AgentDecisionCard.js';
@@ -14,24 +14,31 @@ import type { OpsTaskTimelineEvent } from './components/workbench/OpsTaskInspect
 import { SettingsDrawer } from './components/SettingsDrawer.js';
 import { WeixinConnectDialog } from './components/WeixinConnectDialog.js';
 import { RightPane } from './components/RightPane.js';
-import { readStoredWorkbenchState } from './components/workbench/workbenchState.js';
+import {
+  readStoredWorkbenchState,
+  readStoredWorkbenchVisibility,
+  writeStoredWorkbenchVisibility,
+} from './components/workbench/workbenchState.js';
 import type { ExternalPreviewRequest } from './components/WorkspaceFilesPanel.js';
 import { openInSystemEditor } from './api/desktopBridge.js';
 import type { KnowledgeScopeSelection } from './api/knowledgeClient.js';
 import { WorkflowPanel } from './components/WorkflowPanel.js';
 import { RunMonitorDrawer } from './components/RunMonitorDrawer.js';
+import { TaskCenterDrawer } from './components/tasks/TaskCenterDrawer.js';
 import { WorkspaceThreadList } from './components/WorkspaceThreadList.js';
 import { useBotControls, type WeixinLoginState } from './api/botClient.js';
 import { resizeTextareaToContent } from './shared/composer.js';
 import { useRightPaneSizing, useToastNotice } from './shared/uiState.js';
 import { defaultConfig, defaultMcps } from './config/defaults.js';
+import { saveGlobalDefaults } from './features/settings/settingsClient.js';
+import { contextTokensForSelectedModel } from './api/modelContextReferencesClient.js';
 import { t } from './shared/i18n.js';
 import { extractGitHubSkillInstallUrls } from './features/input/composerInput.js';
 import { normalizeStoredMcps, resolveMcpDraftFromInput } from './features/settings/mcpConfig.js';
 import { getSlashCommandOptions, isSlashInput, parseSlashCommand, type SlashCommand, type SlashCommandOption } from './features/slash/slashCommands.js';
 import { localizedSkillDescription } from './features/settings/skillDescriptions.js';
 import { readStored } from './shared/storage.js';
-import { buildChildActivityByThread } from './features/agents/subagentActivity.js';
+import { buildChildActivityByThread, buildSubagentDirectory } from './features/agents/subagentActivity.js';
 import { buildSubagentStatusRows } from './features/agents/subagents.js';
 import { modeInstructionFor } from './config/taskModes.js';
 import {
@@ -42,30 +49,38 @@ import {
   resolveDisplayContextPressure,
   resolveModelCapabilities,
 } from './features/chat/usageDisplay.js';
+import { resolveSnapshotBusy } from './features/thread/snapshotBusy.js';
 import { rollbackCountForTurn } from './features/chat/rollback.js';
 import { useRunMonitor } from './features/monitor/runMonitor.js';
 import { useTaskRuntimeMonitor, isTaskRuntimeEvent } from './features/monitor/taskRuntimeMonitor.js';
 import { useWebProviderSettings, type SettingsResponseWithWebProvider } from './api/webProviderClient.js';
 import { fetchThreadConfigOverrides, patchThreadConfigOverrides, type ThreadConfigOverrides } from './api/threadConfigClient.js';
+import { createTask, startTask } from './api/taskClient.js';
+import { proposeWorkflowRun } from './api/workflowScriptClient.js';
+import { HIGH_AUTONOMY_OVERRIDES, createInitialWorkflowScript, type ComposerExecutionMode, type ComposerThinkingMode } from './features/composer/executionMode.js';
 import { createLatestRequestGuard } from './features/chat/latestRequestGuard.js';
-import { nextTranscriptFollowState, type TranscriptFollowState } from './features/chat/transcriptFollow.js';
+import {
+  nextTranscriptFollowState,
+  TRANSCRIPT_FOLLOW_GAP_PX,
+  type TranscriptFollowState,
+} from './features/chat/transcriptFollow.js';
 import { actionDetail, actionTitle, completeLocalSkillDraftItem, createLocalSkillDraftItems, mergeIncomingItems, removeLocalThreadItems } from './features/chat/threadItems.js';
 import { optimisticDeleteThread } from './features/chat/threads.js';
-import { forgetWorkspaceRoot, pickWorkspaceRoot, readRememberedWorkspaceRoots, rememberWorkspaceRoots, workspacePickerNotice, workspacePickerStatus } from './features/workspaces/workspaces.js';
+import { compactWorkspaceRoots, forgetWorkspaceRoot, pickWorkspaceRoot, readRememberedWorkspaceRoots, rememberWorkspaceRoots, saveRememberedWorkspaceRoots, threadsInWorkspace, workspaceKey, workspacePickerNotice, workspacePickerStatus } from './features/workspaces/workspaces.js';
 import { controlThreadWorkflow, createWorkflowDraftErrorItem, createWorkflowDraftReplyItem, createWorkflowDraftUserItem, createWorkflowThread, isUntitledWorkflowProjectTitle, isWorkflowProjectThread, loadThreadWorkflow, parseThreadWorkflow, parseWorkflowCheckpointItems, planWorkflowDraft, saveThreadWorkflow, workflowThreadTitleFromGoal, type WorkflowBlueprintCompileResult, type WorkflowComponentDefinition, type WorkflowPlanDraft, type WorkflowSnapshot, type WorkflowRuntimeAction } from './features/workflow/workflow.js';
-import { applyAgentMessageDelta, describeEvent, groupTranscriptItems, removeThreadItem, withSyntheticUserMessages, type EventDraft } from './features/chat/threadView.js';
+import { applyAgentMessageDelta, applyCommandOutputDelta, describeEvent, groupTranscriptItems, removeThreadItem, withSyntheticUserMessages, type EventDraft } from './features/chat/threadView.js';
 import type { ApiKeyState, ApprovalRequest, EventLine, McpConfig, McpServerStatus, ModelPreset, ProviderEntry, SkillDraft, SkillEntry, ThreadChildInfo, ThreadItem, ThreadMeta, ThreadUsage, TurnMeta } from './shared/types.js';
-import type { AgentDecisionRequest, AgentDecisionResponse, ModelPresetConfig, OpsTaskSession, PersistentAccessScope, TemporaryAccessScope } from '@nexus/protocol';
+import { formatSuanliziErrorMessage, type AgentDecisionRequest, type AgentDecisionResponse, type ModelPresetConfig, type OpsTaskSession, type PersistentAccessScope, type TemporaryAccessScope } from '@suanlizi/protocol';
 import './styles.css';
 import './knowledgeBaseVisualization.css';
 import './components/settings/ModelsPage.css';
 type ComposerImage = { name: string; dataUrl: string };
+type PreparingTurn = { threadId: string; turnId?: string };
 type RuntimeStateSnapshot = { executionStatus?: string; decisionRequest?: AgentDecisionRequest | null };
 type OpsTaskAction = OpsAnchorAction | 'pause' | 'resume' | 'propose_patch' | 'approve_patch' | 'reject_patch';
-type ThreadModeSelection = { threadId: string; mode: 'chat' | 'ops'; taskPreset: 'ops' | null };
 type BrowserDesktopRequestEvent = { type: 'agent-browser-requested'; taskId: string };
 type BrowserDesktopRequestApi = {
-  hasPendingAgentRequest(): Promise<boolean>;
+  pendingAgentRequestTaskIds(): Promise<string[]>;
   subscribe(handler: (event: BrowserDesktopRequestEvent) => void): () => void;
 };
 function resolveThemeShortcutMode(current: RunConfig['themeMode']): 'light' | 'dark' {
@@ -110,8 +125,41 @@ function parseProviderEnvVarSaveFailure(detail: string): string {
   return trimmed;
 }
 
+function parseApiErrorMessage(payload: unknown, fallback: string, locale: 'zh' | 'en' = 'zh'): string {
+  if (typeof payload === 'string' && payload.trim()) return formatSuanliziErrorMessage(undefined, payload.trim(), locale);
+  if (!payload || typeof payload !== 'object') return fallback;
+  const record = payload as { error?: unknown; message?: unknown };
+  let info: Parameters<typeof formatSuanliziErrorMessage>[0];
+  let code = '';
+  let message = '';
+  if (typeof record.error === 'string' && record.error.trim()) message = record.error.trim();
+  if (record.error && typeof record.error === 'object') {
+    const error = record.error as { code?: unknown; message?: unknown; info?: Parameters<typeof formatSuanliziErrorMessage>[0] };
+    if (typeof error.code === 'string' && error.code.trim()) code = error.code.trim();
+    if (error.info && typeof error.info === 'object') info = error.info;
+    if (!message && typeof error.message === 'string') message = error.message.trim();
+  }
+  if (!message && typeof record.message === 'string') message = record.message.trim();
+  return message ? formatSuanliziErrorMessage(info, code ? `${code}: ${message}` : message, locale) : fallback;
+}
+
+function eventItemId(event: Record<string, unknown>): string | undefined {
+  const item = event.item;
+  if (!item || typeof item !== 'object') return undefined;
+  const id = (item as { id?: unknown }).id;
+  return typeof id === 'string' && id.trim() ? id : undefined;
+}
+
+function runtimeConfigPayload(source: RunConfig): Partial<RunConfig> {
+  const { themeMode, userAvatarId, customUserAvatarDataUrl, ...payload } = source;
+  void themeMode;
+  void userAvatarId;
+  void customUserAvatarDataUrl;
+  return payload;
+}
+
 function App() {
-  const isElectronShell = typeof (window as unknown as { nexusDesktop?: unknown }).nexusDesktop === 'object';
+  const isElectronShell = typeof (window as unknown as { suanliziDesktop?: unknown }).suanliziDesktop === 'object';
   useEffect(() => {
     if (isElectronShell) {
       document.body.classList.add('electron-shell');
@@ -121,6 +169,10 @@ function App() {
     ...defaultConfig,
     ...readStored<Partial<RunConfig>>(RUN_CONFIG_STORAGE_KEY, {}),
   }));
+  // Thread-scoped model overrides are merged into `config` for the active
+  // conversation, but they must not become the next global startup defaults.
+  const globalConfigRef = useRef<RunConfig>(config);
+  const persistedThreadIdRef = useRef('');
   const [configHydrated, setConfigHydrated] = useState(false);
   const [apiUnavailable, setApiUnavailable] = useState(false);
   const systemTheme = useSystemTheme();
@@ -135,6 +187,7 @@ function App() {
     estimatedTokens?: number;
     hardThreshold?: number;
     maxTokens?: number;
+    windowKnown?: boolean;
     softThreshold?: number;
     ratio?: number;
   } | null>(null);
@@ -148,54 +201,74 @@ function App() {
   // 窄屏 sidebar 抽屉开关 — Chinese: narrow-screen sidebar drawer toggle
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeSlashOption, setActiveSlashOption] = useState<SlashCommandOption | null>(null);
+  const [executionMode, setExecutionMode] = useState<ComposerExecutionMode>('chat');
+  const [thinkingMode, setThinkingMode] = useState<ComposerThinkingMode>(() => config.reasoningEffort);
   const [images, setImages] = useState<ComposerImage[]>([]);
-  const [draggingImage, setDraggingImage] = useState(false), [busy, setBusy] = useState(false), [actionBusy, setActionBusy] = useState(false);
+  const [draggingImage, setDraggingImage] = useState(false), [busy, setBusy] = useState(false), [preparingTurn, setPreparingTurn] = useState<PreparingTurn | null>(null), [actionBusy, setActionBusy] = useState(false);
   const [workflowPlanning, setWorkflowPlanning] = useState(false), [workflowSaving, setWorkflowSaving] = useState(false), [workflowRuntimeBusy, setWorkflowRuntimeBusy] = useState(false), [workflowComponents, setWorkflowComponents] = useState<WorkflowComponentDefinition[]>([]), [workflowBlueprint, setWorkflowBlueprint] = useState<WorkflowBlueprintCompileResult | null>(null), [workflowPlanDraft, setWorkflowPlanDraft] = useState<WorkflowPlanDraft | null>(null), [workflowSelectedNodeIds, setWorkflowSelectedNodeIds] = useState<string[]>([]);
   const [workspaceView, setWorkspaceView] = useState<'chat' | 'workflow'>('chat');
   const [status, setStatus] = useState('Idle');
   const [transcriptFollow, setTranscriptFollow] = useState<TranscriptFollowState>({ following: true, showReturnToBottom: false });
   const [settingsOpen, setSettingsOpen] = useState(false), [settingsHelpOpen, setSettingsHelpOpen] = useState(false);
-  const [rightPaneVisible, setRightPaneVisible] = useState(true);
+  const [rightPaneVisible, setRightPaneVisible] = useState(false);
   // 中文注释：外部预览请求 — 从对话条目点击"预览"时驱动右侧文件面板加载该文件
   // — Chinese: external preview request — drives right file panel to load a file when "preview" is clicked from chat
   const [previewRequest, setPreviewRequest] = useState<ExternalPreviewRequest | null>(null);
   const [rightPaneSizingMode, setRightPaneSizingMode] = useState<'standard' | 'files' | 'browser' | 'terminal'>(() => readStoredRightPaneSizingMode());
-  const [browserRequestVersion, setBrowserRequestVersion] = useState(0);
+  const [browserRequest, setBrowserRequest] = useState<{ threadId: string; version: number } | null>(null);
   const [pendingApprovals, setPendingApprovals] = useState<ApprovalRequest[]>([]);
   const [pendingDecision, setPendingDecision] = useState<AgentDecisionRequest | null>(null);
   const [opsTaskAnchor, setOpsTaskAnchor] = useState<OpsTaskAnchor | null>(null);
   const [opsTaskAnchorBusy, setOpsTaskAnchorBusy] = useState(false);
   const [opsTaskDetail, setOpsTaskDetail] = useState<{ threadId: string; task: OpsTaskSession; events: OpsTaskTimelineEvent[] } | null>(null);
   const [opsKnowledgeScope, setOpsKnowledgeScope] = useState<KnowledgeScopeSelection | null>(null);
-  const [pendingThreadMode, setPendingThreadMode] = useState<'chat' | 'ops'>('chat');
-  const [pendingTaskPreset, setPendingTaskPreset] = useState<'ops' | null>(null);
-  const [threadModeOverride, setThreadModeOverride] = useState<ThreadModeSelection | null>(null);
-  const [modePatchPending, setModePatchPending] = useState(false);
+  // 中文注释：气泡/卡片点击打开右侧 agent 详情的请求；nonce 触发 RightPane 联动
+  // — Chinese: request to open an agent's detail view in the right pane; nonce drives RightPane linkage
+  const [agentDetailRequest, setAgentDetailRequest] = useState<{ threadId: string; nonce: number } | null>(null);
+  // 中文注释：命令终端面板的打开回调（由 RightPane 注入），主流程经 ref 转发
+  // — Chinese: open-callback for the command-terminal pane (injected by RightPane), relayed via ref
+  const openCommandTerminalRef = useRef<((itemId: string) => void) | null>(null);
+  // 中文注释：运行中用户手动收起右侧栏后，同一回合内不再自动弹出
+  // — Chinese: after the user manually closes the pane mid-run, do not auto-reopen within the same turn
+  const agentDetailSuppressedTurnIdsRef = useRef<Set<string>>(new Set());
+  const autoOpenedAgentItemIdsRef = useRef<Set<string>>(new Set());
+  const agentDetailNonceRef = useRef(0);
 
   useEffect(() => {
     // A preview belongs to the thread that requested it. Do not carry its
     // path into an unselected or newly selected conversation.
     setPreviewRequest(null);
   }, [threadId]);
+  useEffect(() => {
+    setPreparingTurn((current) => current && current.threadId === threadId ? current : null);
+  }, [threadId]);
   const taskRuntimeMonitor = useTaskRuntimeMonitor();
   const [providers, setProviders] = useState<ProviderEntry[]>([]);
   const [keyStates, setKeyStates] = useState<ApiKeyState[]>([]), [modelPresets, setModelPresets] = useState<ModelPreset[]>([]), [skillsList, setSkillsList] = useState<SkillEntry[]>([]);
-  const [mcps, setMcps] = useState<McpConfig[]>(() => normalizeStoredMcps(readStored('nexus.mcps', defaultMcps)));
+  const modelSelectionRef = useRef(0);
+  const currentModelConfigRef = useRef(config);
+  currentModelConfigRef.current = config;
+  const [mcps, setMcps] = useState<McpConfig[]>(() => normalizeStoredMcps(readStored('suanlizi.mcps', defaultMcps)));
   const [mcpStatuses, setMcpStatuses] = useState<McpServerStatus[]>([]), [mcpHydrated, setMcpHydrated] = useState(false), [pendingMcpDraft, setPendingMcpDraft] = useState<McpConfig | null>(null);
   const [skillDraft, setSkillDraft] = useState<SkillDraft | null>(null), [dialog, setDialog] = useState<AppDialogState | null>(null), [weixinConnectState, setWeixinConnectState] = useState<WeixinLoginState | null>(null);
   const eventCounter = useRef(0);
   const eventSourceRef = useRef<EventSource | null>(null);
   const transcriptRef = useRef<HTMLElement | null>(null);
+  const transcriptEndRef = useRef<HTMLDivElement | null>(null);
   const transcriptTurnRefs = useRef(new Map<string, HTMLElement>());
   const transcriptAutoScrollFrameRef = useRef<number | null>(null);
+  const transcriptFollowRef = useRef(transcriptFollow);
+  transcriptFollowRef.current = transcriptFollow;
+  const transcriptContentAnchorRef = useRef<number | null>(null);
   const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
   const activeTurnThreadIdRef = useRef<string>('');
   const activeTurnIdRef = useRef<string>('');
   const threadLoadGuardRef = useRef(createLatestRequestGuard());
   const sendMessageGuardRef = useRef(createLatestRequestGuard());
+  const turnWatchRef = useRef<{ epoch: number; timer: number | null; threadId: string; knownTurnIds: Set<string> } | null>(null);
+  const turnWatchEpochRef = useRef(0);
   const threadEventSourceGenerationRef = useRef(0);
-  const modePatchGenerationRef = useRef(0);
-  const modePatchQueueRef = useRef(Promise.resolve());
+  const eventSourceRecoveryTimerRef = useRef<number | null>(null);
   const opsStartGenerationRef = useRef(0);
   const opsActionOwnerRef = useRef<number | null>(null);
   const opsStartLoadTargetRef = useRef<string | null>(null);
@@ -205,28 +278,90 @@ function App() {
   const { toast, showToast } = useToastNotice();
   const { botConfig, botStatus, bindRemoteAssistant, refreshBotStatus, saveBotConfig, connectWeixin, logoutWeixin, startDingtalkStream, stopDingtalkStream, testDingtalkMessage } = useBotControls();
   const { applyWebProviderState, clearWebProviderKey, saveWebProviderKey, webProviderState } = useWebProviderSettings();
-  const activeModeOverride = threadModeOverride?.threadId === threadId ? threadModeOverride : null;
-  const currentThreadMode: 'chat' | 'ops' = activeModeOverride?.mode ?? activeThread?.mode ?? (!threadId ? pendingThreadMode : 'chat');
-  const currentTaskPreset: 'ops' | null = activeModeOverride?.taskPreset ?? activeThread?.taskPreset ?? (!threadId ? pendingTaskPreset : null);
   const currentOpsTaskDetail = opsTaskDetail?.task.spec.threadId === threadId ? opsTaskDetail : null;
   const currentOpsTaskAnchor = opsTaskAnchor?.threadId === threadId ? opsTaskAnchor : null;
+  const opsSessionActive = Boolean(currentOpsTaskDetail || currentOpsTaskAnchor);
+  useEffect(() => {
+    if (!hasActiveThread) {
+      // Idle UI must not retain visibility, utility width, or a browser-open
+      // request from the conversation that was just closed or deleted.
+      setRightPaneVisible(false);
+      setRightPaneSizingMode('standard');
+      setBrowserRequest(null);
+      return;
+    }
+    setRightPaneVisible(readStoredWorkbenchVisibility(threadId));
+    setRightPaneSizingMode(rightPaneSizingModeForTab(readStoredWorkbenchState(threadId).activeTab));
+  }, [hasActiveThread, threadId]);
+
+  const revealRightPaneForThread = useCallback((mode: 'standard' | 'files' | 'browser' | 'terminal' = 'standard'): boolean => {
+    if (!hasActiveThread || !threadId) return false;
+    writeStoredWorkbenchVisibility(true, threadId);
+    setRightPaneVisible(true);
+    setRightPaneSizingMode(mode);
+    return true;
+  }, [hasActiveThread, threadId]);
+
+  // 中文注释：打开某子 agent 的右侧详情（气泡名字点击 / 卡片点击 / 自动弹出共用）
+  // — Chinese: open an agent's right-pane detail (shared by bubble name / card click / auto-reveal)
+  const openAgentDetail = useCallback((targetThreadId: string) => {
+    if (!hasActiveThread || !threadId) return;
+    agentDetailNonceRef.current += 1;
+    setAgentDetailRequest({ threadId: targetThreadId, nonce: agentDetailNonceRef.current });
+    writeStoredWorkbenchVisibility(true, threadId);
+    setRightPaneVisible(true);
+    setRightPaneSizingMode('standard');
+  }, [hasActiveThread, threadId]);
+
+  const toggleRightPane = useCallback(() => {
+    if (!hasActiveThread || !threadId) return;
+    setRightPaneVisible((current) => {
+      const next = !current;
+      writeStoredWorkbenchVisibility(next, threadId);
+      return next;
+    });
+    // 运行中手动收起 → 本回合不再自动弹出 agent 详情
+    // — Chinese: manual close mid-run → no auto agent-detail reveal for this turn
+    if (busy && activeTurnIdRef.current) {
+      agentDetailSuppressedTurnIdsRef.current.add(activeTurnIdRef.current);
+    }
+  }, [busy, hasActiveThread, threadId]);
+
+  // 中文注释：spawn 后自动打开右侧详情；同一 item 只弹一次，用户收起后本回合不再弹
+  // — Chinese: auto-open agent detail on spawn; once per item, suppressed within the turn after a manual close
+  const autoRevealAgentDetail = useCallback((item: ThreadItem) => {
+    const target = (item as ThreadItem & { newThreadId?: string }).newThreadId
+      ?? (item as ThreadItem & { receiverThreadId?: string }).receiverThreadId;
+    if (!target || !threadId || !activeTurnIdRef.current) return;
+    if (item.tool !== 'spawn_agent' && item.tool !== 'spawn_remote_agent') return;
+    if (autoOpenedAgentItemIdsRef.current.has(item.id)) return;
+    autoOpenedAgentItemIdsRef.current.add(item.id);
+    if (agentDetailSuppressedTurnIdsRef.current.has(activeTurnIdRef.current)) return;
+    openAgentDetail(target);
+  }, [openAgentDetail, threadId]);
 
   useEffect(() => {
-    const browser = (window as unknown as { nexusDesktop?: { browser?: BrowserDesktopRequestApi } }).nexusDesktop?.browser;
+    const browser = (window as unknown as { suanliziDesktop?: { browser?: BrowserDesktopRequestApi } }).suanliziDesktop?.browser;
     if (!browser) return undefined;
     const openBrowserWorkbench = (event: BrowserDesktopRequestEvent): void => {
       if (event.type !== 'agent-browser-requested') return;
+      // Never surface an old browser waiter in another conversation.
+      if (!hasActiveThread || !threadId || event.taskId !== threadId) return;
       setWorkspaceView('chat');
-      setRightPaneVisible(true);
-      setRightPaneSizingMode('browser');
-      setBrowserRequestVersion((version) => version + 1);
+      if (!revealRightPaneForThread('browser')) return;
+      setBrowserRequest((current) => ({
+        threadId,
+        version: current?.threadId === threadId ? current.version + 1 : 1,
+      }));
     };
     const unsubscribe = browser.subscribe(openBrowserWorkbench);
-    void browser.hasPendingAgentRequest().then((pending) => {
-      if (pending) openBrowserWorkbench({ type: 'agent-browser-requested', taskId: '' });
+    void browser.pendingAgentRequestTaskIds().then((taskIds) => {
+      if (taskIds.includes(threadId)) {
+        openBrowserWorkbench({ type: 'agent-browser-requested', taskId: threadId });
+      }
     }).catch(() => undefined);
     return unsubscribe;
-  }, []);
+  }, [hasActiveThread, revealRightPaneForThread, threadId]);
   const activeWorkflow = useMemo(() => parseThreadWorkflow(activeThread) ?? parseWorkflowCheckpointItems(items), [activeThread, items]); const workflowTitle = isWorkflowView ? (config.locale === 'zh' ? '未命名工作流项目' : 'Untitled workflow project') : '';
   function resetWorkflowState() { setWorkflowPlanDraft(null); setWorkflowComponents([]); setWorkflowBlueprint(null); setWorkflowSelectedNodeIds([]); }
   const apiConfig = useMemo(() => {
@@ -246,6 +381,18 @@ function App() {
     void customUserAvatarDataUrl;
     return threadConfig;
   }, [apiConfig]);
+  function updatePreparingTurnId(eventThreadId: string, turnId: string): void {
+    setPreparingTurn((current) => current && current.threadId === eventThreadId
+      ? { ...current, turnId }
+      : current);
+  }
+  function clearPreparingTurn(eventThreadId: string, eventTurnId?: unknown): void {
+    setPreparingTurn((current) => {
+      if (!current || current.threadId !== eventThreadId) return current;
+      if (current.turnId && typeof eventTurnId === 'string' && current.turnId !== eventTurnId) return current;
+      return null;
+    });
+  }
   const transcriptGroups = useMemo(() => groupTranscriptItems(items, turns), [items, turns]);
   const transcriptTurnSummaries = useMemo<TranscriptTurnRailEntry[]>(() => {
     const repliesByTurn = new Map<string, string>();
@@ -286,11 +433,13 @@ function App() {
   const activeWorkspaceRoot = threadId
     ? (activeThread?.tags?.conversationKind === 'chat' ? '' : (activeThread?.workspaceRoot || ''))
     : '';
-  const opsModeAvailable = Boolean(activeWorkspaceRoot.trim());
   // Personal knowledge selection is independent of the active project/thread.
   // A task freezes its own ids on creation; this is only the user's next-task
   // selection and must not disappear when they switch conversations.
   const childActivityByThread = useMemo(() => buildChildActivityByThread(threadChildren), [threadChildren]);
+  // 气泡 Agent 行 + 右侧详情联动用的子 agent 目录（label/status/currentAction）
+  // — Chinese: sub-agent directory for bubble agent rows and right-pane detail linkage
+  const subagentDirectory = useMemo(() => buildSubagentDirectory(threadChildren), [threadChildren]);
   const tokenUsage = useMemo(() => {
     return buildTokenUsageSummary(threadUsage, config.locale);
   }, [config.locale, threadUsage]);
@@ -305,18 +454,17 @@ function App() {
     () => hasActiveThread ? resolveDisplayContextPressure(compactionPressure, modelCapabilities) : null,
     [compactionPressure, hasActiveThread, modelCapabilities],
   );
-  const lastItemSignature = useMemo(() => {
-    const last = items[items.length - 1];
-    if (!last) return '';
-    return [
-      last.id,
-      last.type,
-      last.status ?? '',
-      last.text ?? '',
-      last.toolName ?? '',
-      JSON.stringify(last.result ?? last.error ?? ''),
-    ].join('\n');
-  }, [items]);
+  const transcriptContentSignature = useMemo(() => items.map((item) => [
+    item.id,
+    item.type,
+    item.status ?? '',
+    // Track every streaming item, not only the last array entry. Reasoning,
+    // tool output, and an assistant answer can grow while another item is
+    // appended after them; all of those changes may increase scrollHeight.
+    item.text?.length ?? 0,
+    item.toolName ?? '',
+    JSON.stringify(item.result ?? item.error ?? '').length,
+  ].join(':')).join('|'), [items]);
   const openRemoteAssistants = useCallback((platform: 'weixin' | 'dingtalk') => {
     const targetThreadId = threadId || undefined;
     void (async () => {
@@ -398,13 +546,6 @@ function App() {
     ));
   }, [config.locale, input, mcps, skillsList, slashCommandOptions, slashVisible]);
   const addEvent = useCallback((event: EventDraft) => {
-    const isFailure = event.kind === 'error'
-      || event.tone === 'danger'
-      || /(?:error|fail(?:ed|ure)?|exception)/i.test(event.kind);
-    if (isFailure) {
-      showToast(event.detail?.trim() || event.title);
-      return;
-    }
     eventCounter.current += 1;
     setEvents((current) => {
       const displayKey = [event.kind, event.title, event.detail, event.tone].join('\n');
@@ -427,9 +568,11 @@ function App() {
       }
       return [next, ...current].slice(0, 80);
     });
-  }, [showToast]);
+  }, [config.locale]);
   const runMonitor = useRunMonitor({ threadId, threadIds: threadChildren.map((child) => child.thread.threadId), locale: config.locale, addEvent });
-  const suspendNativeBrowser = settingsOpen || settingsHelpOpen || runMonitor.open || dialog !== null || skillDraft !== null || weixinConnectState !== null;
+  // 任务中心（P1 只读）：跨线程任务抽屉；打开时同监控一样暂停原生浏览器视图，避免被遮挡。
+  const [taskCenterOpen, setTaskCenterOpen] = useState(false);
+  const suspendNativeBrowser = settingsOpen || settingsHelpOpen || runMonitor.open || taskCenterOpen || dialog !== null || skillDraft !== null || weixinConnectState !== null;
   const monitorButtonActive = runMonitor.open;
   const openUnifiedMonitor = useCallback(() => {
     runMonitor.openDrawer();
@@ -566,8 +709,14 @@ function App() {
     return () => window.removeEventListener('resize', update);
   }, []);
   const handleCloseWorkbench = useCallback(() => {
+    if (hasActiveThread && threadId) writeStoredWorkbenchVisibility(false, threadId);
     setRightPaneVisible(false);
-  }, []);
+    // 运行中手动收起 → 本回合不再自动弹出 agent 详情
+    // — Chinese: manual close mid-run → no auto agent-detail reveal for this turn
+    if (busy && activeTurnIdRef.current) {
+      agentDetailSuppressedTurnIdsRef.current.add(activeTurnIdRef.current);
+    }
+  }, [busy, hasActiveThread, threadId]);
 
   const mergeApproval = useCallback((approval: ApprovalRequest) => {
     setPendingApprovals((current) =>
@@ -575,10 +724,13 @@ function App() {
     );
   }, []);
   const refreshThreads = useCallback(async () => {
-    const response = await fetch('/api/threads');
-    const data = (await response.json()) as { threads: ThreadMeta[] };
-    setThreads(data.threads ?? []);
-  }, []);
+   const response = await fetch('/api/threads');
+    if (!response.ok) return;
+    const data = (await response.json().catch(() => null)) as { threads?: ThreadMeta[] } | null;
+    // 子 agent 线程只在右侧智能体面板展示，不进左侧对话栏
+    // — Chinese: sub-agent threads surface in the right agents pane, never in the left conversation list
+    setThreads((data?.threads ?? []).filter((thread) => !thread.parentThreadId));
+ }, []);
   const refreshApprovals = useCallback(async () => {
     const response = await fetch('/api/approvals');
     if (!response.ok) return;
@@ -640,7 +792,7 @@ function App() {
     const data = (await response.json()) as { children?: ThreadChildInfo[] };
     setThreadChildren(data.children ?? []);
   }, []);
-  const reloadThreadSnapshot = useCallback(async (id: string, guard?: { signal?: AbortSignal; isCurrent: () => boolean }) => {
+  const reloadThreadSnapshot = useCallback(async (id: string, guard?: { signal?: AbortSignal; isCurrent: () => boolean; preserveCurrentItems?: boolean; terminalTurnId?: string; reconcileBusy?: boolean; requestEpoch?: number }) => {
     let response: Response;
     try {
       response = await fetch(`/api/threads/${id}?includeChildren=1`, guard?.signal ? { signal: guard.signal } : undefined);
@@ -668,30 +820,66 @@ function App() {
       if (error instanceof DOMException && error.name === 'AbortError') return;
     }
     if (guard && !guard.isCurrent()) return;
+    // Reconciliation can finish after the user switches away; it must never
+    // write the old thread into the newly selected transcript.
+    if (threadIdRef.current !== id) return;
     if (data.thread) {
       setThreads((current) => current.map((thread) => thread.threadId === id ? data.thread! : thread));
     }
     setTurns(data.turns ?? []);
     setThreadUsage(data.usage ?? null);
-    setRunningTurnIds(new Set((data.turns ?? [])
-      .filter((turn) => turn.status === 'running')
-      .map((turn) => turn.turnId)));
-    setItems(withSyntheticUserMessages(data.turns ?? [], data.items ?? []) as ThreadItem[]);
+    const runningTurns = (data.turns ?? []).filter((turn) => turn.status === 'running');
+    setRunningTurnIds(new Set(runningTurns.map((turn) => turn.turnId)));
+    // Rehydrate the lightweight pre-first-event marker after a thread switch
+    // or SSE reconnect. Preserve a locally-started turn until its first
+    // persisted turn metadata arrives, but clear a known turn once the
+    // snapshot reports it as terminal.
+    setPreparingTurn((current) => {
+      const runningTurn = runningTurns[0];
+      if (runningTurn) return { threadId: id, turnId: runningTurn.turnId };
+      if (!current || current.threadId !== id || !current.turnId) return current?.threadId === id ? current : null;
+      return (data.turns ?? []).some((turn) => turn.turnId === current.turnId) ? null : current;
+    });
+    const snapshotItems = withSyntheticUserMessages(data.turns ?? [], data.items ?? []) as ThreadItem[];
+    // A failed turn can finish persisting just after the snapshot request was
+    // read. Keep terminal error items already visible for turns that still
+    // exist in this thread, so a refresh cannot make the failure disappear.
+    const snapshotTurnIds = new Set((data.turns ?? []).map((turn) => turn.turnId));
+    setItems((current) => {
+      if (threadIdRef.current !== id) return snapshotItems;
+      // A terminal event or SSE reconnect can race the storage write that
+      // produced the snapshot. Keep the live stream first so a stale read
+      // cannot make the beginning or middle of the answer disappear.
+      if (guard?.preserveCurrentItems) return mergeIncomingItems(current, snapshotItems);
+      const visibleErrors = current.filter((item) =>
+        item.type === 'error' && typeof item.turnId === 'string' && snapshotTurnIds.has(item.turnId),
+      );
+      return mergeIncomingItems(snapshotItems, visibleErrors);
+    });
     setPendingDecision(runtimeState?.decisionRequest ?? null);
-    if (runtimeState?.executionStatus === 'running' || runtimeState?.executionStatus === 'stopping' || runtimeState?.executionStatus === 'waiting_user_input') {
-      setBusy(true);
-    } else {
-      setBusy(false);
+    const busyDecision = resolveSnapshotBusy({
+      turns: data.turns ?? [],
+      runtimeStatus: runtimeState?.executionStatus,
+      reconcileBusy: guard?.reconcileBusy,
+      knownTurnIds: turnWatchRef.current?.threadId === id ? turnWatchRef.current.knownTurnIds : undefined,
+      terminalTurnId: guard?.terminalTurnId,
+      requestEpoch: guard?.requestEpoch,
+      watchEpoch: turnWatchEpochRef.current,
+    });
+    if (busyDecision.applyLifecycle) {
+      setRunningTurnIds(new Set(runningTurns.map((turn) => turn.turnId)));
+      setBusy(busyDecision.busy);
+      if (busyDecision.clearPreparingTurn) setPreparingTurn(null);
     }
     if (data.config) {
       const { workspaceRoot, themeMode, userAvatarId, customUserAvatarDataUrl, ...threadConfig } = data.config;
       void themeMode;
       void userAvatarId;
       void customUserAvatarDataUrl;
-      setConfig((current) => ({
-        ...current,
+      setConfig(() => ({
+        ...globalConfigRef.current,
         ...threadConfig,
-        ...(workspaceRoot ? { workspaceRoot } : {}),
+        workspaceRoot: workspaceRoot ?? '',
       }));
     }
     if (guard && !guard.isCurrent()) return;
@@ -727,7 +915,7 @@ function App() {
       if (threadId) void refreshThreads();
       addEvent({ kind: 'workflow', title: config.locale === 'zh' ? '计划草案已生成' : 'Plan draft ready', detail: draft.workflow.definition.goal, tone: 'success' });
     } catch (error) {
-      setItems((current) => mergeIncomingItems(current, [createWorkflowDraftErrorItem(error instanceof Error ? error.message : String(error), config.locale, draftTurnId)]) as ThreadItem[]);
+      setItems((current) => mergeIncomingItems(current, [createWorkflowDraftErrorItem(formatSuanliziErrorMessage(undefined, error instanceof Error ? error.message : String(error), config.locale), config.locale, draftTurnId)]) as ThreadItem[]);
       addEvent({ kind: 'workflow', title: config.locale === 'zh' ? '计划生成失败' : 'Plan failed', detail: error instanceof Error ? error.message : String(error), tone: 'danger' });
     } finally { setWorkflowPlanning(false); }
   }, [activeThread?.title, activeWorkflow, addEvent, config.locale, refreshThreads, threadId, workflowSelectedNodeIds]);
@@ -777,26 +965,51 @@ function App() {
     async (id: string) => {
       if (!id) return;
       if (threadIdRef.current !== id) {
-        modePatchGenerationRef.current += 1;
         if (opsStartLoadTargetRef.current !== id) opsStartGenerationRef.current += 1;
-        setModePatchPending(false);
-        setThreadModeOverride(null);
       }
       const request = threadLoadGuardRef.current.begin();
+      if (eventSourceRecoveryTimerRef.current !== null) {
+        window.clearTimeout(eventSourceRecoveryTimerRef.current);
+        eventSourceRecoveryTimerRef.current = null;
+      }
       eventSourceRef.current?.close();
       eventSourceRef.current = null;
       setThreadId(id);
+      threadIdRef.current = id;
       setWorkflowPlanDraft(null);
       setEvents([]);
       setCompactionPressure(null);
+      setTranscriptFollow({ following: true, showReturnToBottom: false });
       taskRuntimeMonitor.clear();
       const isCurrent = () => threadLoadGuardRef.current.isCurrent(request.generation);
+      const sourceGeneration = request.generation;
+      threadEventSourceGenerationRef.current = sourceGeneration;
+      const source = new EventSource(`/api/events/${id}`);
+      // Subscribe before the snapshot request. Events can arrive while the
+      // thread payload is loading; replay them after the initial state is set.
+      const preSnapshotMessages: MessageEvent[] = [];
+      let lastEventSequence = 0;
+      let connectionFailedBeforeSubscription = false;
+      source.onmessage = (message) => {
+        if (isCurrent()) preSnapshotMessages.push(message);
+      };
+      source.onerror = () => {
+        connectionFailedBeforeSubscription = true;
+      };
+      source.addEventListener('thread.replay.gap', () => {
+        if (!isCurrent()) return;
+        void reloadThreadSnapshot(id, { isCurrent, preserveCurrentItems: true }).catch(() => undefined);
+      });
+      eventSourceRef.current = source;
       await reloadThreadSnapshot(id, { signal: request.signal, isCurrent });
       if (!isCurrent()) return;
       try {
         const overrides = await fetchThreadConfigOverrides(id);
         if (!isCurrent()) return;
-        setConfig((current) => ({ ...current, ...overrides }));
+        // Thread overrides are scoped to the selected conversation. Always
+        // rebuild from the global snapshot so an older conversation cannot
+        // leak its context window into the next one.
+        setConfig(() => ({ ...globalConfigRef.current, ...overrides }));
       } catch {
         if (!isCurrent()) return;
       }
@@ -813,14 +1026,15 @@ function App() {
           // 主动查询失败时不阻断，后续 SSE 事件仍可更新
         }
       })();
-      const sourceGeneration = request.generation;
-      threadEventSourceGenerationRef.current = sourceGeneration;
-      const source = new EventSource(`/api/events/${id}`);
       source.onmessage = (message) => {
         if (!threadLoadGuardRef.current.isCurrent(sourceGeneration)) return;
         try {
           const event = JSON.parse(message.data) as Record<string, unknown>;
           if (event.type === 'connected') return;
+          if (typeof event.sequence === 'number' && Number.isSafeInteger(event.sequence)) {
+            if (event.sequence <= lastEventSequence) return;
+            lastEventSequence = event.sequence;
+          }
           if ((event.type === 'ops.task.updated' || event.type === 'ops.task.state.updated') && event.threadId === id && typeof event.taskId === 'string') {
             const nextState = event.state === 'waiting_confirmation' || event.state === 'blocked' ? event.state : null;
             setOpsTaskAnchor(nextState ? {
@@ -837,6 +1051,7 @@ function App() {
           if (described) addEvent(described);
           if (event.type === 'turn.started' && typeof event.turnId === 'string') {
             activeTurnIdRef.current = event.turnId;
+            updatePreparingTurnId(id, event.turnId);
             setRunningTurnIds((current) => new Set([...current, event.turnId as string]));
           }
           if (
@@ -853,8 +1068,10 @@ function App() {
               activeTurnIdRef.current = '';
               activeTurnThreadIdRef.current = '';
             }
+            clearPreparingTurn(id, event.turnId);
             setPendingDecision(null);
-            setStatus(event.type === 'turn.failed' ? (config.locale === 'zh' ? '失败' : 'Failed') : t(config.locale, 'idle'));
+            setStatus(event.type === 'turn.failed' ? (config.locale === 'zh' ? '回复失败' : 'Turn failed') : t(config.locale, 'idle'));
+             void reloadThreadSnapshot(id, { isCurrent, preserveCurrentItems: true, terminalTurnId: event.turnId });
             void refreshThreadChildren(id);
             if (runMonitor.open) void runMonitor.refresh(runMonitor.selectedRunId || undefined);
           }
@@ -876,6 +1093,16 @@ function App() {
               setStatus(config.locale === 'zh' ? '停止中' : 'Stopping');
             } else if (event.status === 'terminal') {
               setPendingDecision(null);
+              const terminalTurnId = typeof event.turnId === 'string' ? event.turnId : undefined;
+              const belongsToActiveTurn = activeTurnThreadIdRef.current === id
+                && (!activeTurnIdRef.current || !terminalTurnId || activeTurnIdRef.current === terminalTurnId);
+              if (belongsToActiveTurn) {
+                setBusy(false);
+                activeTurnIdRef.current = '';
+                activeTurnThreadIdRef.current = '';
+                setStatus(event.terminalStatus === 'failed' ? (config.locale === 'zh' ? '回复失败' : 'Turn failed') : t(config.locale, 'idle'));
+                if (terminalTurnId) clearPreparingTurn(id, terminalTurnId);
+              }
             }
           }
           if (event.type === 'approval.required' && typeof event.requestId === 'string') {
@@ -901,15 +1128,52 @@ function App() {
           if (event.type === 'context.compaction_pressure' && event.pressure) {
             setCompactionPressure(event.pressure as never);
           }
+          if (event.type === 'thread.compacted.v2' && event.trigger === 'auto' && typeof event.turnId === 'string') {
+            const compactionItemId = eventItemId(event) ?? `${event.turnId}:auto`;
+            const progressItemId = `compaction-progress:${compactionItemId}`;
+            const failed = event.phase === 'failed';
+            const completed = event.phase === 'completed';
+            const errorMessage = event.error && typeof event.error === 'object' && typeof (event.error as { message?: unknown }).message === 'string'
+              ? (event.error as { message: string }).message
+              : '';
+            setItems((current) => mergeIncomingItems(current, [{
+              id: progressItemId,
+              type: 'reasoning',
+              turnId: event.turnId as string,
+              status: failed ? 'failed' : completed ? 'completed' : 'in_progress',
+              text: failed
+                ? `上下文压缩失败：${errorMessage || '未能生成摘要。'}`
+                : completed ? '上下文压缩完成。' : '上下文正在压缩…',
+              timestamp: new Date().toISOString(),
+              ...(completed || failed ? { completedAt: new Date().toISOString() } : {}),
+            } as ThreadItem]));
+            clearPreparingTurn(id, event.turnId);
+          }
           if (event.type === 'child_agent.event') {
             void refreshThreadChildren(id);
           }
           if (event.type === 'harness.state.updated' && typeof event.harnessRunId === 'string') {
             if ((event.status as string) !== 'active') void refreshThreadChildren(id);
           }
+          // 回合结束清空 agent 详情自动弹出的抑制标记
+          // — Chinese: clear auto-reveal suppression when the turn ends
+          if ((event.type === 'turn.completed' || event.type === 'turn.failed') && typeof event.turnId === 'string') {
+            agentDetailSuppressedTurnIdsRef.current.delete(event.turnId);
+          }
           if (isTaskRuntimeEvent(event)) taskRuntimeMonitor.applyEvent(event);
           if (event.type === 'agent_message.delta') {
+            clearPreparingTurn(id, event.turnId);
             setItems((current) => applyAgentMessageDelta(current, event as never) as ThreadItem[]);
+          }
+          if (event.type === 'command_output.delta' && typeof event.itemId === 'string' && typeof event.delta === 'string') {
+            clearPreparingTurn(id, event.turnId);
+            // 命令输出的流式增量：实时追加到对应 command_execution/tool_call 条目的
+            // 实时输出缓冲，前端命令块随即呈现"终端式"滚动输出。
+            // — Chinese: append streaming command output to the item's live buffer.
+            setItems((current) => applyCommandOutputDelta(current, {
+              itemId: event.itemId as string,
+              delta: event.delta as string,
+            }));
           }
           if (event.type === 'item.discarded' && typeof event.itemId === 'string') {
             const itemId = event.itemId;
@@ -920,50 +1184,73 @@ function App() {
             && event.item
           ) {
             setItems((current) => mergeIncomingItems(current, [event.item as ThreadItem]));
-            if ((event.item as ThreadItem).type === 'collab_tool_call') {
+            const item = event.item as ThreadItem;
+            if (item.type !== 'user_message') clearPreparingTurn(id, event.turnId ?? item.turnId);
+            if (item.type === 'collab_tool_call') {
               void refreshThreadChildren(id);
+              autoRevealAgentDetail(item);
             }
           }
         } catch {
           addEvent({
             kind: 'event',
             title: config.locale === 'zh' ? '事件解析失败' : 'Event parse failed',
-            detail: message.data,
+            detail: config.locale === 'zh' ? '服务器事件格式无效，已重新同步当前对话。' : 'The server event was malformed; the current conversation will be resynced.',
             tone: 'warning',
           });
+          void reloadThreadSnapshot(id, { isCurrent, preserveCurrentItems: true }).catch(() => undefined);
+        }
+      };
+      let recovering = connectionFailedBeforeSubscription;
+      source.onopen = () => {
+        if (!threadLoadGuardRef.current.isCurrent(sourceGeneration) || eventSourceRef.current !== source) return;
+        const wasRecovering = recovering;
+        recovering = false;
+        if (wasRecovering) {
+          void reloadThreadSnapshot(id, {
+            isCurrent: () => threadLoadGuardRef.current.isCurrent(sourceGeneration),
+            preserveCurrentItems: true,
+          }).catch(() => undefined);
         }
       };
       source.onerror = () => {
-        if (!threadLoadGuardRef.current.isCurrent(sourceGeneration)) return;
-        addEvent({
-          kind: 'events',
-          title: config.locale === 'zh' ? '连接恢复中' : 'Reconnecting',
-          detail: config.locale === 'zh' ? '事件连接断开，正在重新拉取当前对话。' : 'The event stream disconnected; reloading the current thread.',
-          tone: 'warning',
-        });
-        window.setTimeout(() => {
-          if (threadLoadGuardRef.current.isCurrent(sourceGeneration)) {
-            source.close();
-            eventSourceRef.current = null;
-            void reloadThreadSnapshot(id, {
-              isCurrent: () => threadLoadGuardRef.current.isCurrent(sourceGeneration),
-            });
-          }
-        }, 500);
+        if (!threadLoadGuardRef.current.isCurrent(sourceGeneration) || eventSourceRef.current !== source) return;
+        if (!recovering) {
+          recovering = true;
+          addEvent({
+            kind: 'events',
+            title: config.locale === 'zh' ? '连接恢复中' : 'Reconnecting',
+            detail: config.locale === 'zh' ? '事件连接断开，正在重新拉取当前对话。' : 'The event stream disconnected; reloading the current thread.',
+            tone: 'warning',
+          });
+        }
+        if (eventSourceRecoveryTimerRef.current !== null) return;
+        eventSourceRecoveryTimerRef.current = window.setTimeout(() => {
+          eventSourceRecoveryTimerRef.current = null;
+          if (!threadLoadGuardRef.current.isCurrent(sourceGeneration) || eventSourceRef.current !== source) return;
+          void reloadThreadSnapshot(id, {
+            isCurrent: () => threadLoadGuardRef.current.isCurrent(sourceGeneration),
+            preserveCurrentItems: true,
+          }).catch(() => undefined);
+        }, 700);
       };
-      eventSourceRef.current = source;
+      // Apply messages received between subscription and snapshot completion.
+      // Keep this after the full handler is installed so no lifecycle event is lost.
+      const pendingMessages = preSnapshotMessages.splice(0);
+      for (const message of pendingMessages) source.onmessage?.(message);
     },
     [addEvent, config.locale, mergeApproval, refreshThreadChildren, reloadThreadSnapshot, runMonitor, taskRuntimeMonitor],
   );
   const selectThreadFromSidebar = useCallback((id: string) => {
-    modePatchGenerationRef.current += 1;
     opsStartGenerationRef.current += 1;
-    setModePatchPending(false);
-    setThreadModeOverride(null);
     resetWorkflowState();
     setWorkspaceView(isWorkflowProjectThread(threads.find((thread) => thread.threadId === id)) ? 'workflow' : 'chat');
     void loadThread(id);
   }, [loadThread, threads]); const createWorkflowProjectDraft = useCallback(async () => {
+    if (eventSourceRecoveryTimerRef.current !== null) {
+      window.clearTimeout(eventSourceRecoveryTimerRef.current);
+      eventSourceRecoveryTimerRef.current = null;
+    }
     eventSourceRef.current?.close(); eventSourceRef.current = null; setWorkspaceView('workflow'); setTurns([]); setItems([]); setThreadUsage(null); setThreadChildren([]); setRunningTurnIds(new Set());
     setEvents([]); resetWorkflowState(); setStatus(config.locale === 'zh' ? '正在创建工作流项目' : 'Creating workflow project');
     try { const title = config.locale === 'zh' ? '未命名工作流项目' : 'Untitled workflow project'; const thread = await createWorkflowThread(title, config.workspaceRoot); opsStartGenerationRef.current += 1; setThreadId(thread.threadId); setThreads((current) => current.some((candidate) => candidate.threadId === thread.threadId) ? current.map((candidate) => candidate.threadId === thread.threadId ? thread : candidate) : [thread, ...current]); setStatus(config.locale === 'zh' ? '准备创建工作流' : 'Ready to plan workflow'); }
@@ -979,7 +1266,13 @@ function App() {
         if (!response.ok) throw new Error(`API unavailable (${response.status})`);
         const data = await response.json() as { config?: Partial<RunConfig>; stored?: boolean } & SettingsResponseWithWebProvider;
         if (disposed) return;
-        setConfig((current) => data.stored || !hasStoredRunConfig ? { ...defaultConfig, ...data.config } : mergeRunConfigDefaults(data.config, current));
+        setConfig((current) => {
+          const next = data.stored || !hasStoredRunConfig
+            ? { ...defaultConfig, ...data.config }
+            : mergeRunConfigDefaults(data.config, current);
+          globalConfigRef.current = next;
+          return next;
+        });
         applyWebProviderState(data);
         setApiUnavailable(false);
         setConfigHydrated(true);
@@ -1009,6 +1302,10 @@ function App() {
     return () => {
       disposed = true;
       window.clearInterval(retryTimer);
+      if (eventSourceRecoveryTimerRef.current !== null) {
+        window.clearTimeout(eventSourceRecoveryTimerRef.current);
+        eventSourceRecoveryTimerRef.current = null;
+      }
       eventSourceRef.current?.close();
       threadLoadGuardRef.current.dispose();
       sendMessageGuardRef.current.dispose();
@@ -1029,31 +1326,41 @@ function App() {
         const response = await fetch(`/api/ops/tasks?threadId=${encodeURIComponent(threadId)}&limit=20`);
         if (!response.ok || disposed) return;
         const data = await response.json() as { tasks?: Array<Record<string, unknown>> };
-        const task = (data.tasks ?? []).find((candidate) => ['queued', 'running', 'paused', 'waiting_confirmation', 'verifying', 'blocked'].includes(String(candidate.state)))
-          ?? (data.tasks ?? [])[0];
-        if (!task || typeof task.taskId !== 'string' || !task.spec) {
+        // Only a live or blocked task reopens the Ops surface. Completed,
+        // cancelled, and failed task history must remain ordinary thread
+        // history until the user explicitly starts a new Ops task.
+        const task = (data.tasks ?? []).find((candidate) => ['queued', 'running', 'paused', 'waiting_confirmation', 'verifying', 'blocked'].includes(String(candidate.state)));
+        const taskSpec = task?.spec && typeof task.spec === 'object' ? task.spec as Record<string, unknown> : null;
+        const taskId = typeof taskSpec?.taskId === 'string' ? taskSpec.taskId : '';
+        if (!task || !taskId || !taskSpec) {
           setOpsTaskAnchor(null);
           setOpsTaskDetail(null);
           return;
         }
-        const detailResponse = await fetch(`/api/ops/tasks/${encodeURIComponent(task.taskId)}`);
+        const detailResponse = await fetch(`/api/ops/tasks/${encodeURIComponent(taskId)}`);
         if (disposed) return;
-        if (detailResponse.ok && !disposed) {
-          const detail = await detailResponse.json() as { task?: OpsTaskSession; events?: OpsTaskTimelineEvent[] };
-          if (detail.task && detail.task.spec.threadId === threadId && !disposed) {
-            setOpsTaskDetail({ threadId, task: detail.task, events: detail.events ?? [] });
-            const scope = detail.task.spec.knowledgeScope;
-            if (scope?.knowledgeBaseIds?.length && scope.snapshotIds?.length) {
-              setOpsKnowledgeScope({ knowledgeBaseIds: scope.knowledgeBaseIds, snapshotIds: scope.snapshotIds, indexVersion: scope.indexVersion });
-            }
-          }
+        if (!detailResponse.ok) {
+          setOpsTaskDetail(null);
+          setOpsTaskAnchor(null);
+          return;
+        }
+        const detail = await detailResponse.json() as { task?: OpsTaskSession; events?: OpsTaskTimelineEvent[] };
+        if (!detail.task || detail.task.spec.threadId !== threadId || disposed) {
+          setOpsTaskDetail(null);
+          setOpsTaskAnchor(null);
+          return;
+        }
+        setOpsTaskDetail({ threadId, task: detail.task, events: detail.events ?? [] });
+        const scope = detail.task.spec.knowledgeScope;
+        if (scope?.knowledgeBaseIds?.length && scope.snapshotIds?.length) {
+          setOpsKnowledgeScope({ knowledgeBaseIds: scope.knowledgeBaseIds, snapshotIds: scope.snapshotIds, indexVersion: scope.indexVersion });
         }
         if (disposed) return;
         if (task.state !== 'waiting_confirmation' && task.state !== 'blocked') {
           setOpsTaskAnchor(null);
           return;
         }
-        const spec = task.spec && typeof task.spec === 'object' ? task.spec as Record<string, unknown> : {};
+        const spec = taskSpec;
         const target = spec.target && typeof spec.target === 'object' ? spec.target as Record<string, unknown> : {};
         const targetLabel = [
           ...(Array.isArray(target.hostIds) ? target.hostIds : []),
@@ -1063,11 +1370,11 @@ function App() {
         const payload = task.lastError ?? task.reason;
         setOpsTaskAnchor({
           threadId,
-          taskId: task.taskId,
+          taskId,
           state: task.state as OpsTaskAnchor['state'],
           phase: typeof task.currentPhase === 'string' ? task.currentPhase : undefined,
           target: targetLabel || undefined,
-          reason: typeof payload === 'string' ? payload : undefined,
+          reason: typeof payload === 'string' ? formatSuanliziErrorMessage(undefined, payload, config.locale) : undefined,
           summary: typeof task.finalConclusion === 'object' && task.finalConclusion && typeof (task.finalConclusion as Record<string, unknown>).summary === 'string'
             ? (task.finalConclusion as Record<string, string>).summary
             : undefined,
@@ -1101,30 +1408,41 @@ function App() {
   }, [opsTaskDetail?.threadId, opsTaskDetail?.task.spec.taskId, threadId]);
   useEffect(() => {
     if (!configHydrated) return;
-    localStorage.setItem(RUN_CONFIG_STORAGE_KEY, JSON.stringify(config));
-  }, [config, configHydrated]);
+    // Do not persist the effective config while a thread override is active.
+    // When the thread is cleared, retain the last known global snapshot.
+    if (!threadId && !persistedThreadIdRef.current) {
+      globalConfigRef.current = config;
+    }
+    persistedThreadIdRef.current = threadId;
+    localStorage.setItem(RUN_CONFIG_STORAGE_KEY, JSON.stringify(globalConfigRef.current));
+  }, [config, configHydrated, threadId]);
   useEffect(() => {
     if (!configHydrated) return;
-    (window as unknown as { nexusDesktop?: { menu?: { setLocale(locale: 'zh' | 'en'): Promise<void> } } })
-      .nexusDesktop?.menu?.setLocale(config.locale === 'zh' ? 'zh' : 'en')
+    (window as unknown as { suanliziDesktop?: { menu?: { setLocale(locale: 'zh' | 'en'): Promise<void> } } })
+      .suanliziDesktop?.menu?.setLocale(config.locale === 'zh' ? 'zh' : 'en')
       .catch(() => undefined);
   }, [config.locale, configHydrated]);
   const visualThemeMode = config.themeMode === 'system' ? systemTheme : config.themeMode;
   useEffect(() => {
-    document.documentElement.dataset.nexusTheme = visualThemeMode;
+    document.documentElement.dataset.suanliziTheme = visualThemeMode;
     document.documentElement.style.colorScheme = visualThemeMode;
     const appearance = (window as unknown as {
-      nexusDesktop?: {
+      suanliziDesktop?: {
         appearance?: {
           setTheme(input: { source: RunConfig['themeMode']; resolved: 'light' | 'dark' }): Promise<void>;
         };
       };
-    }).nexusDesktop?.appearance;
+    }).suanliziDesktop?.appearance;
     void appearance?.setTheme({ source: config.themeMode, resolved: visualThemeMode }).catch(() => undefined);
   }, [config.themeMode, visualThemeMode]);
   useEffect(() => {
-    const roots = [config.workspaceRoot, ...threads.map((thread) => thread.workspaceRoot)];
-    setRememberedWorkspaceRoots((current) => rememberWorkspaceRoots(current, roots));
+    // 只从真实线程和当前选择恢复工作区；删除后不要再把旧根写回 localStorage。
+    // — English: restore roots only from real threads/current selection; never resurrect deleted roots.
+    const realRoots = compactWorkspaceRoots([config.workspaceRoot, ...threads.map((thread) => thread.workspaceRoot)]);
+    setRememberedWorkspaceRoots((current) => {
+      const keys = new Set(realRoots.map((root) => workspaceKey(root)));
+      return saveRememberedWorkspaceRoots([...realRoots, ...current.filter((root) => keys.has(workspaceKey(root)))]);
+    });
   }, [config.workspaceRoot, threads]);
   useEffect(() => {
     if (!mcpHydrated) return;
@@ -1146,9 +1464,24 @@ function App() {
         });
       });
   }, [addEvent, config.locale, mcpHydrated, mcps]);
+  function scheduleTranscriptFollow(force = false): void {
+    if (!force && !transcriptFollowRef.current.following) return;
+    if (transcriptAutoScrollFrameRef.current !== null) return;
+    transcriptAutoScrollFrameRef.current = requestAnimationFrame(() => {
+      transcriptAutoScrollFrameRef.current = null;
+      const transcript = transcriptRef.current;
+      if (!transcript || !transcriptFollowRef.current.following) return;
+      // Anchor the bottom gap instead of chasing a moving scrollHeight. Layout
+      // can grow again between this frame and the scroll event; anchoring keeps
+      // the same visible whitespace and prevents a content-driven scroll event
+      // from being mistaken for the user scrolling upward.
+      const anchor = transcript.scrollHeight - transcript.scrollTop;
+      const nextScrollTop = Math.max(0, transcript.scrollHeight - transcript.clientHeight - TRANSCRIPT_FOLLOW_GAP_PX);
+      if (Math.abs(transcript.scrollTop - nextScrollTop) > 1) transcript.scrollTop = nextScrollTop;
+      transcriptContentAnchorRef.current = anchor;
+    });
+  }
   useEffect(() => {
-    const transcript = transcriptRef.current;
-    if (!transcript) return;
     if (!transcriptFollow.following) {
       if (transcriptAutoScrollFrameRef.current !== null) {
         cancelAnimationFrame(transcriptAutoScrollFrameRef.current);
@@ -1156,31 +1489,34 @@ function App() {
       }
       return;
     }
-    if (transcriptAutoScrollFrameRef.current !== null) cancelAnimationFrame(transcriptAutoScrollFrameRef.current);
-    transcriptAutoScrollFrameRef.current = requestAnimationFrame(() => {
-      transcriptAutoScrollFrameRef.current = null;
-      transcript.scrollTop = transcript.scrollHeight;
-    });
+    scheduleTranscriptFollow();
+  }, [transcriptContentSignature, transcriptFollow.following]);
+  useEffect(() => {
     return () => {
       if (transcriptAutoScrollFrameRef.current !== null) {
         cancelAnimationFrame(transcriptAutoScrollFrameRef.current);
         transcriptAutoScrollFrameRef.current = null;
       }
     };
-  }, [lastItemSignature, transcriptFollow.following]);
+  }, []);
   function handleTranscriptScroll() {
-    if (transcriptAutoScrollFrameRef.current !== null) {
-      cancelAnimationFrame(transcriptAutoScrollFrameRef.current);
-      transcriptAutoScrollFrameRef.current = null;
-    }
     const transcript = transcriptRef.current;
     if (!transcript) return;
+    const expectedAnchor = transcriptContentAnchorRef.current;
+    if (transcriptFollowRef.current.following && expectedAnchor !== null) {
+      // A resize or streamed item can increase scrollHeight before rAF runs.
+      // Ignore that content displacement; the scheduled rAF will re-anchor to
+      // the exact follow gap.
+      if (transcript.scrollHeight - transcript.scrollTop > expectedAnchor + 1) return;
+    }
     const distanceFromBottom = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight;
-    setTranscriptFollow((current: TranscriptFollowState) => nextTranscriptFollowState({
-      following: current.following,
+    const nextFollow = nextTranscriptFollowState({
+      following: transcriptFollowRef.current.following,
       distanceFromBottom,
       source: 'user',
-    }));
+    });
+    transcriptFollowRef.current = nextFollow;
+    setTranscriptFollow(nextFollow);
   }
   async function handleOpsTaskAction(action: OpsTaskAction): Promise<void> {
     const taskId = currentOpsTaskDetail?.task.spec.taskId ?? currentOpsTaskAnchor?.taskId;
@@ -1286,19 +1622,14 @@ function App() {
     }
   }
   function handleReturnToBottom() {
-    setTranscriptFollow(nextTranscriptFollowState({
+    const nextFollow = nextTranscriptFollowState({
       following: false,
       distanceFromBottom: 0,
       source: 'return-action',
-    }));
-    const transcript = transcriptRef.current;
-    if (transcript) {
-      if (transcriptAutoScrollFrameRef.current !== null) cancelAnimationFrame(transcriptAutoScrollFrameRef.current);
-      transcriptAutoScrollFrameRef.current = requestAnimationFrame(() => {
-        transcriptAutoScrollFrameRef.current = null;
-        transcript.scrollTop = transcript.scrollHeight;
-      });
-    }
+    });
+    transcriptFollowRef.current = nextFollow;
+    setTranscriptFollow(nextFollow);
+    scheduleTranscriptFollow(true);
   }
   useEffect(() => { resizeTextareaToContent(composerInputRef.current); }, [activeSlashOption, images.length, input]);
   // 窄屏下窗口变宽时自动收起 sidebar 抽屉 — Chinese: auto-close sidebar drawer when resizing to wide
@@ -1312,7 +1643,8 @@ function App() {
     setBusy(true);
     setStatus(t(config.locale, 'creating'));
     try {
-      const runConfig = { ...threadApiConfig, workspaceRoot: conversationKind === 'chat' ? '' : workspaceRoot };
+      const runConfig = { ...runtimeConfigPayload(globalConfigRef.current) };
+      if (conversationKind === 'chat') runConfig.workspaceRoot = '';
       if (conversationKind === 'project') {
         setRememberedWorkspaceRoots((current) => rememberWorkspaceRoots(current, [workspaceRoot]));
       }
@@ -1335,10 +1667,138 @@ function App() {
     setStatus(workspacePickerStatus(config.locale));
     try {
       const workspaceRoot = await pickWorkspaceRoot(); if (!workspaceRoot) { setStatus(t(config.locale, 'ready')); return; }
-      setConfig((current) => ({ ...current, workspaceRoot })); setRememberedWorkspaceRoots((current) => rememberWorkspaceRoots(current, [workspaceRoot]));
+      setRememberedWorkspaceRoots((current) => rememberWorkspaceRoots(current, [workspaceRoot]));
       await createConversation(workspaceRoot, 'project');
     } catch (error) {
       setDialog(workspacePickerNotice(config.locale, error)); setStatus(t(config.locale, 'ready'));
+    }
+  }
+  async function forgetWorkspace(workspaceRoot: string) {
+    const normalize = (value?: string | null) => (value ?? '').trim().replace(/[\\/]+$/, '').replace(/\\/g, '/').toLowerCase();
+    const target = normalize(workspaceRoot);
+    if (!target) return;
+    const merged = new Map<string, ThreadMeta>();
+    const addThread = (thread?: ThreadMeta | null, parentThreadId?: string) => {
+      if (!thread?.threadId) return;
+      const next = parentThreadId && !thread.parentThreadId ? { ...thread, parentThreadId } : thread;
+      const current = merged.get(next.threadId);
+      if (!current) {
+        merged.set(next.threadId, next);
+        return;
+      }
+      if (!current.parentThreadId && next.parentThreadId) {
+        merged.set(next.threadId, { ...current, parentThreadId: next.parentThreadId });
+      }
+    };
+    for (const thread of threads) addThread(thread);
+    for (const child of threadChildren) addThread(child.thread);
+    try {
+      const response = await fetch('/api/threads');
+      if (response.ok) {
+        const data = await response.json() as { threads?: ThreadMeta[] };
+        for (const thread of data.threads ?? []) addThread(thread);
+      }
+    } catch {
+      // 列表接口失败时仍用本地已经加载的对话。
+    }
+    const known = threadsInWorkspace([...merged.values()], workspaceRoot);
+    await Promise.all(known.map(async (thread) => {
+      try {
+        const response = await fetch(`/api/threads/${encodeURIComponent(thread.threadId)}/children?recursive=1`);
+        if (!response.ok) return;
+        const data = await response.json() as { children?: Array<{ thread?: ThreadMeta }> };
+        for (const child of data.children ?? []) addThread(child.thread, thread.threadId);
+      } catch {
+        // 子线程接口失败时至少删除已经识别到的对话。
+      }
+    }));
+    const affected = threadsInWorkspace([...merged.values()], workspaceRoot);
+    const zh = config.locale === 'zh';
+    const accepted = await requestDecisionDialog({
+      title: zh ? '移除工作区' : 'Remove workspace',
+      message: affected.length > 0
+        ? (zh
+          ? `将删除其中 ${affected.length} 个对话和本地记录，且不可撤销。`
+          : `This deletes ${affected.length} chats and their local records. It cannot be undone.`)
+        : (zh ? '此工作区没有对话，只会从列表中移除。' : 'This workspace has no chats. It will only be removed from the list.'),
+      actionLabel: zh ? '移除' : 'Remove',
+      cancelLabel: t(config.locale, 'cancel'),
+      tone: 'danger',
+    });
+    if (!accepted) return;
+    const previousThreads = threads;
+    const previousThreadId = threadId;
+    const previousWorkspaceRoot = config.workspaceRoot;
+    const previousRemembered = rememberedWorkspaceRoots;
+    const removedIds = new Set(affected.map((thread) => thread.threadId));
+    const remaining = threads.filter((thread) => !removedIds.has(thread.threadId));
+    setThreads(remaining);
+    setRememberedWorkspaceRoots(forgetWorkspaceRoot(previousRemembered, workspaceRoot));
+    const clearingCurrent = normalize(previousWorkspaceRoot) === target;
+    if (clearingCurrent) {
+      setConfig((current) => {
+        globalConfigRef.current = { ...globalConfigRef.current, workspaceRoot: '' };
+        return { ...current, workspaceRoot: '' };
+      });
+      try {
+        await saveGlobalDefaults({ workspaceRoot: '' });
+      } catch {
+        // 后端不可达时本地仍会清空；refreshThreads 后全局 effect 不会再恢复旧根。
+      }
+    }
+    if (removedIds.has(threadId)) {
+      const nextThreadId = remaining[0]?.threadId ?? '';
+      if (eventSourceRecoveryTimerRef.current !== null) {
+        window.clearTimeout(eventSourceRecoveryTimerRef.current);
+        eventSourceRecoveryTimerRef.current = null;
+      }
+      eventSourceRef.current?.close();
+      eventSourceRef.current = null;
+      setBusy(false);
+      setStatus(t(config.locale, 'idle'));
+      resetWorkflowState();
+      const nextThread = remaining.find((thread) => thread.threadId === nextThreadId);
+      setWorkspaceView(isWorkflowProjectThread(nextThread) ? 'workflow' : 'chat');
+      if (nextThreadId) {
+        setThreadId(nextThreadId);
+        setTurns([]);
+        setItems([]);
+        setThreadUsage(null);
+        setEvents([]);
+        void loadThread(nextThreadId);
+      } else {
+        opsStartGenerationRef.current += 1;
+        setThreadId('');
+        setTurns([]);
+        setItems([]);
+        setThreadUsage(null);
+        setEvents([]);
+      }
+    }
+    try {
+      await Promise.all(affected.map(async (thread) => {
+        const response = await fetch(`/api/threads/${encodeURIComponent(thread.threadId)}`, { method: 'DELETE' });
+        if (response.status === 404) return;
+        if (!response.ok) throw new Error(zh ? '删除失败' : 'Delete failed');
+      }));
+      await refreshThreads();
+      await refreshBotStatus();
+    } catch (error) {
+      setThreads(previousThreads);
+      setRememberedWorkspaceRoots(saveRememberedWorkspaceRoots(previousRemembered));
+      if (clearingCurrent) {
+        setConfig((current) => {
+          globalConfigRef.current = { ...globalConfigRef.current, workspaceRoot: previousWorkspaceRoot };
+          return { ...current, workspaceRoot: previousWorkspaceRoot };
+        });
+      }
+      if (previousThreadId) await loadThread(previousThreadId);
+      addEvent({
+        kind: 'error',
+        title: zh ? '移除工作区失败' : 'Remove workspace failed',
+        detail: error instanceof Error ? error.message : String(error),
+        tone: 'danger',
+      });
     }
   }
   function handlePaste(event: React.ClipboardEvent<HTMLTextAreaElement>) {
@@ -1393,51 +1853,6 @@ function App() {
       setDialog({ ...options, kind: 'text', resolve });
     });
   }
-  async function handleThreadModeChange(mode: 'chat' | 'ops', taskPreset: 'ops' | null): Promise<void> {
-    const preset = mode === 'ops' ? 'ops' : null;
-    if (mode === 'ops' && !activeWorkspaceRoot.trim()) {
-      addEvent({
-        kind: 'error',
-        title: config.locale === 'zh' ? '运维模式需要工作区' : 'Ops mode needs a workspace',
-        detail: config.locale === 'zh' ? '当前是无工作区对话，请切换到项目对话或先选择工作区。' : 'This chat has no workspace. Switch to a project chat or choose a workspace first.',
-        tone: 'warning',
-      });
-      return;
-    }
-    setPendingThreadMode(mode);
-    setPendingTaskPreset(preset);
-    if (!threadId) return;
-    const requestThreadId = threadId;
-    const generation = ++modePatchGenerationRef.current;
-    setThreadModeOverride({ threadId: requestThreadId, mode, taskPreset: preset });
-    setModePatchPending(true);
-    const request = modePatchQueueRef.current.then(async () => {
-      const response = await fetch(`/api/threads/${encodeURIComponent(requestThreadId)}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode, taskPreset: preset }),
-      });
-      const data = await response.json().catch(() => ({})) as { thread?: ThreadMeta; error?: string };
-      if (!response.ok || !data.thread) throw new Error(data.error ?? 'Failed to update work mode');
-      if (generation !== modePatchGenerationRef.current || requestThreadId !== threadId) return;
-      setThreads((current) => current.map((thread) => thread.threadId === requestThreadId ? data.thread! : thread));
-      setModePatchPending(false);
-    });
-    modePatchQueueRef.current = request.catch(() => undefined);
-    try {
-      await request;
-    } catch (error) {
-      if (generation !== modePatchGenerationRef.current) return;
-      setThreadModeOverride(null);
-      setModePatchPending(false);
-      addEvent({
-        kind: 'error',
-        title: config.locale === 'zh' ? '工作模式保存失败' : 'Work mode save failed',
-        detail: error instanceof Error ? error.message : String(error),
-        tone: 'danger',
-      });
-    }
-  }
   async function startOpsTask(preset: 'ops', args: string, attachments?: { fileReferences?: string[]; imageNames?: string[] }): Promise<boolean> {
     const startGeneration = ++opsStartGenerationRef.current;
     let requestThreadId = threadIdRef.current;
@@ -1460,11 +1875,6 @@ function App() {
     };
     const criteria = args.trim() || '持续收集工作区、目标环境和日志的只读证据并给出可复核结论';
     const workspaceRoot = requestThreadId ? activeWorkspaceRoot : config.workspaceRoot.trim();
-    if (requestThreadId && !opsKnowledgeScope?.knowledgeBaseIds.length) {
-      const detail = config.locale === 'zh' ? '请先在右侧“知识依据”中选择至少一个个人知识库。' : 'Select at least one personal knowledge base in the Knowledge sources panel first.';
-      reportStartError(detail, 'warning');
-      return false;
-    }
     if (!workspaceRoot) {
       const detail = config.locale === 'zh' ? '当前对话没有工作区。请切换到项目对话或先选择工作区。' : 'The current chat has no workspace. Switch to a project chat or choose a workspace first.';
       reportStartError(detail, 'warning');
@@ -1472,6 +1882,11 @@ function App() {
     }
     if ((attachments?.imageNames?.length ?? 0) > 0) {
       const detail = config.locale === 'zh' ? '运维模式暂不支持图片附件，请切换对话模式或移除图片后重试。' : 'Ops mode does not support image attachments yet. Switch to chat mode or remove the images.';
+      reportStartError(detail, 'warning');
+      return false;
+    }
+    if (!opsKnowledgeScope?.knowledgeBaseIds.length) {
+      const detail = config.locale === 'zh' ? '请先在右侧“知识依据”中选择至少一个个人知识库。' : 'Select at least one personal knowledge base in the Knowledge sources panel first.';
       reportStartError(detail, 'warning');
       return false;
     }
@@ -1520,14 +1935,6 @@ function App() {
           ? current.map((thread) => thread.threadId === activeId ? updatedThread : thread)
           : [updatedThread, ...current]);
       }
-      if (!opsKnowledgeScope?.knowledgeBaseIds.length) {
-        const detail = config.locale === 'zh' ? '线程已切换到 Ops。请先在右侧“知识依据”中选择至少一个个人知识库，然后再次启动任务。' : 'The thread is now in Ops mode. Select at least one personal knowledge base in the right panel, then start the task again.';
-        reportStartError(detail, 'warning');
-        return false;
-      }
-      setPendingThreadMode('ops');
-      setPendingTaskPreset(preset);
-      setThreadModeOverride({ threadId: activeId, mode: 'ops', taskPreset: preset });
       const response = await fetch('/api/ops/tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Idempotency-Key': `desktop-ops-${activeId}-${Date.now()}` },
@@ -1561,10 +1968,11 @@ function App() {
       return true;
     } catch (error) {
       if (!isCurrentStart()) return false;
-      setStatus(error instanceof Error ? error.message : String(error));
+      const readableError = formatSuanliziErrorMessage(undefined, error instanceof Error ? error.message : String(error), config.locale);
+      setStatus(readableError);
       const detail = error instanceof Error ? error.message : String(error);
       addEvent({ kind: 'error', title: config.locale === 'zh' ? '运维任务启动失败' : 'Ops task failed to start', detail, tone: 'danger' });
-      setItems((current) => mergeIncomingItems(current, [{ id: `ops_error_${Date.now()}`, type: 'error', text: detail, error: { message: detail }, status: 'failed', timestamp: new Date().toISOString() }]));
+      setItems((current) => mergeIncomingItems(current, [{ id: `ops_error_${Date.now()}`, type: 'error', text: readableError, error: { message: readableError }, status: 'failed', timestamp: new Date().toISOString() }]));
       return false;
     } finally {
       if (opsActionOwnerRef.current === startGeneration) {
@@ -1573,6 +1981,170 @@ function App() {
       }
     }
   }
+  function selectExecutionMode(mode: ComposerExecutionMode): void {
+    setExecutionMode(mode);
+    if (mode !== 'goal') return;
+    setConfig((current) => ({ ...current, ...HIGH_AUTONOMY_OVERRIDES }));
+    // Goal 入口采用最高自治配置；Dynamic Workflow 的同一配置由思考档位单独控制。
+    void saveThreadModelOverrides(HIGH_AUTONOMY_OVERRIDES);
+  }
+
+  function clearExecutionMode(): void {
+    setExecutionMode('chat');
+  }
+  async function selectThinkingMode(next: ComposerThinkingMode): Promise<void> {
+    setThinkingMode(next);
+    const overrides = next === 'workflow'
+      ? HIGH_AUTONOMY_OVERRIDES
+      : { reasoningEffort: next };
+    setConfig((current) => ({ ...current, ...overrides }));
+    await saveThreadModelOverrides(overrides);
+  }
+
+  function reportExecutionEntryError(mode: 'goal' | 'workflow', reason: unknown): void {
+    const label = mode === 'goal'
+      ? (config.locale === 'zh' ? 'Goal 创建失败' : 'Failed to create Goal')
+      : (config.locale === 'zh' ? 'Dynamic Workflow 创建失败' : 'Failed to create Dynamic Workflow');
+    const detail = reason instanceof Error ? reason.message : String(reason);
+    setStatus(detail);
+    showToast(detail);
+    addEvent({ kind: 'error', title: label, detail, tone: 'danger' });
+  }
+
+  function reportThinkingModeError(reason: unknown): void {
+    const detail = reason instanceof Error ? reason.message : String(reason);
+    addEvent({
+      kind: 'error',
+      title: config.locale === 'zh' ? '思考程度保存失败' : 'Failed to save thinking level',
+      detail,
+      tone: 'warning',
+    });
+  }
+
+  async function submitExecutionMode(
+    mode: ComposerExecutionMode,
+    rawObjective: string,
+    attachments?: { fileReferences?: string[]; imageNames?: string[] },
+  ): Promise<boolean> {
+    const objective = mergeComposerFileReferences(rawObjective, attachments?.fileReferences ?? []);
+    if (!objective.trim()) return true;
+
+    if (mode === 'chat') {
+      await sendMessage(objective);
+      setComposerFileReferences([]);
+      return true;
+    }
+    if (mode === 'plan') {
+      await sendMessage(modeInstructionFor('plan', config.locale), objective);
+      setComposerFileReferences([]);
+      return true;
+    }
+    if (mode === 'ops') {
+      return startOpsTask('ops', objective, attachments);
+    }
+
+    if (mode === 'goal' && (attachments?.imageNames?.length ?? 0) > 0) {
+      const message = config.locale === 'zh'
+        ? 'Goal 当前不支持图片作为任务上下文。请移除图片后提交，或先在对话中说明图片内容。'
+        : 'Goal does not yet support images as task context. Remove the images or describe the image in chat first.';
+      setStatus(message);
+      showToast(message);
+      return false;
+    }
+
+    const targetThreadId = threadIdRef.current;
+    if (!targetThreadId) {
+      const message = config.locale === 'zh'
+        ? '请先打开一个会话，再创建 Goal。'
+        : 'Open a conversation before creating a Goal.';
+      setStatus(message);
+      showToast(message);
+      return false;
+    }
+
+    setActionBusy(true);
+    try {
+      const task = await createTask({
+        threadId: targetThreadId,
+        objective,
+        acceptanceCriteria: [],
+        entryMode: 'goal',
+      });
+      await startTask(task.id);
+      setStatus(config.locale === 'zh' ? 'Goal 已启动' : 'Goal started');
+      setInput('');
+      setComposerFileReferences([]);
+      setImages([]);
+      setTaskCenterOpen(true);
+      return true;
+    } catch (reason) {
+      reportExecutionEntryError(mode, reason);
+      return false;
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  async function submitDynamicWorkflow(
+    rawObjective: string,
+    attachments?: { fileReferences?: string[]; imageNames?: string[] },
+  ): Promise<boolean> {
+    const objective = mergeComposerFileReferences(rawObjective, attachments?.fileReferences ?? []);
+    if (!objective.trim()) return true;
+    if (attachments?.imageNames?.length) {
+      const message = config.locale === 'zh'
+        ? 'Dynamic Workflow 当前不支持图片作为任务上下文。请先在对话中说明图片内容。'
+        : 'Dynamic Workflow does not yet support images as task context. Describe the image in chat first.';
+      setStatus(message);
+      showToast(message);
+      return false;
+    }
+    const targetThreadId = threadIdRef.current;
+    if (!targetThreadId) {
+      const message = config.locale === 'zh'
+        ? '请先打开一个会话，再创建 Dynamic Workflow。'
+        : 'Open a conversation before creating a Dynamic Workflow.';
+      setStatus(message);
+      showToast(message);
+      return false;
+    }
+
+    setActionBusy(true);
+    try {
+      const task = await createTask({
+        threadId: targetThreadId,
+        objective,
+        acceptanceCriteria: [],
+        entryMode: executionMode === 'goal' ? 'goal' : 'workflow',
+      });
+      let goalRunId: string | undefined;
+      if (executionMode === 'goal') {
+        const started = await startTask(task.id);
+        goalRunId = started.run?.id;
+        if (!goalRunId) throw new Error('Goal 启动响应缺少 Goal Run');
+      }
+      // Dynamic Workflow 只生成待审阅脚本；批准和执行必须由任务中心完成。
+      await proposeWorkflowRun(task.id, {
+        objective,
+        proposedScript: createInitialWorkflowScript(objective),
+        ...(goalRunId ? { goalRunId } : {}),
+      });
+      setStatus(executionMode === 'goal'
+        ? (config.locale === 'zh' ? 'Goal × Dynamic Workflow 等待审阅' : 'Goal × Dynamic Workflow awaits review')
+        : (config.locale === 'zh' ? 'Dynamic Workflow 等待审阅' : 'Dynamic Workflow awaits review'));
+      setInput('');
+      setComposerFileReferences([]);
+      setImages([]);
+      setTaskCenterOpen(true);
+      return true;
+    } catch (reason) {
+      reportExecutionEntryError('workflow', reason);
+      return false;
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
   async function runSlashCommand(command: SlashCommand, attachments?: { fileReferences?: string[]; imageNames?: string[] }) {
     switch (command.kind) {
       case 'skills.list':
@@ -1614,13 +2186,39 @@ function App() {
         if (threadId && !busy && !actionBusy) await threadAction('compact');
         return;
       case 'ops':
+        selectExecutionMode('ops');
         if (!command.args.trim()) {
-          setInput(`/ops ${command.preset} `);
+          setInput('');
           window.requestAnimationFrame(() => composerInputRef.current?.focus());
           return true;
         }
-        return startOpsTask(command.preset, command.args, attachments);
+        return submitExecutionMode('ops', command.args, attachments);
+      case 'goal':
+        selectExecutionMode('goal');
+        if (!command.args.trim()) {
+          setInput('');
+          window.requestAnimationFrame(() => composerInputRef.current?.focus());
+          return true;
+        }
+        return submitExecutionMode('goal', command.args, attachments);
+      case 'workflow':
+        void selectThinkingMode('workflow').catch(reportThinkingModeError);
+        if (!command.args.trim()) {
+          setInput('');
+          window.requestAnimationFrame(() => composerInputRef.current?.focus());
+          return true;
+        }
+        return submitDynamicWorkflow(command.args, attachments);
       case 'task.mode':
+        if (command.mode === 'plan') {
+          selectExecutionMode('plan');
+          if (!command.args.trim()) {
+            setInput('');
+            window.requestAnimationFrame(() => composerInputRef.current?.focus());
+            return true;
+          }
+          return submitExecutionMode('plan', command.args, attachments);
+        }
         if (!command.args.trim()) {
           setInput(`/${command.mode} `);
           window.requestAnimationFrame(() => composerInputRef.current?.focus());
@@ -1655,6 +2253,11 @@ function App() {
         detail: selected?.name ?? option.title,
         tone: 'success',
       });
+      return;
+    }
+    if (option.id === 'plan' || option.id === 'goal' || option.id === 'workflow' || option.id === 'ops') {
+      setInput('');
+      void runSlashCommand(parseSlashCommand(option.command));
       return;
     }
     if (option.command.endsWith(' ')) {
@@ -1699,9 +2302,16 @@ function App() {
         return (await runSlashCommand(command, { fileReferences: composerFileReferences, imageNames: images.map((image) => image.name) })) !== false;
       }
     }
-    await sendMessage(mergeComposerFileReferences(input, composerFileReferences));
-    setComposerFileReferences([]);
-    return true;
+    if (thinkingMode === 'workflow') {
+      return submitDynamicWorkflow(input, {
+        fileReferences: composerFileReferences,
+        imageNames: images.map((image) => image.name),
+      });
+    }
+    return submitExecutionMode(executionMode, input, {
+      fileReferences: composerFileReferences,
+      imageNames: images.map((image) => image.name),
+    });
   }
   function setWebSearchMode(mode: WebSearchMode) {
     setConfig((current) => ({ ...current, webSearchMode: mode }));
@@ -1743,12 +2353,13 @@ function App() {
       ));
       setStatus(t(config.locale, 'idle'));
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
+      const readableError = formatSuanliziErrorMessage(undefined, error instanceof Error ? error.message : String(error), config.locale);
+      setStatus(readableError);
       setItems((current) => completeLocalSkillDraftItem(
         current,
         localDraft.statusItemId,
         'failed',
-        error instanceof Error ? error.message : String(error),
+        readableError,
       ));
       addEvent({
         kind: 'error',
@@ -1817,7 +2428,7 @@ function App() {
       });
       setStatus(t(config.locale, 'idle'));
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
+      setStatus(formatSuanliziErrorMessage(undefined, error instanceof Error ? error.message : String(error), config.locale));
       if (activeThreadId) {
         await loadThread(activeThreadId);
       }
@@ -1864,6 +2475,13 @@ function App() {
       tone: 'success',
     });
   }
+  function stopTurnWatch(epoch: number): void {
+    const watch = turnWatchRef.current;
+    if (!watch || watch.epoch !== epoch) return;
+    if (watch.timer !== null) window.clearInterval(watch.timer);
+    turnWatchRef.current = null;
+  }
+
   async function sendMessage(
     modeInstruction?: string,
     forcedText?: string,
@@ -1873,10 +2491,11 @@ function App() {
     const outgoingImages = options.imagesOverride ?? images;
     const hasImages = outgoingImages.length > 0;
     if (!text && !hasImages) return;
-    const requestConfig = options.configOverride ?? threadApiConfig;
     const sendReq = sendMessageGuardRef.current.begin();
     const isSendCurrent = () => sendMessageGuardRef.current.isCurrent(sendReq.generation);
     let activeThreadId = threadId;
+    const requestConfig = options.configOverride
+      ?? (activeThreadId ? threadApiConfig : runtimeConfigPayload(globalConfigRef.current));
     if (!activeThreadId) {
       const response = await fetch('/api/threads', {
         method: 'POST',
@@ -1903,6 +2522,26 @@ function App() {
     }
     setBusy(true);
     activeTurnThreadIdRef.current = activeThreadId;
+    activeTurnIdRef.current = '';
+    setPreparingTurn({ threadId: activeThreadId });
+    const turnWatchEpoch = turnWatchEpochRef.current + 1;
+    turnWatchEpochRef.current = turnWatchEpoch;
+    const turnWatch = {
+      epoch: turnWatchEpoch,
+      timer: null as number | null,
+      threadId: activeThreadId,
+      knownTurnIds: new Set(turns.map((turn) => turn.turnId)),
+    };
+    const isTurnWatchCurrent = () => threadIdRef.current === activeThreadId
+      && turnWatchEpochRef.current === turnWatchEpoch;
+    turnWatch.timer = window.setInterval(() => {
+      void reloadThreadSnapshot(activeThreadId, {
+        isCurrent: isTurnWatchCurrent,
+        reconcileBusy: true,
+        requestEpoch: turnWatchEpoch,
+      }).catch(() => {});
+    }, 2500);
+    turnWatchRef.current = turnWatch;
     setInput('');
     const sentImages = [...outgoingImages];
     if (options.clearComposerImages ?? !options.imagesOverride) setImages([]);
@@ -1920,6 +2559,14 @@ function App() {
       return;
     }
     setItems((current) => mergeIncomingItems(current, [pendingUserItem]));
+    let failureItems: ThreadItem[] = [];
+    const requestedModelConfig = {
+      provider: requestConfig.provider ?? config.provider,
+      model: requestConfig.model ?? config.model,
+      baseUrl: requestConfig.baseUrl ?? config.baseUrl,
+      modelContextTokens: requestConfig.modelContextTokens,
+      modelMaxOutputTokens: requestConfig.modelMaxOutputTokens,
+    };
     try {
       const body: Record<string, unknown> = { input: text || 'See attached image(s).', config: requestConfig };
       if (modeInstruction) body.modeInstruction = modeInstruction;
@@ -1934,12 +2581,14 @@ function App() {
       });
       if (!isSendCurrent()) return;
       if (!response.ok) {
-        const error = (await response.json()) as { error?: string };
-        throw new Error(error.error ?? 'Turn failed');
+        const payload = await response.json().catch(() => null) as { error?: unknown; items?: unknown } | null;
+        if (Array.isArray(payload?.items)) failureItems = payload.items as ThreadItem[];
+        throw new Error(parseApiErrorMessage(payload, 'Turn failed', config.locale));
       }
       const data = (await response.json()) as { items: ThreadItem[] };
       if (!isSendCurrent()) return;
       setItems((current) => mergeIncomingItems(current, data.items ?? []));
+      if ((data.items ?? []).some((item) => item.type !== 'user_message')) clearPreparingTurn(activeThreadId);
       setRunningTurnIds(new Set());
       await refreshThreads();
       if (!isSendCurrent()) return;
@@ -1947,9 +2596,25 @@ function App() {
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return;
       if (!isSendCurrent()) return;
-      setStatus(error instanceof Error ? error.message : String(error));
+      clearPreparingTurn(activeThreadId);
+      // Keep the long gateway diagnostic in the persisted error item; the
+      // top bar is a compact lifecycle status and must never become the title.
+      setStatus(config.locale === 'zh' ? '回复失败' : 'Turn failed');
       if (activeThreadId) {
-        await loadThread(activeThreadId);
+        if (failureItems.length > 0) {
+          setItems((current) => mergeIncomingItems(current, failureItems));
+        } else {
+          // `loadThread` rehydrates the terminal error item written by the
+          // runtime. Do not append an unscoped synthetic item here: it would
+          // render as a second assistant group beside the persisted error.
+          await loadThread(activeThreadId);
+          // A failed-turn snapshot can lag behind the just-applied model
+          // selection. Preserve the request model instead of reverting it.
+          if (isSendCurrent()) {
+            setConfig((current) => ({ ...current, ...requestedModelConfig }));
+            globalConfigRef.current = { ...globalConfigRef.current, ...requestedModelConfig };
+          }
+        }
       }
       addEvent({
         kind: 'error',
@@ -1959,13 +2624,20 @@ function App() {
       });
     } finally {
       if (isSendCurrent()) {
+        stopTurnWatch(turnWatchEpoch);
         setBusy(false);
+        activeTurnIdRef.current = '';
         activeTurnThreadIdRef.current = '';
       }
     }
   }
   async function stopTurn() {
     const targetThreadId = activeTurnThreadIdRef.current || threadId; if (!targetThreadId) return;
+    const activeWatch = turnWatchRef.current;
+    if (activeWatch) stopTurnWatch(activeWatch.epoch);
+    turnWatchEpochRef.current += 1;
+    setBusy(false);
+    clearPreparingTurn(targetThreadId);
     setStatus(config.locale === 'zh' ? '停止中' : 'Stopping');
     showToast(config.locale === 'zh' ? '已请求停止当前回复' : 'Stop requested');
     try {
@@ -2188,8 +2860,15 @@ function App() {
   // — Chinese: clicking "preview" on a tool item switches the right panel to Files tab and drives preview
   function previewFileFromItem(path: string) {
     if (!path) return;
-    setRightPaneSizingMode('files');
+    if (!revealRightPaneForThread('files')) return;
     setPreviewRequest({ path, threadId: threadId || undefined, pin: true, openedBy: 'user', nonce: Date.now() });
+  }
+  // 中文注释：点击命令块"终端"按钮 → 打开右侧命令终端面板实时观看该命令输出
+  // — Chinese: clicking "Terminal" on a command block opens the right command-terminal pane
+  function previewCommandInWorkbench(itemId: string) {
+    if (!itemId || !hasActiveThread) return;
+    revealRightPaneForThread('standard');
+    openCommandTerminalRef.current?.(itemId);
   }
   function addWorkspaceFileToComposer(path: string) {
     const normalized = path.trim();
@@ -2221,6 +2900,10 @@ function App() {
     const nextState = optimisticDeleteThread(threads, id, threadId);
     setThreads(nextState.threads);
     if (id === threadId) {
+      if (eventSourceRecoveryTimerRef.current !== null) {
+        window.clearTimeout(eventSourceRecoveryTimerRef.current);
+        eventSourceRecoveryTimerRef.current = null;
+      }
       eventSourceRef.current?.close();
       eventSourceRef.current = null;
       setBusy(false);
@@ -2298,32 +2981,89 @@ function App() {
     if (name === null) return null;
     return name.trim() || defaultName;
   }
-  async function saveModelPreset(name: string, presetConfig: ModelPresetConfig, presetId?: string, status: 'draft' | 'published' = 'published'): Promise<void> {
+  async function saveModelPreset(name: string, presetConfig: ModelPresetConfig, presetId?: string): Promise<ModelPreset> {
     const response = await fetch('/api/model-presets', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...(presetId ? { id: presetId } : {}), name, status, config: presetConfig }),
+      body: JSON.stringify({ ...(presetId ? { id: presetId } : {}), name, config: presetConfig }),
     });
     if (!response.ok) throw new Error('Model preset save failed');
-    const data = (await response.json()) as { presets?: ModelPreset[] };
+    const data = (await response.json()) as { preset?: ModelPreset; presets?: ModelPreset[] };
+    if (!data.preset?.id) throw new Error('Model preset save response missing preset id');
     setModelPresets(data.presets ?? []);
+    return data.preset;
+  }
+  async function recoverDeletedModel(providerId: string, model: string | null, remaining: ModelPreset[]): Promise<void> {
+    const matches = (value: RunConfig) => value.provider === providerId && (model === null || value.model === model);
+    const currentAffected = matches(config);
+    const globalAffected = matches(globalConfigRef.current);
+    if (!currentAffected && !globalAffected) return;
+    const fallback = remaining[0]?.config ?? defaultConfig;
+    const patch: ThreadConfigOverrides = {
+      provider: fallback.provider,
+      model: fallback.model,
+      baseUrl: fallback.baseUrl,
+      modelContextTokens: fallback.modelContextTokens,
+      modelMaxOutputTokens: fallback.modelMaxOutputTokens,
+    };
+    if (globalAffected) {
+      await saveGlobalDefaults(patch);
+      const nextGlobal = { ...globalConfigRef.current, ...patch };
+      globalConfigRef.current = nextGlobal;
+      localStorage.setItem(RUN_CONFIG_STORAGE_KEY, JSON.stringify(nextGlobal));
+    }
+    if (currentAffected) {
+      setConfig((current) => ({ ...current, ...patch }));
+      await saveThreadModelOverrides(patch);
+    }
   }
   async function deleteModelPreset(presetId: string): Promise<void> {
     const response = await fetch(`/api/model-presets/${encodeURIComponent(presetId)}`, {
       method: 'DELETE',
     });
     if (!response.ok) throw new Error('Model preset delete failed');
-    const data = (await response.json()) as { presets?: ModelPreset[] };
+    const data = (await response.json()) as { presets?: ModelPreset[]; providers?: ProviderEntry[] };
     setModelPresets(data.presets ?? []);
+    if (data.providers) setProviders(data.providers);
+    const removed = modelPresets.find((preset) => preset.id === presetId);
+    if (removed) await recoverDeletedModel(removed.config.provider, removed.config.model, data.presets ?? []);
+  }
+  async function deleteCustomProvider(providerId: string): Promise<void> {
+    const response = await fetch(`/api/providers/` + encodeURIComponent(providerId), { method: 'DELETE' });
+    if (!response.ok) throw new Error('Provider delete failed');
+    const data = (await response.json()) as { providers?: ProviderEntry[]; presets?: ModelPreset[] };
+    setProviders(data.providers ?? []);
+    setModelPresets(data.presets ?? []);
+    await recoverDeletedModel(providerId, null, data.presets ?? []);
   }
   function applyModelPreset(preset: ModelPreset) {
+    const selection = ++modelSelectionRef.current;
+    const targetThreadId = threadIdRef.current;
     const patch: ThreadConfigOverrides = {
       provider: preset.config.provider,
       model: preset.config.model,
       baseUrl: preset.config.baseUrl,
+      modelContextTokens: preset.config.modelContextTokens,
+      modelMaxOutputTokens: preset.config.modelMaxOutputTokens,
     };
+    currentModelConfigRef.current = { ...currentModelConfigRef.current, ...patch };
     setConfig((current) => ({ ...current, ...patch }));
-    void saveThreadModelOverrides(patch);
+    if (patch.modelContextTokens !== undefined) {
+      void saveThreadModelOverrides(patch);
+      return;
+    }
+    // 无显式长度的旧预设：先尝试服务端，再从独立参考列表复制一次。
+    void contextTokensForSelectedModel(preset.config).then((contextTokens) => {
+      const latest = currentModelConfigRef.current;
+      if (selection !== modelSelectionRef.current || threadIdRef.current !== targetThreadId
+        || latest.provider !== patch.provider || latest.model !== patch.model || latest.baseUrl !== patch.baseUrl
+        || latest.modelContextTokens !== undefined) return;
+      const assigned = { ...patch, modelContextTokens: contextTokens };
+      currentModelConfigRef.current = { ...latest, ...assigned };
+      setConfig((current) => current.provider === patch.provider && current.model === patch.model && current.baseUrl === patch.baseUrl
+        ? { ...current, ...assigned } : current);
+      void saveThreadModelOverrides(assigned);
+    });
   }
   async function saveProviderKey(providerId: string, apiKey: string) {
     const response = await fetch(`/api/keys/${providerId}`, {
@@ -2372,8 +3112,18 @@ function App() {
     }
   }
   function saveGlobalModelConfig(nextConfig: RunConfig): void {
-    localStorage.setItem(RUN_CONFIG_STORAGE_KEY, JSON.stringify(nextConfig));
-    setConfig(nextConfig);
+    const currentGlobal = globalConfigRef.current;
+    const nextGlobal: RunConfig = {
+      ...currentGlobal,
+      provider: nextConfig.provider,
+      model: nextConfig.model,
+      baseUrl: nextConfig.baseUrl,
+      modelContextTokens: nextConfig.modelContextTokens,
+      modelMaxOutputTokens: nextConfig.modelMaxOutputTokens,
+    };
+    globalConfigRef.current = nextGlobal;
+    localStorage.setItem(RUN_CONFIG_STORAGE_KEY, JSON.stringify(nextGlobal));
+    setConfig(nextGlobal);
   }
   const shortcutThemeMode = resolveThemeShortcutMode(config.themeMode);
   const themeShortcutLabel = shortcutThemeMode === 'dark'
@@ -2412,7 +3162,7 @@ function App() {
           onCreatePlainChat={() => void createPlainConversation()}
           onCreateInWorkspace={(workspaceRoot) => void createConversation(workspaceRoot, 'project')} onDeleteThread={(id) => void deleteConversation(id)}
           onCreateWorkflowProject={createWorkflowProjectDraft}
-          onForgetWorkspace={(workspaceRoot) => setRememberedWorkspaceRoots((current) => forgetWorkspaceRoot(current, workspaceRoot))}
+          onForgetWorkspace={(workspaceRoot) => { void forgetWorkspace(workspaceRoot); }}
           onOpenSettings={() => { setSettingsOpen(true); setSidebarOpen(false); }}
           onPickWorkspace={() => void createConversationWithWorkspacePicker()}
           onRenameThread={renameConversation}
@@ -2435,18 +3185,24 @@ function App() {
             <strong>{activeThread?.title || workflowTitle || t(config.locale, 'noConversation')}</strong>
             {hasActiveThread ? <span>{status}</span> : null}
           </div>
-          {hasActiveThread && (tokenUsage || hasContextPressure(displayCompactionPressure)) ? (
+          {hasActiveThread ? (
             <div className="usage-strip" title={buildTokenTooltip(tokenUsage, displayCompactionPressure, config.locale)}>
-              <span className="usage-item cache">
-                <b>{config.locale === 'zh' ? '缓存' : 'Cache'} {tokenUsage?.hitRate ?? 0}%</b>
-                <i><span style={{ width: `${tokenUsage?.hitRate ?? 0}%` }} /></i>
+              <span className={["usage-item", "cache", tokenUsage?.cacheReported !== true ? "unknown" : ""].filter(Boolean).join(' ')}>
+                <b>{tokenUsage?.cacheReported === true
+                  ? `${config.locale === 'zh' ? '缓存命中' : 'Cache hit'} ${tokenUsage.hitRate ?? 0}%`
+                  : (config.locale === 'zh' ? '缓存未上报' : 'Cache unavailable')}</b>
+                {tokenUsage?.cacheReported === true ? <i><span style={{ width: `${tokenUsage.hitRate ?? 0}%` }} /></i> : null}
               </span>
               {hasContextPressure(displayCompactionPressure) ? (
                 <span className="usage-item context">
                   <b>{config.locale === 'zh' ? '上下文' : 'Context'} {contextUsagePercent(displayCompactionPressure)}%</b>
                   <i><span style={{ width: `${contextUsagePercent(displayCompactionPressure)}%` }} /></i>
                 </span>
-              ) : null}
+              ) : (
+                <span className="usage-item context unknown" title={config.locale === 'zh' ? '请在模型配置中填写上下文 Token 数' : 'Set context tokens in model settings'}>
+                  <b>{config.locale === 'zh' ? '上下文未配置' : 'Context unset'}</b>
+                </span>
+              )}
             </div>
           ) : null}
           <div className="actions">
@@ -2462,15 +3218,16 @@ function App() {
             </button>
             <button className="iconButton" onClick={() => void threadAction('compact')} disabled={!threadId || busy || actionBusy} title={t(config.locale, 'compact')} aria-label={t(config.locale, 'compact')}><Icon name="refresh" /></button>
             {config.monitorPanelVisible !== false ? <button className={monitorButtonActive ? 'iconButton panelButton active' : 'iconButton panelButton'} onClick={openUnifiedMonitor} title={config.locale === 'zh' ? '任务监控' : 'Task monitor'} aria-label={config.locale === 'zh' ? '任务监控' : 'Task monitor'}><Icon name="activity" /></button> : null}
+            <button className={taskCenterOpen ? 'iconButton panelButton active' : 'iconButton panelButton'} onClick={() => setTaskCenterOpen(true)} title={config.locale === 'zh' ? '运行观察' : 'Run observer'} aria-label={config.locale === 'zh' ? '运行观察' : 'Run observer'}><Icon name="workflow" /></button>
             <button className="iconButton helpButton" onClick={() => setSettingsHelpOpen(true)} title={config.locale === 'zh' ? '设置说明' : 'Settings guide'} aria-label={config.locale === 'zh' ? '设置说明' : 'Settings guide'}><Icon name="question" /></button>
-            <button className={showRightPane ? 'iconButton panelButton rightPaneToggleButton active' : 'iconButton panelButton rightPaneToggleButton'} onClick={() => { if (hasActiveThread) setRightPaneVisible((value) => !value); }} disabled={!hasActiveThread} title={config.locale === 'zh' ? '显示/隐藏右侧栏' : 'Show/hide right panel'} aria-label={config.locale === 'zh' ? '显示/隐藏右侧栏' : 'Show/hide right panel'}><Icon name="panel" /></button>
+            <button className={showRightPane ? 'iconButton panelButton rightPaneToggleButton active' : 'iconButton panelButton rightPaneToggleButton'} onClick={toggleRightPane} disabled={!hasActiveThread} title={config.locale === 'zh' ? '显示/隐藏右侧栏' : 'Show/hide right panel'} aria-label={config.locale === 'zh' ? '显示/隐藏右侧栏' : 'Show/hide right panel'}><Icon name="panel" /></button>
           </div>
         </header>
         <div className="contentGrid">
           <section className="transcript" ref={transcriptRef} onScroll={handleTranscriptScroll}>
             {!hasActiveThread ? (
               <ConversationIdleAnimation theme={shortcutThemeMode === 'light' ? 'light' : 'dark'} />
-            ) : items.length === 0 ? (
+            ) : items.length === 0 && preparingTurn?.threadId !== threadId ? (
               <>
                 <div className="empty">{workspaceView === 'workflow'
                   ? (config.locale === 'zh' ? '从下方输入工作流目标，或描述节点修改要求。' : 'Describe a workflow goal or node change below.')
@@ -2500,6 +3257,9 @@ function App() {
                       locale={config.locale}
                       canRegenerate={Boolean(group.turnId && group.turnId === latestRollbackTurnId && !busy && !actionBusy)}
                       childActivityByThread={childActivityByThread}
+                      directory={subagentDirectory}
+                      onOpenAgent={openAgentDetail}
+                      onPreviewCommand={previewCommandInWorkbench}
                       onBranch={branchFromTurn}
                       onCopy={copyMessage}
                       onRegenerate={regenerateFromTurn}
@@ -2517,8 +3277,10 @@ function App() {
                     onAction={handleOpsTaskAction}
                   />
                 ) : null}
+                {preparingTurn?.threadId === threadId ? <TurnPreparingIndicator locale={config.locale} /> : null}
               </>
             )}
+            <div ref={transcriptEndRef} className="transcriptEndSentinel" aria-hidden="true" />
           </section>
           {showRightPane ? (
             <>
@@ -2554,6 +3316,7 @@ function App() {
                 </section>
               ) : (
                 <RightPane
+                  key={`${hasActiveThread ? threadId : 'no-thread'}:${activeWorkspaceRoot}`}
                   activeThread={hasActiveThread ? activeThread : null}
                   activeThreadId={hasActiveThread ? threadId : ''}
                   activeThreadTitle={hasActiveThread ? activeThread?.title ?? '' : ''}
@@ -2563,7 +3326,7 @@ function App() {
                   locale={config.locale}
                   runtimeItems={hasActiveThread ? items : []}
                   workspaceRoot={activeWorkspaceRoot}
-                  browserRequestVersion={browserRequestVersion}
+                  browserRequestVersion={browserRequest?.threadId === threadId ? browserRequest.version : 0}
                   suspendBrowser={suspendNativeBrowser}
                   onTabChange={(tab) => setRightPaneSizingMode(rightPaneSizingModeForTab(tab))}
                   onJumpToMonitor={jumpToMonitor}
@@ -2585,8 +3348,10 @@ function App() {
                   onResume={handleControlResume}
                   onRollback={handleControlRollback}
                   responsiveMode={responsiveMode === 'side' ? undefined : responsiveMode}
+                  agentDetailRequest={agentDetailRequest}
+                  onOpenCommandTerminal={(handler) => { openCommandTerminalRef.current = handler; }}
                   onCloseRequest={handleCloseWorkbench}
-                  showOps={hasActiveThread && (currentThreadMode === 'ops' || Boolean(currentOpsTaskDetail))}
+                  showOps={hasActiveThread && opsSessionActive}
                   opsTask={hasActiveThread ? currentOpsTaskDetail?.task ?? null : null}
                   opsTaskEvents={hasActiveThread ? currentOpsTaskDetail?.events ?? [] : []}
                   opsTaskBusy={opsTaskAnchorBusy}
@@ -2607,9 +3372,9 @@ function App() {
           </button>
         ) : null}
         {pendingDecision && pendingDecision.threadId === threadId ? (
-          <AgentDecisionCard request={pendingDecision} locale={config.locale} busy={actionBusy || modePatchPending} onSubmit={submitAgentDecision} />
+          <AgentDecisionCard request={pendingDecision} locale={config.locale} busy={actionBusy} onSubmit={submitAgentDecision} />
         ) : null}
-        <ComposerBar activeSlashOption={activeSlashOption} activeThreadId={threadId} actionBusy={actionBusy || modePatchPending} addFileReference={(path) => setComposerFileReferences((current) => current.includes(path) ? current : [...current, path])} applyModelPreset={applyModelPreset} botConfig={botConfig} botStatus={botStatus} busy={busy} composerInputRef={composerInputRef} config={config} currentThreadMode={currentThreadMode} currentTaskPreset={currentTaskPreset} draggingImage={draggingImage} filteredSlashOptions={filteredSlashOptions} handleDrop={handleDrop} handleFileSelect={handleFileSelect} handlePaste={handlePaste} images={images} input={input} fileReferences={composerFileReferences} modelPresets={modelPresets} onStartOps={startOpsTask} onThreadModeChange={handleThreadModeChange} openRemoteAssistants={openRemoteAssistants} opsModeAvailable={opsModeAvailable} opsModeUnavailableHint={config.locale === 'zh' ? '当前对话没有工作区，请切换到项目对话或先选择工作区。' : 'Choose a workspace or switch to a project chat to use Ops mode.'} persistThreadConfigOverrides={saveThreadModelOverrides} removeImage={removeImage} removeFileReference={(path) => setComposerFileReferences((current) => current.filter((item) => item !== path))} rightPaneVisible={showRightPane} selectSlashOption={selectSlashOption} setActiveSlashOption={setActiveSlashOption} setConfig={setConfig} setDraggingImage={setDraggingImage} setInput={setInput} slashVisible={slashVisible} stopTurn={stopTurn} submitComposer={submitComposer} workflowMode={workspaceView === 'workflow'} workflowPlanning={workflowPlanning} workspaceRoot={activeWorkspaceRoot} />
+        <ComposerBar activeSlashOption={activeSlashOption} activeThreadId={threadId} actionBusy={actionBusy} addFileReference={(path) => setComposerFileReferences((current) => current.includes(path) ? current : [...current, path])} applyModelPreset={applyModelPreset} botConfig={botConfig} botStatus={botStatus} busy={busy} composerInputRef={composerInputRef} config={config} executionMode={executionMode} thinkingMode={thinkingMode} onThinkingModeChange={(mode) => { void selectThinkingMode(mode).catch(reportThinkingModeError); }} onClearExecutionMode={clearExecutionMode} draggingImage={draggingImage} filteredSlashOptions={filteredSlashOptions} handleDrop={handleDrop} handleFileSelect={handleFileSelect} handlePaste={handlePaste} images={images} input={input} fileReferences={composerFileReferences} modelPresets={modelPresets} providers={providers} openRemoteAssistants={openRemoteAssistants} persistThreadConfigOverrides={saveThreadModelOverrides} removeImage={removeImage} removeFileReference={(path) => setComposerFileReferences((current) => current.filter((item) => item !== path))} rightPaneVisible={showRightPane} selectSlashOption={selectSlashOption} setActiveSlashOption={setActiveSlashOption} setConfig={setConfig} setDraggingImage={setDraggingImage} setInput={setInput} slashVisible={slashVisible} stopTurn={stopTurn} submitComposer={submitComposer} workflowMode={workspaceView === 'workflow'} workflowPlanning={workflowPlanning} workspaceRoot={activeWorkspaceRoot} />
       </section>
       {settingsOpen ? (
         <SettingsDrawer
@@ -2619,7 +3384,7 @@ function App() {
           refreshProviders={refreshProviders} refreshKeyStates={refreshKeyStates}
           clearProviderKey={clearProviderKey}
           deleteSkill={deleteSkill}
-          requestModelPresetName={requestModelPresetName} saveModelPreset={saveModelPreset} deleteModelPreset={deleteModelPreset} saveProviderKey={saveProviderKey} saveProviderEnvVar={saveProviderEnvVar} saveBotConfig={saveBotConfig} saveSkillDraft={saveSkillDraft} logoutWeixin={logoutWeixin}
+          requestModelPresetName={requestModelPresetName} saveModelPreset={saveModelPreset} deleteModelPreset={deleteModelPreset} deleteCustomProvider={deleteCustomProvider} saveProviderKey={saveProviderKey} saveProviderEnvVar={saveProviderEnvVar} saveBotConfig={saveBotConfig} saveSkillDraft={saveSkillDraft} logoutWeixin={logoutWeixin}
           webProviderState={webProviderState} saveWebProviderKey={saveWebProviderKey} clearWebProviderKey={clearWebProviderKey}
           setConfig={setConfig} setMcps={setMcps} setOpen={setSettingsOpen}
           pendingMcpDraft={pendingMcpDraft}
@@ -2644,6 +3409,7 @@ function App() {
         selectedEventId={runMonitor.selectedEventId}
         traceFocusVersion={runMonitor.traceFocusVersion}
         selectedTrace={runMonitor.selectedTrace}
+        systemMonitorStatus={runMonitor.systemMonitorStatus}
         categoryFilter={runMonitor.categoryFilter}
         errorsOnly={runMonitor.errorsOnly}
         tracePage={runMonitor.tracePage}
@@ -2651,6 +3417,7 @@ function App() {
         autoRefresh={runMonitor.autoRefresh}
         autoRefreshInterval={runMonitor.autoRefreshInterval}
         loading={runMonitor.loading}
+        loadError={runMonitor.loadError}
         allCategories={runMonitor.allCategories}
         zh={runMonitor.zh}
         onClose={() => runMonitor.setOpen(false)}
@@ -2669,6 +3436,15 @@ function App() {
         onAutoRefreshChange={runMonitor.setAutoRefresh}
         onAutoRefreshIntervalChange={runMonitor.setAutoRefreshInterval}
         onLoadOlder={() => void runMonitor.loadOlder()}
+      />
+      <TaskCenterDrawer
+        open={taskCenterOpen}
+        locale={config.locale}
+        onClose={() => setTaskCenterOpen(false)}
+        onOpenThread={(jumpThreadId) => {
+          setTaskCenterOpen(false);
+          if (jumpThreadId !== threadId) void loadThread(jumpThreadId);
+        }}
       />
       {dialog ? <AppDialog dialog={dialog} onClose={() => setDialog(null)} /> : null}
       {toast ? <div className="toastNotice" key={toast.id} role="alert"><Icon name="alert" /><span>{toast.text}</span></div> : null}
@@ -2691,10 +3467,9 @@ function mergeComposerFileReferences(text: string, references: string[]): string
 }
 
 function readStoredRightPaneSizingMode(): 'standard' | 'files' | 'browser' | 'terminal' {
-  const activeTab = readStoredWorkbenchState().activeTab;
-  if (activeTab === 'files') return 'files';
-  if (activeTab === 'browser') return 'browser';
-  if (activeTab.startsWith('terminal:')) return 'terminal';
+  // The active thread is not known during the first render. Restoring a
+  // global utility tab here would briefly show another thread's width; the
+  // scoped RightPane state applies the correct mode once a thread is loaded.
   return 'standard';
 }
 

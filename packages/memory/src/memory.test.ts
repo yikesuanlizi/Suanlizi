@@ -3,9 +3,9 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import type { ThreadId, ThreadItem, ThreadMeta, TurnMeta } from '@nexus/protocol';
+import type { ThreadId, ThreadItem, ThreadMeta, TurnMeta } from '@suanlizi/protocol';
 import { compactThread, getCompactionPressure, rollbackTurns, shouldCompact } from './memory.js';
-import type { ThreadStore } from '@nexus/storage';
+import type { ThreadStore } from '@suanlizi/storage';
 
 class MemoryStore implements ThreadStore {
   thread: ThreadMeta;
@@ -372,7 +372,7 @@ describe('compactThread', () => {
     }
   });
 
-  it('maps Codex-style three-section summaries onto Nexus structured fields', async () => {
+  it('maps Codex-style three-section summaries onto Suanlizi structured fields', async () => {
     const store = new MemoryStore('thread-codex-labels');
 
     const result = await compactThread('thread-codex-labels', store, new CodexStyleSummaryModel() as never, {
@@ -563,7 +563,7 @@ describe('rollbackTurns checkpoints', () => {
   });
 
   it('restores disk files from project checkpoints when hashes match', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'nexus-rollback-'));
+    const root = mkdtempSync(join(tmpdir(), 'suanlizi-rollback-'));
     const file = join(root, 'src.txt');
     writeFileSync(file, 'after', 'utf-8');
     const store = new MemoryStore('thread-project-rollback');
@@ -594,7 +594,7 @@ describe('rollbackTurns checkpoints', () => {
   });
 
   it('records rollback conflicts instead of overwriting externally changed files', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'nexus-rollback-conflict-'));
+    const root = mkdtempSync(join(tmpdir(), 'suanlizi-rollback-conflict-'));
     const file = join(root, 'src.txt');
     writeFileSync(file, 'external edit', 'utf-8');
     const store = new MemoryStore('thread-project-conflict');
@@ -630,7 +630,7 @@ describe('rollbackTurns checkpoints', () => {
 
   it('restores the source file and removes the target after rolling back a rename checkpoint', async () => {
     // 中文注释：rename 检查点含两个文件条目：源 delete（beforeContent 为源原内容）+ 目标 add
-    const root = mkdtempSync(join(tmpdir(), 'nexus-rollback-rename-'));
+    const root = mkdtempSync(join(tmpdir(), 'suanlizi-rollback-rename-'));
     const sourceFile = join(root, 'a.txt');
     const targetFile = join(root, 'b.txt');
     // 模拟 apply_patch move a.txt -> b.txt 之后的磁盘状态：源已删、目标含搬移后的内容
@@ -678,7 +678,7 @@ describe('rollbackTurns checkpoints', () => {
   it('records a conflict for a renamed target modified after the checkpoint and keeps the edit', async () => {
     // 中文注释：rename 后用户手动改了目标文件，rollback 时目标哈希不匹配 → 记录冲突并保留目标修改；
     // 源文件无冲突仍按 beforeContent 恢复
-    const root = mkdtempSync(join(tmpdir(), 'nexus-rollback-rename-conflict-'));
+    const root = mkdtempSync(join(tmpdir(), 'suanlizi-rollback-rename-conflict-'));
     const sourceFile = join(root, 'a.txt');
     const targetFile = join(root, 'b.txt');
     // 目标被外部修改，与检查点 afterHash 不一致

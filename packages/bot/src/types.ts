@@ -1,4 +1,4 @@
-import type { ThreadId } from '@nexus/protocol';
+import type { ThreadId } from '@suanlizi/protocol';
 
 export type BotPlatform = 'weixin' | 'feishu' | 'dingtalk' | 'wechat-work' | 'qq';
 export type BotChatType = 'dm' | 'group';

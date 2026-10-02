@@ -4,21 +4,36 @@ import { accessPolicyConfigSchema } from './accessPolicySchemas.js';
 
 export type PermissionPresetId = 'read_only' | 'workspace' | 'danger_full_access';
 export type WebSearchMode = 'auto' | 'on' | 'off';
-export type ReasoningEffort = 'low' | 'medium' | 'high';
+export type ReasoningEffort = 'no' | 'medium' | 'high' | 'xhigh' | 'max';
 export type RunProfile = 'cache_first' | 'runtime_os';
 export type ApiMode = 'chat' | 'responses' | 'completion';
 export type ReasoningMode = 'disabled' | 'auto' | 'adaptive' | 'enabled';
+
+/** 归一历史输入和新 UI 的思考档：low 家族关闭思考，ultra 家族映射最高档。 */
+export function normalizeReasoningEffort(value: unknown): ReasoningEffort | undefined {
+  if (typeof value !== 'string') return undefined;
+  const effort = value.trim().toLowerCase().replace(/[_-]+/g, '');
+  if (!effort) return undefined;
+  if (['no', 'low', 'none', 'off', 'disabled', 'false', 'minimal'].includes(effort)) return 'no';
+  if (['ultra', 'maximum'].includes(effort)) return 'max';
+  if (['medium', 'high', 'xhigh', 'max'].includes(effort)) return effort as ReasoningEffort;
+  return undefined;
+}
 
 export interface ThreadRunConfigOverrides {
   workspaceRoot?: string;
   provider?: string;
   model?: string;
   baseUrl?: string;
+  modelContextTokens?: number;
+  modelMaxOutputTokens?: number;
   permissions?: PermissionPresetId;
   accessPolicy?: AccessPolicyConfig;
   webSearchMode?: WebSearchMode;
   reasoningEffort?: ReasoningEffort;
   runProfile?: RunProfile;
+  /** 上下文压缩阈值：占模型上下文窗口的比例（0.3 ~ 0.95）。 */
+  compactionThreshold?: number;
 }
 
 export const THREAD_RUN_CONFIG_KEYS = [
@@ -26,11 +41,14 @@ export const THREAD_RUN_CONFIG_KEYS = [
   'provider',
   'model',
   'baseUrl',
+  'modelContextTokens',
+  'modelMaxOutputTokens',
   'permissions',
   'accessPolicy',
   'webSearchMode',
   'reasoningEffort',
   'runProfile',
+  'compactionThreshold',
 ] as const;
 
 export type ThreadRunConfigKey = typeof THREAD_RUN_CONFIG_KEYS[number];
@@ -45,11 +63,14 @@ const threadRunConfigOverridesSchemaLegacy = z.object({
   provider: z.string().trim().min(1).optional(),
   model: z.string().trim().min(1).optional(),
   baseUrl: z.string().optional(),
+  modelContextTokens: z.number().int().positive().optional(),
+  modelMaxOutputTokens: z.number().int().positive().optional(),
   permissions: z.enum(['read_only', 'workspace', 'danger_full_access']).optional(),
   accessPolicy: accessPolicyConfigSchema.optional(),
   webSearchMode: z.enum(['auto', 'on', 'off']).optional(),
-  reasoningEffort: z.enum(['low', 'medium', 'high']).optional(),
+  reasoningEffort: z.preprocess(normalizeReasoningEffort, z.enum(['no', 'medium', 'high', 'xhigh', 'max']).optional()),
   runProfile: z.enum(['cache_first', 'runtime_os']).optional(),
+  compactionThreshold: z.number().min(0.3).max(0.95).optional(),
 }).strict();
 
 export const threadConfigUpdateSchema = z.object({
@@ -69,9 +90,17 @@ export const threadConfigUpdateSchema = z.object({
 export function threadRunConfigOverridesFrom(input: Record<string, unknown>): ThreadRunConfigOverrides {
   const result: ThreadRunConfigOverrides = {};
   for (const key of THREAD_RUN_CONFIG_KEYS) {
-    const value = input[key];
+    const value = key === 'reasoningEffort'
+      ? normalizeReasoningEffort(input[key])
+      : input[key];
     if (typeof value === 'string') {
       (result as Record<string, string>)[key] = value.trim();
+    } else if ((key === 'modelContextTokens' || key === 'modelMaxOutputTokens')
+      && typeof value === 'number' && Number.isInteger(value) && value > 0) {
+      (result as Record<string, number>)[key] = value;
+    } else if (key === 'compactionThreshold'
+      && typeof value === 'number' && Number.isFinite(value) && value > 0) {
+      (result as Record<string, number>)[key] = Math.min(0.95, Math.max(0.3, value));
     } else if (key === 'accessPolicy' && value && typeof value === 'object' && !Array.isArray(value)) {
       result.accessPolicy = accessPolicyConfigSchema.parse(value);
     }
@@ -83,9 +112,12 @@ export interface ModelPresetConfig {
   provider: string;
   model: string;
   baseUrl: string;
+  /** Explicit context window for custom or self-hosted models. */
+  modelContextTokens?: number;
+  /** Explicit maximum completion size for custom or self-hosted models. */
+  modelMaxOutputTokens?: number;
 }
 
-export type ModelPresetStatus = 'draft' | 'published';
 
 export function modelPresetConfigFrom(input: Record<string, unknown>): ModelPresetConfig {
   const provider = typeof input.provider === 'string' ? input.provider.trim() : '';
@@ -94,7 +126,23 @@ export function modelPresetConfigFrom(input: Record<string, unknown>): ModelPres
   if (!provider || !model) {
     throw new Error('provider and model are required');
   }
-  return { provider, model, baseUrl };
+  const modelContextTokens = positiveOptionalInteger(input.modelContextTokens);
+  const modelMaxOutputTokens = positiveOptionalInteger(input.modelMaxOutputTokens);
+  if (modelContextTokens && modelMaxOutputTokens && modelMaxOutputTokens > modelContextTokens) {
+    throw new Error('modelMaxOutputTokens cannot exceed modelContextTokens');
+  }
+  return {
+    provider,
+    model,
+    baseUrl,
+    ...(modelContextTokens ? { modelContextTokens } : {}),
+    ...(modelMaxOutputTokens ? { modelMaxOutputTokens } : {}),
+  };
+}
+
+function positiveOptionalInteger(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined;
 }
 
 // ─── Explicit Configuration Scopes (for P0 Task 3 refactoring) ──────────────

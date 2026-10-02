@@ -21,7 +21,7 @@ let mainLogs: string[] = [];
 let userSite: Server | null = null;
 let userSiteUrl = '';
 
-const USER_SITE_HTML = `<!doctype html><title>Nexus User Test</title><main><h1>Browser user scenario</h1><button id="probe">Probe</button></main>`;
+const USER_SITE_HTML = `<!doctype html><title>Suanlizi User Test</title><main><h1>Browser user scenario</h1><button id="probe">Probe</button></main>`;
 
 async function startViteDev(): Promise<void> {
   if (viteServer !== null) return;
@@ -60,7 +60,7 @@ async function startViteDev(): Promise<void> {
 function launchElectronDev() {
   return electron.launch({
     args: [MAIN_JS, '--disable-gpu'],
-    env: { ...process.env, NEXUS_ELECTRON_LOAD: 'dev', NEXUS_DISABLE_SINGLE_INSTANCE: '1', NEXUS_UI_URL: viteUiUrl },
+    env: { ...process.env, SUANLIZI_ELECTRON_LOAD: 'dev', SUANLIZI_DISABLE_SINGLE_INSTANCE: '1', SUANLIZI_UI_URL: viteUiUrl },
   });
 }
 
@@ -68,7 +68,7 @@ async function browserApi<T>(app: ElectronApplication, call: string, arg?: unkno
   const win = await app.firstWindow();
   return win.evaluate(
     ([callExpr, argValue]) => {
-      const api = (window as unknown as { nexusDesktop: { browser: Record<string, (a: unknown) => Promise<unknown>> } }).nexusDesktop.browser;
+      const api = (window as unknown as { suanliziDesktop: { browser: Record<string, (a: unknown) => Promise<unknown>> } }).suanliziDesktop.browser;
       return api[callExpr](argValue) as Promise<unknown>;
     },
     [call, arg],
@@ -158,7 +158,7 @@ describe('用户场景实测', () => {
         tabId: tabsNow[0].tabId,
         expression: 'document.title',
       });
-      expect(String(viewTitle)).toBe('Nexus User Test');
+      expect(String(viewTitle)).toBe('Suanlizi User Test');
       const shot = await win.screenshot();
       expect(shot.length).toBeGreaterThan(10_000);
 
@@ -175,9 +175,9 @@ describe('用户场景实测', () => {
 
       // 6) 日志：页面主动打一条 console，确认能到 Main（终端）或事件。
       // — English: log a console line from the page and confirm it is visible.
-      await browserApi(app, 'evaluate', { tabId: tabsNow[0].tabId, expression: "console.log('nexus-ui-log-probe'); 'ok'" });
+      await browserApi(app, 'evaluate', { tabId: tabsNow[0].tabId, expression: "console.log('suanlizi-ui-log-probe'); 'ok'" });
       await new Promise((r) => setTimeout(r, 800));
-      const logVisible = mainLogs.some((l) => l.includes('nexus-ui-log-probe'));
+      const logVisible = mainLogs.some((l) => l.includes('suanlizi-ui-log-probe'));
       expect(logVisible).toBe(true);
     } finally {
       await app.close();
@@ -224,7 +224,7 @@ describe('用户场景实测', () => {
         tabId: remaining[0].tabId,
         expression: 'document.title',
       });
-      expect(title).toBe('Nexus User Test');
+      expect(title).toBe('Suanlizi User Test');
     } finally {
       await app.close();
     }
@@ -244,11 +244,11 @@ describe('用户场景实测', () => {
         const root = document.documentElement;
         const dialogElement = document.querySelector<HTMLElement>('.searchDialog');
         const inputElement = document.querySelector<HTMLElement>('.searchDialogInput');
-        const collapseButton = document.querySelector<HTMLElement>('.threadListHeader > .miniIconButton');
+        const collapseButton = document.querySelector<HTMLElement>('.workspaceThreadsHeader > .miniIconButton');
         const path = collapseButton?.querySelector('svg path')?.getAttribute('d') ?? null;
         const buttonBox = collapseButton?.getBoundingClientRect() ?? null;
         return {
-          theme: root.dataset.nexusTheme,
+          theme: root.dataset.suanliziTheme,
           dialogBackground: dialogElement ? getComputedStyle(dialogElement).backgroundColor : null,
           inputBackground: inputElement ? getComputedStyle(inputElement).backgroundColor : null,
           buttonBox: buttonBox ? { width: buttonBox.width, height: buttonBox.height } : null,
@@ -274,13 +274,13 @@ describe('用户场景实测', () => {
     try {
       const win = await app.firstWindow();
       await win.waitForSelector('#root > *', { timeout: 60_000, state: 'attached' });
-      const menuApi = (window: { nexusDesktop?: { menu?: { setLocale(locale: string): Promise<void> } } }) => window.nexusDesktop?.menu;
+      const menuApi = (window: { suanliziDesktop?: { menu?: { setLocale(locale: string): Promise<void> } } }) => window.suanliziDesktop?.menu;
       const zhResult = await win.evaluate(() => {
-        const menu = (window as unknown as { nexusDesktop?: { menu?: { setLocale(locale: string): Promise<unknown> } } }).nexusDesktop?.menu;
+        const menu = (window as unknown as { suanliziDesktop?: { menu?: { setLocale(locale: string): Promise<unknown> } } }).suanliziDesktop?.menu;
         return menu ? menu.setLocale('zh') : Promise.resolve('no-menu');
       });
       const enResult = await win.evaluate(() => {
-        const menu = (window as unknown as { nexusDesktop?: { menu?: { setLocale(locale: string): Promise<unknown> } } }).nexusDesktop?.menu;
+        const menu = (window as unknown as { suanliziDesktop?: { menu?: { setLocale(locale: string): Promise<unknown> } } }).suanliziDesktop?.menu;
         return menu ? menu.setLocale('en') : Promise.resolve('no-menu');
       });
       expect(zhResult).not.toBe('no-menu');

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { McpRuntimeManager } from '@nexus/runtime';
+import type { McpRuntimeManager } from '@suanlizi/runtime';
 import { __gitNexusRouteTest } from './gitnexusRoute.js';
 
 function mcpText(data: unknown) {

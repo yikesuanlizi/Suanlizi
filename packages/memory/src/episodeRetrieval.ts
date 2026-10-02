@@ -1,5 +1,5 @@
-import type { EpisodeRecord, EpisodeSearchOptions, EpisodeSearchResult, ThreadId, TurnId } from '@nexus/protocol';
-import type { ThreadStore } from '@nexus/storage';
+import type { EpisodeRecord, EpisodeSearchOptions, EpisodeSearchResult, ThreadId, TurnId } from '@suanlizi/protocol';
+import type { ThreadStore } from '@suanlizi/storage';
 
 export interface RetrievalContext {
   threadId: ThreadId;

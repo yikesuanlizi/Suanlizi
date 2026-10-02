@@ -4,8 +4,8 @@ import type {
   EpisodeSearchOptions,
   ThreadId,
   TurnId,
-} from '@nexus/protocol';
-import type { ThreadStore } from '@nexus/storage';
+} from '@suanlizi/protocol';
+import type { ThreadStore } from '@suanlizi/storage';
 import { createHash, randomUUID } from 'node:crypto';
 
 // ─── Episode Memory Settings ────────────────────────────────────────────────

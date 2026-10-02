@@ -27,4 +27,10 @@ describe('normalizeMarkdownForDisplay', () => {
 
     expect(normalizeMarkdownForDisplay(code)).toBe(code);
   });
+
+  it('hides provider think tags in normal message text but preserves code blocks', () => {
+    expect(normalizeMarkdownForDisplay('<think>内部思考</think>最终答案')).toBe('最终答案');
+    const code = '```xml\n<think>keep this example</think>\n```';
+    expect(normalizeMarkdownForDisplay(code)).toBe(code);
+  });
 });

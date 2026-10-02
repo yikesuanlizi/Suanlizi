@@ -44,7 +44,7 @@ afterAll(async () => {
 });
 
 function launchPhase0() {
-  return electron.launch({ args: [MAIN_JS], env: { ...process.env, NEXUS_ELECTRON_LOAD: 'phase0', NEXUS_DISABLE_SINGLE_INSTANCE: '1' } });
+  return electron.launch({ args: [MAIN_JS], env: { ...process.env, SUANLIZI_ELECTRON_LOAD: 'phase0', SUANLIZI_DISABLE_SINGLE_INSTANCE: '1' } });
 }
 
 type ElectronApp = Awaited<ReturnType<typeof electron.launch>>;
@@ -52,7 +52,7 @@ type ElectronApp = Awaited<ReturnType<typeof electron.launch>>;
 async function browserApi<T>(win: ElectronApp, call: string, arg?: unknown): Promise<T> {
   return win.evaluate(
     ([callExpr, argValue]) => {
-      const api = (window as unknown as { nexusDesktop: { browser: Record<string, (a: unknown) => Promise<unknown>> } }).nexusDesktop.browser;
+      const api = (window as unknown as { suanliziDesktop: { browser: Record<string, (a: unknown) => Promise<unknown>> } }).suanliziDesktop.browser;
       return api[callExpr](argValue) as Promise<unknown>;
     },
     [call, arg],
@@ -151,7 +151,7 @@ describe('Phase 2 · 动态标签与导航', () => {
       // — English: subscribe first, then create, so events are captured.
       const events: string[] = [];
       await win.evaluate(() => {
-        const api = (window as unknown as { nexusDesktop: { browser: { subscribe(h: (e: { type: string }) => void): void } } }).nexusDesktop.browser;
+        const api = (window as unknown as { suanliziDesktop: { browser: { subscribe(h: (e: { type: string }) => void): void } } }).suanliziDesktop.browser;
         api.subscribe((event) => {
           (window as unknown as { __events?: string[] }).__events = [
             ...((window as unknown as { __events?: string[] }).__events ?? []),

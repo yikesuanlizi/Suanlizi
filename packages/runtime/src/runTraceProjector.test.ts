@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { RunTraceEnvelope } from '@nexus/protocol';
-import { RUN_TRACE_VERSION } from '@nexus/protocol';
+import type { RunTraceEnvelope } from '@suanlizi/protocol';
+import { RUN_TRACE_VERSION } from '@suanlizi/protocol';
 import { projectRunTrace } from './runTraceProjector.js';
 
 function event(overrides: Partial<RunTraceEnvelope>): RunTraceEnvelope {
@@ -59,7 +59,7 @@ describe('projectRunTrace', () => {
   it('counts document file lifecycle events separately from changed files', () => {
     const summary = projectRunTrace([
       event({ sequence: 1, category: 'file', name: 'document extracted', lifecycle: 'completed', payload: { action: 'extract', path: 'a.docx' } }),
-      event({ sequence: 2, category: 'file', name: 'artifact stale', lifecycle: 'instant', payload: { action: 'stale', path: '.nexus/artifacts/documents/a.md', sourcePath: 'a.docx' } }),
+      event({ sequence: 2, category: 'file', name: 'artifact stale', lifecycle: 'instant', payload: { action: 'stale', path: '.suanlizi/artifacts/documents/a.md', sourcePath: 'a.docx' } }),
       event({ sequence: 3, category: 'file', name: 'document refreshed', lifecycle: 'completed', payload: { action: 'refresh', path: 'a.docx' } }),
     ]);
 
@@ -137,7 +137,7 @@ describe('projectRunTrace', () => {
           target: { kind: 'path', path: 'E:\\langchain\\outside.txt' },
           toolName: 'read_file',
           agentThreadId: 'thread-a',
-          agentRole: 'Nexus 主控 Agent',
+          agentRole: 'Suanlizi 主控 Agent',
         },
       }),
       event({

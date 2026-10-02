@@ -47,7 +47,7 @@ type ElectronApp = Awaited<ReturnType<typeof electron.launch>>;
 // Phase 0 模式：加载最小测试 Renderer（renderer.html）。
 // — English: Phase 0 mode — loads the minimal test renderer (renderer.html).
 function launchPhase0() {
-  return electron.launch({ args: [MAIN_JS], env: { ...process.env, NEXUS_ELECTRON_LOAD: 'phase0', NEXUS_DISABLE_SINGLE_INSTANCE: '1' } });
+  return electron.launch({ args: [MAIN_JS], env: { ...process.env, SUANLIZI_ELECTRON_LOAD: 'phase0', SUANLIZI_DISABLE_SINGLE_INSTANCE: '1' } });
 }
 
 async function browserApi<T>(win: ElectronApp, call: string, arg?: unknown): Promise<T> {
@@ -55,7 +55,7 @@ async function browserApi<T>(win: ElectronApp, call: string, arg?: unknown): Pro
     ([callExpr, argValue]) => {
       // 分步调用：先取 api 再传参（避免 window.evaluate 序列化限制）。
       // — English: resolve the API object first, then call with the arg.
-      const api = (window as unknown as { nexusDesktop: { browser: Record<string, (a: unknown) => Promise<unknown>> } }).nexusDesktop.browser;
+      const api = (window as unknown as { suanliziDesktop: { browser: Record<string, (a: unknown) => Promise<unknown>> } }).suanliziDesktop.browser;
       return api[callExpr](argValue) as Promise<unknown>;
     },
     [call, arg],
@@ -78,13 +78,13 @@ async function waitForSiteReady(win: ElectronApp, tabId: string, timeoutMs = 15_
 }
 
 describe('Phase 0 · Electron 同会话可行性闸门', () => {
-  it('启动 Electron：主窗口加载 preload，nexusDesktop API 可用（sandbox + contextIsolation）', async () => {
+  it('启动 Electron：主窗口加载 preload，suanliziDesktop API 可用（sandbox + contextIsolation）', async () => {
     const app = await launchPhase0();
     try {
       const win = await app.firstWindow();
       await win.waitForSelector('#btn-create', { timeout: 15_000 });
       const hasApi = await win.evaluate(() => {
-        const api = (window as unknown as { nexusDesktop?: unknown }).nexusDesktop;
+        const api = (window as unknown as { suanliziDesktop?: unknown }).suanliziDesktop;
         return api !== undefined && typeof api === 'object';
       });
       expect(hasApi).toBe(true);
@@ -169,7 +169,7 @@ describe('Phase 0 · Electron 同会话可行性闸门', () => {
       // 事件完成操作。指针不参与 hit testing，也不会阻断用户随时接管。
       const agentPointerSeen = await browserApi<boolean>(win, 'evaluate', {
         tabId: tab.tabId,
-        expression: 'document.getElementById("__nexus_agent_pointer__") !== null',
+        expression: 'document.getElementById("__suanlizi_agent_pointer__") !== null',
       });
       expect(agentPointerSeen).toBe(true);
     } finally {
@@ -191,7 +191,7 @@ describe('Phase 0 · Electron 同会话可行性闸门', () => {
       // — English: write localStorage and a cookie on the shared webContents.
       await browserApi<unknown>(win, 'evaluate', {
         tabId: tab.tabId,
-        expression: 'localStorage.setItem("phase0", "shared-session"); document.cookie = "nexus_phase0=ok; path=/"',
+        expression: 'localStorage.setItem("phase0", "shared-session"); document.cookie = "suanlizi_phase0=ok; path=/"',
       });
 
       // 导航到站点根（重载）后读取：同 partition 持久化仍在。
@@ -204,7 +204,7 @@ describe('Phase 0 · Electron 同会话可行性闸门', () => {
       });
       const parsed = typeof stored === 'string' ? JSON.parse(stored) : stored;
       expect(parsed.local).toBe('shared-session');
-      expect(parsed.cookie).toContain('nexus_phase0=ok');
+      expect(parsed.cookie).toContain('suanlizi_phase0=ok');
     } finally {
       await app.close();
     }

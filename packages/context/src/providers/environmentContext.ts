@@ -46,7 +46,6 @@ export class EnvironmentContextProvider implements ContextProvider {
         encoding: 'utf8',
         timeout: 3000,
         windowsHide: true,
-        shell: process.platform === 'win32',
       }).trim();
 
       const status = execFileSync('git', ['status', '--porcelain'], {
@@ -54,7 +53,6 @@ export class EnvironmentContextProvider implements ContextProvider {
         encoding: 'utf8',
         timeout: 3000,
         windowsHide: true,
-        shell: process.platform === 'win32',
       }).trim();
 
       return {

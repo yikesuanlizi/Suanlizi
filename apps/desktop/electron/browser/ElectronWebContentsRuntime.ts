@@ -11,8 +11,8 @@ import type {
   BrowserRuntimePort,
   BrowserSessionHandle,
   PostconditionCheck,
-} from '@nexus/browser-runtime';
-import type { ActionIntent, ClassifiedError, ContentBlock, FormInfo, Observation, PageGraph, Postcondition } from '@nexus/protocol';
+} from '@suanlizi/browser-runtime';
+import type { ActionIntent, ClassifiedError, ContentBlock, FormInfo, Observation, PageGraph, Postcondition } from '@suanlizi/protocol';
 import type { WebContentsView } from 'electron';
 import { app } from 'electron';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -29,7 +29,11 @@ interface ElementRefInfo {
 }
 
 function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'object' && err !== null) {
+    try { return JSON.stringify(err); } catch { return Object.prototype.toString.call(err); }
+  }
+  return String(err);
 }
 
 function actionError(actionId: string, error: Omit<ClassifiedError, 'actionId'>): ClassifiedError {
@@ -123,7 +127,7 @@ export class ElectronWebContentsRuntime implements BrowserRuntimePort {
     const snapshot = async (): Promise<{ elements?: Array<Record<string, unknown>>; content?: Array<Record<string, unknown>>; forms?: Array<Record<string, unknown>> }> => {
       // 复用 browser-runtime 的页面快照脚本（宿主无关）。
       // — English: reuse browser-runtime's host-agnostic snapshot script.
-      const { SNAPSHOT_SCRIPT } = await import('@nexus/browser-runtime');
+      const { SNAPSHOT_SCRIPT } = await import('@suanlizi/browser-runtime');
       const raw = await this.adapter.evaluate({ tabId: taskId, expression: SNAPSHOT_SCRIPT });
       if (typeof raw === 'string') {
         try {
@@ -481,7 +485,7 @@ export class ElectronWebContentsRuntime implements BrowserRuntimePort {
           }
           case 'screenshot': {
             await this.adapter.attach();
-            const shot = await this.view.webContents.debugger.sendCommand('Page.captureScreenshot', { format: 'png' });
+            const shot = await this.adapter.sendCommand<{ data?: string }>('Page.captureScreenshot', { format: 'png' });
             const data = shot.data as string | undefined;
             if (typeof data !== 'string') return failed({ kind: 'page', code: 'SHOT_FAILED', message: '截图失败', retryable: true });
             const safeTaskId = taskId.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 96) || 'task';

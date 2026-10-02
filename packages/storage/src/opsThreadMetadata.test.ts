@@ -3,7 +3,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createStore } from './index.js';
-import type { ThreadMeta } from '@nexus/protocol';
+import type { ThreadMeta } from '@suanlizi/protocol';
 
 function thread(overrides: Partial<ThreadMeta> = {}): ThreadMeta {
   const now = '2026-08-19T00:00:00.000Z';
@@ -24,7 +24,7 @@ function thread(overrides: Partial<ThreadMeta> = {}): ThreadMeta {
 
 describe('Thread Ops entrance metadata persistence', () => {
   it('persists mode and taskPreset through the storage boundary', async () => {
-    const { store } = createStore(mkdtempSync(join(tmpdir(), 'nexus-ops-thread-')));
+    const { store } = createStore(mkdtempSync(join(tmpdir(), 'suanlizi-ops-thread-')));
     await store.createThread(thread({ mode: 'ops', taskPreset: 'ops' }));
 
     await expect(store.getThread('ops-thread-1')).resolves.toMatchObject({

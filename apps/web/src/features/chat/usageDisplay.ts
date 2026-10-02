@@ -1,6 +1,6 @@
 import type { Locale } from '../../config/config.js';
 import type { ThreadUsage, Usage } from '../../shared/types.js';
-import { resolveModelCapabilities, type ModelCapabilities, type ModelCapabilitySource } from '@nexus/protocol';
+import { resolveModelCapabilities, type ModelCapabilities, type ModelCapabilitySource } from '@suanlizi/protocol';
 
 export { resolveModelCapabilities };
 
@@ -8,7 +8,8 @@ export interface TokenUsageSummary {
   totalInput: number;
   totalCached: number;
   totalOutput: number;
-  hitRate: number;
+  hitRate?: number;
+  cacheReported?: boolean;
   cacheLabel: string;
 }
 
@@ -22,12 +23,14 @@ export function buildTokenUsageSummary(
   const cachedInputTokens = Number(total.cachedInputTokens ?? 0);
   const outputTokens = Number(total.outputTokens ?? 0);
   if (!inputTokens && !cachedInputTokens && !outputTokens) return null;
-  const hitRate = inputTokens > 0 ? Math.round((cachedInputTokens / inputTokens) * 100) : 0;
+  const cacheReported = total.cacheReported === true;
+  const hitRate = cacheReported && inputTokens > 0 ? Math.round((cachedInputTokens / inputTokens) * 100) : undefined;
   return {
     totalInput: inputTokens,
-    totalCached: cachedInputTokens,
+    totalCached: cacheReported ? cachedInputTokens : 0,
     totalOutput: outputTokens,
-    hitRate,
+    ...(hitRate === undefined ? {} : { hitRate }),
+    ...(total.cacheReported === undefined ? {} : { cacheReported: total.cacheReported }),
     cacheLabel: locale === 'zh' ? '缓存' : 'cache',
   };
 }
@@ -54,13 +57,19 @@ function formatUsageLine(total: Usage, locale: Locale): string {
   const cachedInputTokens = Number(total.cachedInputTokens ?? 0);
   const outputTokens = Number(total.outputTokens ?? 0);
   if (!inputTokens && !cachedInputTokens && !outputTokens) return '';
-  const hitRate = inputTokens > 0 ? Math.round((cachedInputTokens / inputTokens) * 100) : 0;
+  const cacheReported = total.cacheReported === true;
+  const hitRate = cacheReported && inputTokens > 0 ? Math.round((cachedInputTokens / inputTokens) * 100) : 0;
   const cacheLabel = total.cacheStrategy === 'deepseek-native'
     ? (locale === 'zh' ? 'DeepSeek 缓存' : 'DeepSeek cache')
     : (locale === 'zh' ? '缓存' : 'cache');
+  const cacheText = cacheReported
+    ? (locale === 'zh'
+      ? `${cacheLabel} ${cachedInputTokens}，命中率 ${hitRate ?? 0}%`
+      : `${cacheLabel} ${cachedInputTokens}, hit ${hitRate ?? 0}%`)
+    : (locale === 'zh' ? `${cacheLabel}未上报` : `${cacheLabel} unavailable`);
   return locale === 'zh'
-    ? `Token：输入 ${inputTokens}，${cacheLabel} ${cachedInputTokens}，命中率 ${hitRate}%，输出 ${outputTokens}`
-    : `Tokens: input ${inputTokens}, ${cacheLabel} ${cachedInputTokens}, hit ${hitRate}%, output ${outputTokens}`;
+    ? `Token：输入 ${inputTokens}，${cacheText}，输出 ${outputTokens}`
+    : `Tokens: input ${inputTokens}, ${cacheText}, output ${outputTokens}`;
 }
 
 function formatUsageNumbers(
@@ -71,15 +80,21 @@ function formatUsageNumbers(
   const inputTokens = Number(usage.inputTokens ?? 0);
   const cachedInputTokens = Number(usage.cachedInputTokens ?? 0);
   const outputTokens = Number(usage.outputTokens ?? 0);
-  const hitRate = inputTokens > 0 ? Math.round((cachedInputTokens / inputTokens) * 100) : 0;
+  const cacheReported = usage.cacheReported === true;
+  const hitRate = cacheReported && inputTokens > 0 ? Math.round((cachedInputTokens / inputTokens) * 100) : 0;
   const cacheLabel = options.omitCacheLabel
     ? (locale === 'zh' ? '缓存' : 'cache')
     : usage.cacheStrategy === 'deepseek-native'
       ? (locale === 'zh' ? 'DeepSeek 缓存' : 'DeepSeek cache')
       : (locale === 'zh' ? '缓存' : 'cache');
+  const cacheText = cacheReported
+    ? (locale === 'zh'
+      ? `${cacheLabel} ${cachedInputTokens}，命中率 ${hitRate ?? 0}%`
+      : `${cacheLabel} ${cachedInputTokens}, hit ${hitRate ?? 0}%`)
+    : (locale === 'zh' ? `${cacheLabel}未上报` : `${cacheLabel} unavailable`);
   return locale === 'zh'
-    ? `输入 ${inputTokens}，${cacheLabel} ${cachedInputTokens}，命中率 ${hitRate}%，输出 ${outputTokens}`
-    : `input ${inputTokens}, ${cacheLabel} ${cachedInputTokens}, hit ${hitRate}%, output ${outputTokens}`;
+    ? `输入 ${inputTokens}，${cacheText}，输出 ${outputTokens}`
+    : `input ${inputTokens}, ${cacheText}, output ${outputTokens}`;
 }
 
 export function formatCacheDiagnostics(
@@ -118,6 +133,8 @@ export interface ContextPressureSnapshot {
   status?: string;
   estimatedTokens?: number;
   maxTokens?: number;
+  /** Runtime maxTokens may be an internal safety fallback; only use it when explicitly known. */
+  windowKnown?: boolean;
   softThreshold?: number;
   hardThreshold?: number;
 }
@@ -135,7 +152,7 @@ export function resolveDisplayContextPressure(
   pressure: ContextPressureSnapshot | null | undefined,
   capabilities: ModelCapabilities | null | undefined,
 ): DisplayContextPressure | null {
-  const runtimeMax = positiveNumber(pressure?.maxTokens);
+  const runtimeMax = pressure?.windowKnown === true ? positiveNumber(pressure?.maxTokens) : undefined;
   const modelMax = positiveNumber(capabilities?.contextTokens);
   const maxTokens = modelMax ?? runtimeMax;
   if (!maxTokens) return null;
@@ -182,14 +199,18 @@ export function softThresholdPercent(pressure: { softThreshold?: number; maxToke
 }
 
 export function buildTokenTooltip(
-  usage: { totalInput?: number; totalCached?: number; totalOutput?: number; hitRate?: number } | null | undefined,
+  usage: { totalInput?: number; totalCached?: number; totalOutput?: number; hitRate?: number; cacheReported?: boolean } | null | undefined,
   pressure: DisplayContextPressure | null | undefined,
   locale: Locale,
 ): string {
   const parts: string[] = [];
   if (usage) {
     parts.push(locale === 'zh' ? `输入: ${usage.totalInput}` : `Input: ${usage.totalInput}`);
-    parts.push(locale === 'zh' ? `缓存: ${usage.totalCached} (${usage.hitRate}%)` : `Cache: ${usage.totalCached} (${usage.hitRate}%)`);
+    parts.push(usage.cacheReported === true
+      ? (locale === 'zh'
+        ? `缓存命中: ${usage.totalCached} (${usage.hitRate ?? 0}%)`
+        : `Cache hit: ${usage.totalCached} (${usage.hitRate ?? 0}%)`)
+      : (locale === 'zh' ? '缓存未上报' : 'Cache unavailable'));
     parts.push(locale === 'zh' ? `输出: ${usage.totalOutput}` : `Output: ${usage.totalOutput}`);
   }
   if (pressure?.maxTokens) {

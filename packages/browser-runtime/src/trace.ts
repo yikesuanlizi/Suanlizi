@@ -7,7 +7,7 @@
 // — English: this package does not depend on RunTraceSession — observations are
 //   emitted via a callback; correlation uses the spanId sequence plus
 //   actionId/observationId in the payload.
-import type { RunTraceLevel, RunTraceObservation, RunTracePayloadMap, RunTraceRunKind } from '@nexus/protocol';
+import type { RunTraceLevel, RunTraceObservation, RunTracePayloadMap, RunTraceRunKind } from '@suanlizi/protocol';
 import { stripSensitiveUrl } from './urlSafe.js';
 
 type BrowserPayload = RunTracePayloadMap['browser'];

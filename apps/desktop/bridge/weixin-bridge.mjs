@@ -7,10 +7,10 @@ import { dirname, join } from 'node:path';
 import os from 'node:os';
 
 const requireFromHere = createRequire(import.meta.url);
-const PORT = Number(process.env.NEXUS_WEIXIN_BRIDGE_PORT || 18790);
-const API_URL = (process.env.NEXUS_API_URL || 'http://127.0.0.1:4127').replace(/\/+$/, '');
-const STATE_ROOT = process.env.NEXUS_WEIXIN_STATE_DIR || join(os.homedir(), '.nexus', 'weixin-bridge');
-const LOG_DIR = process.env.NEXUS_LOG_DIR || join(os.homedir(), '.nexus', 'logs');
+const PORT = Number(process.env.SUANLIZI_WEIXIN_BRIDGE_PORT || 18790);
+const API_URL = (process.env.SUANLIZI_API_URL || 'http://127.0.0.1:4127').replace(/\/+$/, '');
+const STATE_ROOT = process.env.SUANLIZI_WEIXIN_STATE_DIR || join(os.homedir(), '.suanlizi', 'weixin-bridge');
+const LOG_DIR = process.env.SUANLIZI_LOG_DIR || join(os.homedir(), '.suanlizi', 'logs');
 const BRIDGE_LOG_PATH = join(LOG_DIR, 'weixin-bridge.log');
 const WEIXIN_PLUGIN_ID = 'openclaw-weixin';
 const WEIXIN_API_BASE_URL = 'https://ilinkai.weixin.qq.com';
@@ -22,8 +22,8 @@ const DEFAULT_LONG_POLL_TIMEOUT_MS = 35_000;
 const DEFAULT_API_TIMEOUT_MS = 15_000;
 const RETRY_DELAY_MS = 2_000;
 const BACKOFF_DELAY_MS = 30_000;
-const WEIXIN_ACK_ENABLED = process.env.NEXUS_WEIXIN_ACK !== '0';
-const WEIXIN_ACK_TEXT = process.env.NEXUS_WEIXIN_ACK_TEXT || '已收到，正在处理。';
+const WEIXIN_ACK_ENABLED = process.env.SUANLIZI_WEIXIN_ACK !== '0';
+const WEIXIN_ACK_TEXT = process.env.SUANLIZI_WEIXIN_ACK_TEXT || '已收到，正在处理。';
 const MessageType = { BOT: 2 };
 const MessageItemType = { TEXT: 1, VOICE: 3 };
 const MessageState = { FINISH: 2 };
@@ -152,7 +152,7 @@ function readWeixinPackageInfo() {
   if (packageInfoCache) return packageInfoCache;
   const packageJson = resolvePackagePath('@tencent-weixin/openclaw-weixin', 'package.json');
   if (!packageJson) {
-    throw new Error('Built-in WeChat login component is missing. Install @tencent-weixin/openclaw-weixin in @nexus/desktop.');
+    throw new Error('Built-in WeChat login component is missing. Install @tencent-weixin/openclaw-weixin in @suanlizi/desktop.');
   }
   const parsed = JSON.parse(readFileSync(packageJson, 'utf8'));
   packageInfoCache = {
@@ -174,7 +174,7 @@ function buildBaseInfo() {
   const info = readWeixinPackageInfo();
   return {
     channel_version: info.version,
-    bot_agent: `Nexus/${process.env.npm_package_version || '0.1.0'}`,
+    bot_agent: `Suanlizi/${process.env.npm_package_version || '0.1.0'}`,
   };
 }
 
@@ -445,7 +445,7 @@ async function waitForWeixinLogin(params) {
         return { connected: false, message: '多次输入错误，连接流程已停止。请稍后再试。' };
       case 'binded_redirect':
         activeLogins.delete(sessionKey);
-        return { connected: true, alreadyConnected: true, accountId: normalizeAccountId(sessionKey), sessionKey, message: '已连接过此 Nexus，无需重复连接。' };
+        return { connected: true, alreadyConnected: true, accountId: normalizeAccountId(sessionKey), sessionKey, message: '已连接过此 Suanlizi，无需重复连接。' };
       case 'scaned_but_redirect': {
         const redirectHost = recordString(status, 'redirect_host');
         if (redirectHost) login.currentApiBaseUrl = `https://${redirectHost}`;
@@ -464,7 +464,7 @@ async function waitForWeixinLogin(params) {
         await saveWeixinAccount(accountId, { token, baseUrl, userId });
         await clearStaleAccountsForUserId(accountId, userId);
         activeLogins.delete(sessionKey);
-        return { connected: true, accountId, sessionKey, baseUrl, userId, message: '已将此 Nexus 连接到微信。' };
+        return { connected: true, accountId, sessionKey, baseUrl, userId, message: '已将此 Suanlizi 连接到微信。' };
       }
     }
     await sleep(1_000);
@@ -538,7 +538,7 @@ async function notifyStop(account) {
 }
 
 async function sendMessageWeixin(params) {
-  const messageId = `nexus-weixin-${randomUUID()}`;
+  const messageId = `suanlizi-weixin-${randomUUID()}`;
   await appendBridgeLog('info', 'send WeChat message request', {
     accountId: params.account.accountId,
     to: params.to,
@@ -587,7 +587,7 @@ function textFromItemList(itemList) {
   return '';
 }
 
-async function postToNexusWebhook(message, accountId) {
+async function postToSuanliziWebhook(message, accountId) {
   const text = textFromItemList(message.item_list);
   if (!text) {
     await appendBridgeLog('warn', 'skip message without text', { accountId, message: logMessageShape(message) });
@@ -596,7 +596,7 @@ async function postToNexusWebhook(message, accountId) {
   const from = message.from_user_id != null ? String(message.from_user_id).trim() : '';
   const messageId = message.message_id != null && String(message.message_id).trim()
     ? String(message.message_id).trim()
-    : `nexus-weixin-${randomUUID()}`;
+    : `suanlizi-weixin-${randomUUID()}`;
   const body = {
     provider: 'weixin',
     platform: 'weixin',
@@ -610,7 +610,7 @@ async function postToNexusWebhook(message, accountId) {
     chatType: 'dm',
     accountId,
   };
-  await appendBridgeLog('info', 'post inbound message to Nexus', {
+  await appendBridgeLog('info', 'post inbound message to Suanlizi', {
     accountId,
     apiUrl: API_URL,
     body,
@@ -652,12 +652,12 @@ async function postToNexusWebhook(message, accountId) {
     signal: AbortSignal.timeout(650_000),
   });
   const data = await readJsonResponse(res);
-  await appendBridgeLog(res.ok && data.ok !== false ? 'info' : 'error', 'Nexus webhook response', {
+  await appendBridgeLog(res.ok && data.ok !== false ? 'info' : 'error', 'Suanlizi webhook response', {
     accountId,
     status: res.status,
     data,
   });
-  if (!res.ok || data.ok === false) throw new Error(recordString(data, 'message') || recordString(data, 'error') || `Nexus webhook HTTP ${res.status}`);
+  if (!res.ok || data.ok === false) throw new Error(recordString(data, 'message') || recordString(data, 'error') || `Suanlizi webhook HTTP ${res.status}`);
   const reply = recordString(asRecord(data.result), 'reply');
   if (reply) {
     try {
@@ -674,14 +674,14 @@ async function postToNexusWebhook(message, accountId) {
         text: reply,
         contextToken: getContextToken(account.accountId, from),
       });
-      await appendBridgeLog('info', 'sent Nexus reply to WeChat', {
+      await appendBridgeLog('info', 'sent Suanlizi reply to WeChat', {
         accountId,
         to: from,
         length: reply.length,
         messageId: result.messageId,
       });
     } catch (error) {
-      await appendBridgeLog('error', 'failed to send Nexus reply to WeChat', {
+      await appendBridgeLog('error', 'failed to send Suanlizi reply to WeChat', {
         accountId,
         to: from,
         error: error instanceof Error ? error.message : String(error),
@@ -762,7 +762,7 @@ async function monitorWeixinAccount(accountId, signal, options = {}) {
             messageCount: monitorDiag(account.accountId).messageCount + 1,
             lastMessageAt: nowIso(),
           });
-          await postToNexusWebhook(message, account.accountId);
+          await postToSuanliziWebhook(message, account.accountId);
         }
       } catch (error) {
         if (signal.aborted) return;
@@ -942,7 +942,7 @@ async function handleBridgeRequest(request, response) {
 
 async function main() {
   if (!resolveWeixinPluginRoot()) {
-    throw new Error('Built-in WeChat login component is missing. Install @tencent-weixin/openclaw-weixin in @nexus/desktop.');
+    throw new Error('Built-in WeChat login component is missing. Install @tencent-weixin/openclaw-weixin in @suanlizi/desktop.');
   }
   await ensureStateDirs();
   const server = createHttpServer((request, response) => {
@@ -957,8 +957,8 @@ async function main() {
     if (error && typeof error === 'object' && error.code === 'EADDRINUSE') {
       const live = await isExistingBridgeLive();
       const hint = live
-        ? `A WeChat bridge is already running on port ${PORT}. Stop the old desktop dev process or kill the old node bridge before starting Nexus again.`
-        : `Port ${PORT} is already in use by another non-Nexus process. Set NEXUS_WEIXIN_BRIDGE_PORT to another port or close the process using that port.`;
+        ? `A WeChat bridge is already running on port ${PORT}. Stop the old desktop dev process or kill the old node bridge before starting Suanlizi again.`
+        : `Port ${PORT} is already in use by another non-Suanlizi process. Set SUANLIZI_WEIXIN_BRIDGE_PORT to another port or close the process using that port.`;
       throw new Error(hint);
     }
     throw error;

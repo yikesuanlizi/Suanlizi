@@ -8,7 +8,7 @@ import { extractDocumentText, extractorForDocumentPath } from './documentExtract
 
 describe('document extractors', () => {
   it('extracts text from a minimal docx', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-docx-'));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-docx-'));
     const filePath = path.join(root, 'sample.docx');
     await writeMinimalDocx(filePath, '第一章 生命周期检测');
 
@@ -19,7 +19,7 @@ describe('document extractors', () => {
   });
 
   it('extracts rows from an xlsx workbook', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-xlsx-'));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-xlsx-'));
     const filePath = path.join(root, 'table.xlsx');
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([['名称', '状态'], ['方案B', '通过']]), 'Sheet1');

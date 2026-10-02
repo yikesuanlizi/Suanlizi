@@ -1,5 +1,5 @@
 // Harness 类型定义：跨 turn 自主循环的状态、计划、证据、上下文裁切等类型。
-// protocol 层共享类型（GoalEvaluation / HarnessContinuationItem）从 @nexus/protocol re-export，
+// protocol 层共享类型（GoalEvaluation / HarnessContinuationItem）从 @suanlizi/protocol re-export，
 // 避免 runtime/types.ts 与 protocol/types.ts 双份漂移（实施点 4）。
 
 import type {
@@ -10,7 +10,7 @@ import type {
   ThreadItem,
   TurnId,
   Usage,
-} from '@nexus/protocol';
+} from '@suanlizi/protocol';
 
 // ─── Re-export protocol 共享类型 ────────────────────────────────────────────
 // 实施点 4：GoalEvaluation / HarnessContinuationItem 统一在 protocol 定义
@@ -19,7 +19,7 @@ export type {
   GoalEvaluationStatus,
   HarnessContinuationItem,
   HarnessItemVisibility,
-} from '@nexus/protocol';
+} from '@suanlizi/protocol';
 
 // ─── Harness 专用类型 ────────────────────────────────────────────────────────
 
@@ -64,6 +64,7 @@ export interface HarnessState {
 // ─── Evidence Receipt ────────────────────────────────────────────────────────
 
 // 证据收据类型：tool（工具调用）/ file_change（文件变更）/ command（命令）/ test（测试）/ checkpoint / mcp / error
+// / workflow_result（计划 §11.3：WorkflowRun / WorkflowAgentCall 的结构化结果物化出的证据）
 export type EvidenceReceiptKind =
   | 'tool'
   | 'file_change'
@@ -71,10 +72,27 @@ export type EvidenceReceiptKind =
   | 'test'
   | 'checkpoint'
   | 'mcp'
-  | 'error';
+  | 'error'
+  | 'workflow_result';
 
 // 证据状态：passed（通过）/ failed（失败）/ unknown（未知）
 export type EvidenceReceiptStatus = 'passed' | 'failed' | 'unknown';
+
+/**
+ * 证据来源形态（计划 §11.3 + 盘点 §4.4 清单第 1/2 项）。
+ *
+ * - `thread_item`：既有主通道，一条证据一一对应一个 ThreadItem（id = `ev_<itemId>`）。
+ * - `workflow`：WorkflowRun / WorkflowAgentCall 结果物化的证据，独立于普通 ThreadItem，
+ *   **不保证存在 turnId / itemId**（`protocol/src/task.ts` 的 WorkflowAgentCall 注释已冻结这一点），
+ *   id 命名空间为 `wev_<runId>_<agentCallId|run>`（盘点 §2 冻结），与 `ev_<itemId>` 完全隔离。
+ *
+ * 影响面结论：仓库内除 `evidenceLedger.ts` 的 5 个构造点外，没有任何读取方消费
+ * `receipt.itemId` / `receipt.turnId`（goalEvaluator / harnessContext / readinessCritic / taskHarness
+ * 只用 kind、status、summary、refs、supportsCriteria），因此选择「itemId/turnId 改为可选 +
+ * sourceKind 判别」这一影响最小方案，而不是在 task 模块内做平行 Evidence 类型（平行类型会让
+ * GoalEvaluator 的入参变成两套，P3 证据硬校验 gate 必须二选一，成本更高）。
+ */
+export type EvidenceReceiptSourceKind = 'thread_item' | 'workflow';
 
 // 证据收据引用：指向原始 ThreadItem 的轻量指针（不复制全量内容）
 export interface EvidenceReceiptRefs {
@@ -82,15 +100,24 @@ export interface EvidenceReceiptRefs {
   command?: string;                        // 执行的命令
   toolName?: string;                       // 工具名
   hash?: string;                           // 内容哈希
+  /** Workflow 证据：所属 WorkflowRunRecord id（对应 WorkflowEvidenceSource 两分支）。 */
+  runId?: string;
+  /** Workflow 证据：具体某次 agent() 调用 id；run 级证据缺省。 */
+  agentCallId?: string;
 }
 
 // 证据收据：只存索引和摘要，原始内容通过 itemId 从 ThreadStore 获取
 export interface EvidenceReceipt {
   id: string;
   threadId: ThreadId;
-  turnId: TurnId;
-  itemId: ItemId;                          // 指向原始 ThreadItem
-  harnessRunId: string;                    // 关联的 harness run ID
+  /** 来源形态判别；workflow 证据不绑定 turn/item（计划 §11.3）。 */
+  sourceKind: EvidenceReceiptSourceKind;
+  /** `sourceKind === 'workflow'` 时缺省（空串同样表示「无 turn 归属」，ledger 内部已按缺省处理）。 */
+  turnId?: TurnId;
+  /** 指向原始 ThreadItem；workflow 证据没有 ThreadItem，故缺省。 */
+  itemId?: ItemId;
+  /** 关联的 harness run ID；workflow 证据以 refs.runId 为主键，这里允许空串。 */
+  harnessRunId: string;
   kind: EvidenceReceiptKind;
   summary: string;                         // 简短摘要
   refs: EvidenceReceiptRefs;

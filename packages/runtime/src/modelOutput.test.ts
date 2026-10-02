@@ -25,7 +25,7 @@ describe('validateModelOutputItems', () => {
         type: 'assistant_message_final',
         itemId: 'a2',
         turnId: 'turn-2',
-        text: 'search_content\nE:\\langchain\\Nexus\\apps\\api\\src\n完成\nread_file\npackages\\bot\\src\\routes\\botRoute.ts\n完成',
+        text: 'search_content\nE:\\langchain\\Suanlizi\\apps\\api\\src\n完成\nread_file\npackages\\bot\\src\\routes\\botRoute.ts\n完成',
       },
     ]);
 
@@ -49,6 +49,29 @@ describe('validateModelOutputItems', () => {
     if (!result.ok) {
       expect(result.error.message).toContain('protocol');
     }
+  });
+
+  it('rejects Gitee flattened tool-call transcripts with name and arguments fields', () => {
+    const result = validateModelOutputItems([
+      {
+        type: 'assistant_message_final',
+        itemId: 'a-gitee',
+        turnId: 'turn-gitee',
+        text: [
+          '我继续处理。',
+          '',
+          '[工具调用]',
+          '名称: read_file',
+          '参数: {"filePath":"README.md"}',
+          '',
+          '[工具结果]',
+          '内容: ...',
+        ].join('\n'),
+      },
+    ]);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.message).toContain('protocol');
   });
 
   it('rejects redacted DingTalk tool history text when the model repeats it as assistant content', () => {

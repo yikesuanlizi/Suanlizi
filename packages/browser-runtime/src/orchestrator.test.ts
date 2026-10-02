@@ -13,8 +13,8 @@ import type {
   BrowserTaskState,
   RunTraceObservation,
   TaskBudget,
-} from '@nexus/protocol';
-import { normalizeAccessPolicyConfig } from '@nexus/protocol';
+} from '@suanlizi/protocol';
+import { normalizeAccessPolicyConfig } from '@suanlizi/protocol';
 import { BrowserPolicyEngine } from './policy.js';
 import { BrowserTaskMachine, BudgetExceededError, DEFAULT_TASK_BUDGET } from './taskMachine.js';
 import { BrowserTraceRecorder } from './trace.js';

@@ -5,9 +5,9 @@
 //   delivered Phase 0/1 pieces into one closed loop (architecture §7 decision
 //   & execution cycle: policy → budget → ledger prepare → execute → verify →
 //   commit/uncertain/failed → TaskEvent+Trace → continue/pause/finish).
-// 本包只依赖 @nexus/protocol 与本包内部件；不持有任何 UI/桌面端逻辑，
+// 本包只依赖 @suanlizi/protocol 与本包内部件；不持有任何 UI/桌面端逻辑，
 // 审批确认通过注入的 resolveApproval 回调交给宿主（Phase 1 桌面端）。
-// — English: depends only on @nexus/protocol and this package's own pieces;
+// — English: depends only on @suanlizi/protocol and this package's own pieces;
 //   approval confirmation is delegated to the host via resolveApproval.
 // 错误恢复策略（架构文档 §9.4）：transient 有上限退避重试、element 重新观测、
 // policy 不重试、side_effect/uncertain 对账不能盲目重试——runAction 在
@@ -26,7 +26,7 @@ import type {
   BrowserTaskState,
   HumanRequest,
   Observation,
-} from '@nexus/protocol';
+} from '@suanlizi/protocol';
 import { evaluateDownload, type DownloadSpec } from './download.js';
 import type { BrowserPolicyEngine } from './policy.js';
 import type { BrowserTaskMachine } from './taskMachine.js';

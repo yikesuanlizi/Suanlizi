@@ -80,7 +80,7 @@ export class NativeFetchWebProvider implements WebProvider {
       try {
         const response = await fetch(source.url(request.query), {
           headers: {
-            'user-agent': 'Mozilla/5.0 Nexus/0.1',
+            'user-agent': 'Mozilla/5.0 Suanlizi/0.1',
             accept: 'text/html,application/xhtml+xml',
           },
           signal: request.signal,
@@ -104,7 +104,7 @@ export class NativeFetchWebProvider implements WebProvider {
     const url = parsePublicHttpUrl(request.url);
     const response = await fetch(url.toString(), {
       headers: {
-        'user-agent': 'Mozilla/5.0 Nexus/0.1',
+        'user-agent': 'Mozilla/5.0 Suanlizi/0.1',
         accept: 'text/html,application/xhtml+xml,text/plain,text/markdown,application/json;q=0.9,*/*;q=0.5',
       },
       signal: request.signal,

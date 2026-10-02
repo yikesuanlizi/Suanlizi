@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatSuanliziErrorMessage } from '@suanlizi/protocol';
 import type { Locale } from '../config/config.js';
 import { Icon } from './Icon.js';
 
@@ -64,7 +65,7 @@ export function OpsTaskAnchorCard({
         {task.reason ? (
           <span>
             <b>{text(locale, '原因', 'Reason')}</b>
-            {task.reason}
+            {formatSuanliziErrorMessage(undefined, task.reason, locale)}
           </span>
         ) : null}
         {task.summary ? <p>{task.summary}</p> : null}

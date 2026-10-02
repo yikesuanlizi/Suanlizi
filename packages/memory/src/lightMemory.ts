@@ -1,4 +1,4 @@
-import type { ThreadStore } from '@nexus/storage';
+import type { ThreadStore } from '@suanlizi/storage';
 
 export const LIGHT_MEMORY_KEY = 'memory.light.v1';
 

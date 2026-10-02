@@ -1,4 +1,6 @@
 import type React from 'react';
+import { formatSuanliziErrorMessage } from '@suanlizi/protocol';
+import { ErrorNotice } from '../features/chat/ErrorNotice.js';
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -9,7 +11,7 @@ import { itemHeading } from '../features/chat/threadView.js';
 import { normalizeMarkdownForDisplay } from '../features/chat/markdownText.js';
 import { buildTurnFileSummary, type TurnChangedFileSummaryEntry, type TurnFileSummaryEntry } from '../features/chat/turnFileSummary.js';
 import type { ThreadItem } from '../shared/types.js';
-import { childActivityForCollabItem } from '../features/agents/subagentActivity.js';
+import { childActivityForCollabItem, type SubagentDirectoryEntry } from '../features/agents/subagentActivity.js';
 import { RobotMoodIcon, type RobotMoodVariant } from './RobotMoodIcon.js';
 import { UserAvatar } from './UserAvatar.js';
 // 英文说明: DiffView renders red/green line-level diffs for file_change items
@@ -66,23 +68,48 @@ export function terminalTimestampForItem(
   assistantTimestamp?: string,
 ): string | null {
   const start = item.timestamp ? Date.parse(item.timestamp) : Number.NaN;
-  const laterItem = items
+  const isAfterStart = (value: string | null | undefined): value is string => {
+    const parsed = value ? Date.parse(value) : Number.NaN;
+    return Number.isFinite(parsed) && (!Number.isFinite(start) || parsed > start);
+  };
+  const completedCandidates = items
+    .map((candidate) => (candidate as ThreadItem & { completedAt?: string | null }).completedAt)
+    .filter(isAfterStart)
+    .sort((a, b) => Date.parse(a) - Date.parse(b));
+  if (completedCandidates.length > 0) return completedCandidates.at(-1) ?? null;
+  const laterStart = items
     .slice(Math.max(0, items.indexOf(item) + 1))
     .map((candidate) => candidate.timestamp)
-    .find((timestamp) => {
-      const parsed = timestamp ? Date.parse(timestamp) : Number.NaN;
-      return Number.isFinite(parsed) && (!Number.isFinite(start) || parsed > start);
-    });
-  if (laterItem) return laterItem;
-  if (turnCompletedAt && Number.isFinite(Date.parse(turnCompletedAt)) && (!Number.isFinite(start) || Date.parse(turnCompletedAt) > start)) return turnCompletedAt;
-  if (assistantTimestamp && Number.isFinite(Date.parse(assistantTimestamp)) && (!Number.isFinite(start) || Date.parse(assistantTimestamp) > start)) return assistantTimestamp;
-  const itemCompletedAt = (item as ThreadItem & { completedAt?: string | null }).completedAt;
-  return itemCompletedAt && Number.isFinite(Date.parse(itemCompletedAt)) && (!Number.isFinite(start) || Date.parse(itemCompletedAt) > start) ? itemCompletedAt : null;
+    .filter(isAfterStart)
+    .sort((a, b) => Date.parse(a) - Date.parse(b))
+    .at(-1);
+  if (laterStart) return laterStart;
+  if (isAfterStart(turnCompletedAt)) return turnCompletedAt;
+  if (isAfterStart(assistantTimestamp)) return assistantTimestamp;
+  return null;
 }
 
 function formatElapsed(ms: number): string {
-  if (ms < 1000) return '0s';
-  return `${Math.round(ms / 1000)}s`;
+  if (ms < 1000) return '<1s';
+  // 命令/子 Agent 可能运行几十分钟甚至更久，分/小时级要可读。
+  // — Chinese: long-running commands can take minutes or hours; format accordingly.
+  const totalSeconds = Math.round(ms / 1000);
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes < 60) return seconds > 0 ? `${minutes}m${seconds}s` : `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const restMinutes = minutes % 60;
+  return restMinutes > 0 ? `${hours}h${restMinutes}m` : `${hours}h`;
+}
+
+function isTimedItem(item: ThreadItem): boolean {
+  return item.type === 'tool_call'
+    || item.type === 'collab_tool_call'
+    || item.type === 'mcp_tool_call'
+    || item.type === 'command_execution'
+    || item.type === 'context_compaction'
+    || item.type === 'file_change';
 }
 
 export function ItemView({
@@ -96,6 +123,10 @@ export function ItemView({
   onOpenFile,
   userAvatarId,
   customUserAvatarDataUrl,
+  childActivityByThread = {},
+  directory = {},
+  onOpenAgent,
+  onPreviewCommand,
 }: {
   item: ThreadItem;
   locale: Locale;
@@ -111,9 +142,24 @@ export function ItemView({
   onOpenFile?: (path: string) => void;
   userAvatarId?: string;
   customUserAvatarDataUrl?: string;
+  childActivityByThread?: Record<string, ThreadItem[]>;
+  /** threadId → 子 agent 目录条目（label/status/currentAction），供 Agent 行展示 */
+  directory?: Record<string, SubagentDirectoryEntry>;
+  /** 点击气泡里的 agent 名字时调用，打开右侧详情 */
+  onOpenAgent?: (threadId: string) => void;
+  /** 点击命令块的"终端"按钮时调用：右侧命令终端面板实时观看该命令输出 */
+  onPreviewCommand?: (itemId: string) => void;
 }) {
   const heading = itemHeading(item, locale);
   const gitNexusView = useGitNexusView(item);
+  const timedItem = isTimedItem(item);
+  // Keep this hook unconditional so a streamed row can update lifecycle
+  // fields without changing the hook order of its list component.
+  const elapsedMs = useElapsedMs(
+    item.timestamp,
+    timedItem ? item.status ?? 'completed' : 'completed',
+    terminalTimestampForItem(item, [item], (item as ThreadItem & { completedAt?: string | null }).completedAt),
+  );
   if (item.type === 'user_message') {
     return (
       <MessageFrame
@@ -151,25 +197,31 @@ export function ItemView({
     );
   }
   if (item.type === 'reasoning') {
-    return <ReasoningDetails item={item} locale={locale} onCopy={onCopy} />;
+    return <ReasoningDetails item={item} locale={locale} onCopy={onCopy} active={item.status === 'in_progress'} />;
   }
   if (
     item.type === 'tool_call'
-    || item.type === 'collab_tool_call'
     || item.type === 'mcp_tool_call'
-    || item.type === 'command_execution'
     || item.type === 'context_compaction'
   ) {
     const toolSummary = summarizeToolItem(item, locale);
+  // 完成后的折叠行只保留工具名和状态，不泄露具体命令/路径；展开详情仍可查看完整调用。
+  // — English: collapsed completed rows show the tool label only; details remain expandable.
+  const completedOnly = item.status !== 'in_progress';
+  if (completedOnly) {
+    toolSummary.value = '';
+    toolSummary.meta = '';
+  }
     return (
-      <details className="message tool">
+      <details className="message tool" open={item.status === 'in_progress' ? true : undefined}>
         <summary className="toolSummary">
+          {toolSummary.status ? <span className={`toolSummaryStatus ${item.status ?? ''}`} title={locale === 'zh' ? '工具状态' : 'Tool status'} aria-label={locale === 'zh' ? '工具状态' : 'Tool status'}>{toolSummary.status}</span> : null}
           <span className="toolSummaryMain">
             <strong className="toolSummaryName">{toolSummary.name}</strong>
             {toolSummary.value ? <span className="toolSummaryValue">{toolSummary.value}</span> : null}
             {toolSummary.meta ? <span className="toolSummaryMeta">{toolSummary.meta}</span> : null}
           </span>
-          {toolSummary.status ? <span className="toolSummaryStatus">{toolSummary.status}</span> : null}
+          {elapsedMs !== null ? <span className="toolElapsed" title={locale === 'zh' ? '调用时长' : 'elapsed'}>{formatElapsed(elapsedMs)}</span> : null}
         </summary>
         <ToolItemActions item={item} locale={locale} onPreviewFile={onPreviewFile} onOpenFile={onOpenFile} />
         {gitNexusView
@@ -178,13 +230,26 @@ export function ItemView({
       </details>
     );
   }
+  if (item.type === 'command_execution') {
+    return (
+      <CommandExecutionBlock
+        elapsedMs={elapsedMs}
+        item={item}
+        locale={locale}
+        onOpenFile={onOpenFile}
+        onPreviewCommand={onPreviewCommand}
+        onPreviewFile={onPreviewFile}
+      />
+    );
+  }
   if (item.type === 'file_change') {
     // 英文说明: shared/types ThreadItem.hunks omits addedLinesContent/removedLinesContent;
     // 中文说明: shared/types 的 ThreadItem.hunks 未声明行内容字段，运行时携带，用类型断言对齐
     const hunks = (item.hunks ?? []) as DiffViewHunk[];
     return (
-      <details className="message tool">
+      <details className="message tool" open={item.status === 'in_progress' ? true : undefined}>
         <summary>
+          {formatToolStatus(item.status, locale) ? <span className={`toolSummaryStatus ${item.status ?? ''}`} title={locale === 'zh' ? '工具状态' : 'Tool status'} aria-label={locale === 'zh' ? '工具状态' : 'Tool status'}>{formatToolStatus(item.status, locale)}</span> : null}
           <strong>{heading.title}</strong>
           <span>{heading.detail}</span>
         </summary>
@@ -197,18 +262,36 @@ export function ItemView({
     return <RollbackConflictBlock item={item} locale={locale} />;
   }
   if (item.type === 'error') {
+    const rawErrorText = item.message ?? item.text ?? item.error?.message ?? '';
     return (
       <MessageFrame
         align="agent"
         item={item}
         locale={locale}
-        text={item.message ?? ''}
+        text={rawErrorText}
         action="branch"
         onBranch={onBranch}
         onCopy={onCopy}
       >
-        <article className="message error" role="alert"><Icon name="alert" /><span>{item.message}</span></article>
+        <ErrorNotice
+          info={item.info}
+          message={rawErrorText}
+          detail={item.detail}
+          locale={locale}
+          className="message error"
+        />
       </MessageFrame>
+    );
+  }
+  if (item.type === 'collab_tool_call') {
+    return (
+      <AgentTurnRow
+        item={item}
+        locale={locale}
+        directory={directory}
+        childActivity={childActivityForCollabItem(item, childActivityByThread)}
+        onOpenAgent={onOpenAgent}
+      />
     );
   }
   return <InternalItemDetails item={item} locale={locale} />;
@@ -217,6 +300,18 @@ export function ItemView({
 function PersistedAttachments({ attachments }: { attachments?: Array<{ name: string; path: string; mimeType?: string; url?: string }> }) {
   if (!attachments?.length) return null;
   return <div className="persistedAttachmentStrip">{attachments.map((attachment) => attachment.url ? <img key={attachment.path} src={attachment.url} alt={attachment.name} title={attachment.name} /> : <span key={attachment.path}>{attachment.name}</span>)}</div>;
+}
+
+/** 等待回合首个可见事件时的轻量状态；收到思考、工具或回复后由主流程移除。 */
+export function TurnPreparingIndicator({ locale }: { locale: Locale }) {
+  return (
+    <div className="turnPreparingBlock" role="status" aria-live="polite">
+      <span className="turnPreparingIndicator">
+        <span className="turnPreparingDots" aria-hidden="true"><i /><i /><i /></span>
+        <span>{locale === 'zh' ? '正在准备回复…' : 'Preparing response…'}</span>
+      </span>
+    </div>
+  );
 }
 
 export function AssistantTurnView({
@@ -230,6 +325,9 @@ export function AssistantTurnView({
   onOpenFile,
   childActivityByThread = {},
   workspaceRoot = '',
+  directory = {},
+  onOpenAgent,
+  onPreviewCommand,
 }: {
   group: AssistantTurnGroup;
   locale: Locale;
@@ -245,22 +343,42 @@ export function AssistantTurnView({
   onOpenFile?: (path: string) => void;
   childActivityByThread?: Record<string, ThreadItem[]>;
   workspaceRoot?: string;
+  /** threadId → 子 agent 目录条目，供气泡底部 Agent 行展示 */
+  directory?: Record<string, SubagentDirectoryEntry>;
+  /** 点击气泡里的 agent 名字时调用，打开右侧详情 */
+  onOpenAgent?: (threadId: string) => void;
+  /** 点击命令块的"终端"按钮时调用：右侧命令终端面板实时观看该命令输出 */
+  onPreviewCommand?: (itemId: string) => void;
 }) {
   const agentText = group.items
     .filter((item) => item.type === 'agent_message' && item.text)
     .map((item) => sanitizeAgentMessageTextForDisplay(item.text ?? '', locale))
     .join('\n\n');
   const errorText = group.items
-    .filter((item) => item.type === 'error' && item.message)
-    .map((item) => item.message)
+    .filter((item) => item.type === 'error')
+    .map((item) => item.message ?? item.text ?? item.error?.message ?? '')
+    .filter(Boolean)
     .join('\n\n');
   const text = agentText || errorText;
   const timestamp = group.timestamp ?? group.items.find((item) => item.timestamp)?.timestamp ?? new Date().toISOString();
   const assistantTimestamp = [...group.items].reverse().find((item) => item.type === 'agent_message' && item.timestamp)?.timestamp;
   const hasRunningItem = group.items.some((item) => item.status === 'in_progress');
+  const live = group.status === 'running' || hasRunningItem;
   const agentItems = group.items.filter((item) => item.type === 'agent_message' && item.text);
   const streamingAgentItemId = [...agentItems].reverse().find((item) => item.status === 'in_progress')?.id
-    ?? ((group.status === 'running' || hasRunningItem) ? agentItems.at(-1)?.id : undefined);
+    ?? (live ? agentItems.at(-1)?.id : undefined);
+  // 只展开当前正在运行的思考/工具块；开始下一个块后，前一个自动收起。
+  const activeExpandableId = live
+    ? [...group.items].reverse().find((item) => {
+        if (item.type === 'reasoning') {
+          // The latest reasoning block stays active through its completed event;
+          // otherwise the panel flashes closed before the next model/tool output.
+          const status = (item as ThreadItem & { status?: string }).status;
+          return !status || status === 'in_progress' || Boolean(item.completedAt);
+        }
+        return isToolItem(item) && item.status === 'in_progress';
+      })?.id
+    : undefined;
   return (
     <MessageFrame
       align="agent"
@@ -269,7 +387,7 @@ export function AssistantTurnView({
         type: 'agent_message',
         turnId: group.turnId,
         text,
-        status: group.status === 'running' || hasRunningItem ? 'in_progress' : group.status,
+        status: live ? 'in_progress' : group.status,
         timestamp,
       }}
       locale={locale}
@@ -296,38 +414,75 @@ export function AssistantTurnView({
             ) : null;
           }
           if (item.type === 'reasoning') {
-            return <ReasoningDetails item={item} key={item.id} locale={locale} onCopy={onCopy} endIso={terminalTimestampForItem(item, group.items, group.completedAt, assistantTimestamp)} />;
+            // 回合进行中所有思考块保持展开（固定比例高度内滚动），
+            // 回合结束才统一折叠；active 只决定当前流式块的高亮。
+            // — Chinese: while the turn is live, every reasoning block stays open
+            //   (scrolling inside a capped height); they fold together when the turn ends.
+            return <ReasoningDetails item={item} key={item.id} locale={locale} onCopy={onCopy} active={item.id === activeExpandableId} keepOpen={false} endIso={terminalTimestampForItem(item, group.items, group.completedAt, assistantTimestamp)} />;
           }
           if (
             isToolItem(item)
           ) {
             if (isToolItem(group.items[index - 1])) return null;
-            const batch = group.items.slice(index).filter((candidate, offset, source) => {
-              if (offset === 0) return true;
-              return isToolItem(source[offset - 1]) && isToolItem(candidate);
-            });
+            const batch = takeContiguousToolItems(group.items, index);
             return (
               <ToolBatchDetails
                 childActivityByThread={childActivityByThread}
                 items={batch}
                 key={`tool-batch-${item.id}`}
                 locale={locale}
+                activeId={activeExpandableId}
                 completedAt={group.completedAt}
                 assistantTimestamp={assistantTimestamp}
                 onPreviewFile={onPreviewFile}
                 onOpenFile={onOpenFile}
+                onPreviewCommand={onPreviewCommand}
               />
             );
+          }
+          if (item.type === 'command_execution') {
+            return <CommandExecutionBlock
+              elapsedMs={useElapsedMs(
+                item.timestamp,
+                item.status ?? 'completed',
+                terminalTimestampForItem(item, group.items, group.completedAt, assistantTimestamp),
+              )}
+              item={item}
+              key={item.id}
+              locale={locale}
+              onOpenFile={onOpenFile}
+              onPreviewCommand={onPreviewCommand}
+              onPreviewFile={onPreviewFile}
+            />;
           }
           if (item.type === 'rollback_conflict') {
             return <RollbackConflictBlock item={item} locale={locale} key={item.id} />;
           }
+          if (item.type === 'collab_tool_call') {
+            return <AgentTurnRow
+              childActivity={childActivityForCollabItem(item, childActivityByThread)}
+              directory={directory}
+              item={item}
+              key={item.id}
+              locale={locale}
+              onOpenAgent={onOpenAgent}
+            />;
+          }
           if (item.type === 'error') {
-            return <div className="assistantTurnError" role="alert" key={item.id}><Icon name="alert" /><span>{item.message}</span></div>;
+            return (
+              <ErrorNotice
+                info={item.info}
+                message={item.message ?? item.text ?? item.error?.message}
+                detail={item.detail}
+                locale={locale}
+                className="assistantTurnError"
+                key={item.id}
+              />
+            );
           }
           return <InternalItemDetails item={item} key={item.id} locale={locale} />;
         })}
-        <TurnFileSummaryBlock items={group.items as ThreadItem[]} locale={locale} onPreviewFile={onPreviewFile} workspaceRoot={workspaceRoot} />
+        {!live ? <TurnFileSummaryBlock items={group.items as ThreadItem[]} locale={locale} onPreviewFile={onPreviewFile} workspaceRoot={workspaceRoot} /> : null}
       </article>
     </MessageFrame>
   );
@@ -337,31 +492,76 @@ function ReasoningDetails({
   item,
   locale,
   onCopy,
+  active = false,
   endIso,
+  keepOpen = false,
 }: {
   item: ThreadItem;
   locale: Locale;
   onCopy?: (text: string) => void;
+  active?: boolean;
   endIso?: string | null;
+  /** 回合进行中保持展开：思考结束不折叠，等整个回合输出完成才折叠。 */
+  // — Chinese: keep open while the turn is live — a finished reasoning block
+  //   only folds when the whole turn completes, not when its own segment ends.
+  keepOpen?: boolean;
 }) {
   const text = item.text?.trim();
   if (!text) return <InternalItemDetails item={item} locale={locale} />;
   // 思考时长（实时/冻结），跟在 THINK 小字后面。
   // — English: reasoning elapsed (live/frozen), right after the THINK label.
-  const elapsedMs = useElapsedMs(item.timestamp, item.status ?? 'completed', endIso);
+  const elapsedMs = useElapsedMs(
+    item.timestamp,
+    item.status ?? 'completed',
+    (item as ThreadItem & { completedAt?: string | null }).completedAt ?? endIso,
+  );
+  const isCompactionProgress = item.id.startsWith('compaction-progress:');
+  // 父级统一决定当前活跃块；否则上一个仍未收到终态的块会继续展开。
+  const isLive = active || keepOpen;
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const userScrolledRef = useRef(false);
+  const lastTextLengthRef = useRef(text.length);
+  // 流式追加时自动跟随滚动到底部；用户手动上滑后停止跟随，用户操作优先。
+  // — Chinese: auto-follow streaming output; once the user scrolls up, stop
+  //   following until they scroll back to the bottom. User interaction wins.
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (!body || !isLive) return;
+    if (text.length === lastTextLengthRef.current) return;
+    lastTextLengthRef.current = text.length;
+    if (userScrolledRef.current) return;
+    body.scrollTop = body.scrollHeight;
+  }, [text, isLive]);
+  useEffect(() => {
+    if (!isLive) userScrolledRef.current = false;
+  }, [isLive]);
+  const handleBodyScroll = () => {
+    const body = bodyRef.current;
+    if (!body) return;
+    const distanceFromBottom = body.scrollHeight - body.scrollTop - body.clientHeight;
+    userScrolledRef.current = distanceFromBottom > 24;
+  };
+  const compactionLabel = item.status === 'in_progress'
+    ? (locale === 'zh' ? '上下文正在压缩' : 'Compacting context')
+    : item.status === 'failed'
+      ? (locale === 'zh' ? '上下文压缩失败' : 'Context compaction failed')
+      : (locale === 'zh' ? '上下文压缩完成' : 'Context compaction completed');
   return (
     <details
       className="reasoningDetails"
-      data-running={item.status === 'in_progress' ? 'true' : undefined}
+      data-running={isLive ? 'true' : undefined}
+      open={isLive ? true : undefined}
     >
       <summary>
-        {elapsedMs !== null ? (
+        {isCompactionProgress ? (
+          <span className="reasoningElapsed">{compactionLabel}</span>
+        ) : elapsedMs !== null ? (
           <span className="reasoningElapsed">
             {locale === 'zh' ? `思考 ${formatElapsed(elapsedMs)}` : `think ${formatElapsed(elapsedMs)}`}
           </span>
         ) : null}
       </summary>
-      <div className="reasoningDetailsBody"><RichMessageText text={text} onCopy={onCopy} /></div>
+      <div className="reasoningDetailsBody" ref={bodyRef} onScroll={handleBodyScroll}><RichMessageText text={text} onCopy={onCopy} /></div>
     </details>
   );
 }
@@ -369,30 +569,134 @@ function ReasoningDetails({
 function isToolItem(item: ThreadItem | undefined): boolean {
   return Boolean(item && (
     item.type === 'tool_call'
-    || item.type === 'collab_tool_call'
     || item.type === 'mcp_tool_call'
-    || item.type === 'command_execution'
     || item.type === 'context_compaction'
     || item.type === 'file_change'
   ));
+}
+
+/** collab_tool_call 是子 Agent 委派条目，从工具批拆出，在气泡正文底部单独渲染。 */
+export function isAgentItem(item: ThreadItem | undefined): boolean {
+  return Boolean(item && item.type === 'collab_tool_call');
+}
+
+/**
+ * 命令执行块：命令本身始终可见（摘要行不折叠），只有输出可以收起。
+ * 长输出默认折叠显示前几行，展开后自动滚动跟随；失败时摘要行直接带出错误摘要。
+ * — Chinese: the command line itself never folds; only its output folds.
+ */
+function CommandExecutionBlock({
+  item,
+  locale,
+  elapsedMs,
+  onPreviewFile,
+  onOpenFile,
+  onPreviewCommand,
+}: {
+  item: ThreadItem;
+  locale: Locale;
+  elapsedMs: number | null;
+  onPreviewFile?: (path: string) => void;
+  onOpenFile?: (path: string) => void;
+  /** 点击"终端预览"时调用：把命令输出投到右侧命令终端面板实时观看。 */
+  // — Chinese: open the command's live output in the right command-terminal pane.
+  onPreviewCommand?: (itemId: string) => void;
+}) {
+  const zh = locale === 'zh';
+  const failureSummary = toolFailureSummary(item, locale);
+  const command = String(item.command ?? '').trim();
+  // 流式预览优先：进行中的命令用 liveOutput（实时增量），完成后用最终 aggregatedOutput。
+  // — Chinese: prefer the live streaming buffer while running; the final
+  //   aggregated output is authoritative once completed.
+  const output = String((item as ThreadItem & { liveOutput?: string }).liveOutput ?? item.aggregatedOutput ?? '').replace(/\s+$/, '');
+  const outputLines = output ? output.split(/\r?\n/) : [];
+  const COLLAPSED_LINE_COUNT = 8;
+  const statusLabel = formatToolStatus(item.status, locale);
+  const outputRef = useRef<HTMLPreElement | null>(null);
+  const userScrolledRef = useRef(false);
+  // 终端式跟随：输出增量时自动滚到底；用户上滑后停止跟随，滚回底部恢复。
+  // — Chinese: auto-follow the tail like a terminal; user scroll-up pauses following.
+  useEffect(() => {
+    const pre = outputRef.current;
+    if (!pre) return;
+    if (userScrolledRef.current) return;
+    pre.scrollTop = pre.scrollHeight;
+  }, [output]);
+  const handleOutputScroll = () => {
+    const pre = outputRef.current;
+    if (!pre) return;
+    const distanceFromBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight;
+    userScrolledRef.current = distanceFromBottom > 24;
+  };
+  return (
+    <div className={`commandExecBlock${item.status === 'failed' ? ' failed' : ''}`} data-status={item.status ?? undefined}>
+      <div className="commandExecHead">
+        {statusLabel ? <span className={`toolSummaryStatus ${item.status ?? ''}`} aria-hidden="true">{statusLabel}</span> : null}
+        <code className="commandExecCmd" title={command}>{command || (zh ? '(空命令)' : '(empty command)')}</code>
+        {elapsedMs !== null ? (
+          <span className="toolElapsed">
+            {item.status === 'in_progress'
+              ? (zh ? `已用时 ${formatElapsed(elapsedMs)}` : `${formatElapsed(elapsedMs)} elapsed`)
+              : (zh ? `用时 ${formatElapsed(elapsedMs)}` : formatElapsed(elapsedMs))}
+          </span>
+        ) : null}
+        {onPreviewCommand && output ? (
+          <button
+            type="button"
+            className="commandExecPreviewBtn"
+            title={zh ? '在右侧终端面板查看' : 'View in the right terminal pane'}
+            aria-label={zh ? '在右侧终端面板查看' : 'View in the right terminal pane'}
+            onClick={() => onPreviewCommand(item.id)}
+          >
+            <Icon name="terminal" />
+            <span>{zh ? '终端' : 'Terminal'}</span>
+          </button>
+        ) : null}
+      </div>
+      {failureSummary ? <div className="toolSummaryError" title={failureSummary}>{failureSummary}</div> : null}
+      {outputLines.length > 0 ? (
+        outputLines.length > COLLAPSED_LINE_COUNT ? (
+          <details className="commandExecOutput" open={item.status === 'in_progress' ? true : undefined}>
+            <summary>
+              <span>{zh ? `输出 ${outputLines.length} 行` : `${outputLines.length} lines`}</span>
+              <span className="commandExecOutputPeek" aria-hidden="true">{outputLines.slice(0, COLLAPSED_LINE_COUNT).join(' ⏎ ')} …</span>
+            </summary>
+            <pre ref={outputRef} onScroll={handleOutputScroll}>{output}</pre>
+          </details>
+        ) : (
+          <pre className="commandExecOutputShort" ref={outputRef} onScroll={handleOutputScroll}>{output}</pre>
+        )
+      ) : item.status === 'in_progress' ? (
+        <div className="commandExecPending">{zh ? '等待输出…' : 'Waiting for output…'}</div>
+      ) : null}
+      {item.exitCode != null && item.exitCode !== 0 ? (
+        <div className="commandExecExit">{zh ? `退出码 ${item.exitCode}` : `exit code ${item.exitCode}`}</div>
+      ) : null}
+      <ToolItemActions item={item} locale={locale} onPreviewFile={onPreviewFile} onOpenFile={onOpenFile} />
+    </div>
+  );
 }
 
 function ToolBatchDetails({
   childActivityByThread,
   items,
   locale,
+  activeId,
   completedAt,
   assistantTimestamp,
   onPreviewFile,
   onOpenFile,
+  onPreviewCommand,
 }: {
   childActivityByThread: Record<string, ThreadItem[]>;
   items: ThreadItem[];
   locale: Locale;
+  activeId?: string;
   completedAt?: string | null;
   assistantTimestamp?: string;
   onPreviewFile?: (path: string) => void;
   onOpenFile?: (path: string) => void;
+  onPreviewCommand?: (itemId: string) => void;
 }) {
   // 批统计：工具数量 + 批总时长（首工具开始 → 末工具完成/实时）。
   // 思考时长显示在 THINK 折叠旁（ReasoningDetails），不混入工具批。
@@ -408,11 +712,27 @@ function ToolBatchDetails({
   const stats = batchElapsedMs !== null
     ? (zh ? `共 ${items.length} 个 · ${formatElapsed(batchElapsedMs)}` : `${items.length} calls · ${formatElapsed(batchElapsedMs)}`)
     : (zh ? `共 ${items.length} 个` : `${items.length} calls`);
+  const failedCount = items.filter((item) => item.status === 'failed').length;
+  const failureStats = failedCount > 0 ? (zh ? ` · ${failedCount} 个失败` : ` · ${failedCount} failed`) : '';
+  // 批折叠时也保证"正在做什么"可见：摘要行带出运行中/最近一个工具名。
+  // — Chinese: even folded, the batch summary peeks the running/latest tool name.
+  const peekItem = items.find((item) => item.status === 'in_progress') ?? items[items.length - 1];
+  const peekLabel = peekItem ? summarizeToolItem(peekItem, locale) : null;
+  if (peekLabel && peekItem?.status !== 'in_progress') {
+    peekLabel.value = '';
+    peekLabel.meta = '';
+  }
   return (
-    <details className="toolBatchDetails">
+    <details className="toolBatchDetails" open={Boolean(activeId && items.some((item) => item.id === activeId)) || anyRunning ? true : undefined}>
       <summary aria-label={zh ? `${items.length} 个工具调用` : `${items.length} tool calls`}>
         <span aria-hidden="true" className="toolBatchIcon"><Icon name="wrench" /></span>
-        <span aria-hidden="true" className="toolBatchStats">{stats}</span>
+        <span aria-hidden="true" className="toolBatchStats">{stats}{failureStats}</span>
+        {peekLabel ? (
+          <span aria-hidden="true" className="toolBatchPeek" title={`${peekLabel.name} ${peekLabel.value}`}>
+            <strong>{peekLabel.name}</strong>
+            {peekLabel.value ? <span>{peekLabel.value}</span> : null}
+          </span>
+        ) : null}
         <span aria-hidden="true" className="toolBatchChevron"><Icon name="chevronRight" /></span>
       </summary>
       <div className="toolBatchItems">
@@ -423,8 +743,12 @@ function ToolBatchDetails({
             key={item.id}
             locale={locale}
             compact
+            active={item.id === activeId}
+            completedAt={completedAt}
+            assistantTimestamp={assistantTimestamp}
             onPreviewFile={onPreviewFile}
             onOpenFile={onOpenFile}
+            onPreviewCommand={onPreviewCommand}
           />
         ))}
       </div>
@@ -544,8 +868,10 @@ export function sanitizeAgentMessageTextForDisplay(text: string, locale: Locale)
 
 function findPlainTextToolTagIndex(text: string): number {
   const normalized = text.replace(/｜/g, '|');
-  const match = /<\|+(?:DSML\|+)?(?:tool_calls|invoke|parameter)/i.exec(normalized);
-  return match?.index ?? -1;
+  const tagMatch = /<\|+(?:DSML\|+)?(?:tool_calls|invoke|parameter)/i.exec(normalized);
+  const giteeMatch = /\[工具调用\][\s\S]{0,4000}?(?:名称|name)\s*[:：]\s*[\w./:-]+[\s\S]{0,4000}?(?:参数|arguments?|args)\s*[:：]/i.exec(text);
+  const indices = [tagMatch?.index, giteeMatch?.index].filter((value): value is number => value !== undefined);
+  return indices.length > 0 ? Math.min(...indices) : -1;
 }
 
 function RichMessageText({
@@ -875,6 +1201,10 @@ function ToolDetails({
   locale,
   onPreviewFile,
   onOpenFile,
+  onPreviewCommand,
+  completedAt,
+  assistantTimestamp,
+  active = false,
 }: {
   childItems?: ThreadItem[];
   compact?: boolean;
@@ -882,18 +1212,45 @@ function ToolDetails({
   locale: Locale;
   onPreviewFile?: (path: string) => void;
   onOpenFile?: (path: string) => void;
+  onPreviewCommand?: (itemId: string) => void;
+  completedAt?: string | null;
+  assistantTimestamp?: string;
+  active?: boolean;
 }) {
   const heading = itemHeading(item, locale);
-  const gitNexusView = useGitNexusView(item);
+    const gitNexusView = useGitNexusView(item);
+    const failureSummary = toolFailureSummary(item, locale);
+  const elapsedMs = useElapsedMs(
+    item.timestamp,
+    item.status ?? 'completed',
+    terminalTimestampForItem(
+      item,
+      [item],
+      (item as ThreadItem & { completedAt?: string | null }).completedAt ?? completedAt,
+      assistantTimestamp,
+    ),
+  );
+  if (item.type === 'command_execution') {
+    return <CommandExecutionBlock
+      elapsedMs={elapsedMs}
+      item={item}
+      locale={locale}
+      onOpenFile={onOpenFile}
+      onPreviewCommand={onPreviewCommand}
+      onPreviewFile={onPreviewFile}
+    />;
+  }
   if (item.type === 'file_change') {
     // 英文说明: shared/types ThreadItem.hunks omits addedLinesContent/removedLinesContent;
     // 中文说明: shared/types 的 ThreadItem.hunks 未声明行内容字段，运行时携带，用类型断言对齐
     const hunks = (item.hunks ?? []) as DiffViewHunk[];
     return (
-      <details className={compact ? 'message tool inlineTool' : 'message tool'}>
-        <summary>
-          <strong>{heading.title}</strong>
-          <span>{heading.detail}</span>
+      <details className={compact ? 'message tool inlineTool' : 'message tool'} open={active ? true : undefined}>
+        <summary className="toolSummary">
+          {formatToolStatus(item.status, locale) ? <span className={`toolSummaryStatus ${item.status ?? ''}`} title={locale === 'zh' ? '工具状态' : 'Tool status'} aria-label={locale === 'zh' ? '工具状态' : 'Tool status'}>{formatToolStatus(item.status, locale)}</span> : null}
+          <span className="toolSummaryMain"><strong className="toolSummaryName">{heading.title}</strong><span className="toolSummaryValue">{heading.detail}</span></span>
+          {failureSummary ? <span className="toolSummaryError" title={failureSummary}>{failureSummary}</span> : null}
+          {elapsedMs !== null ? <span className="toolElapsed" title={locale === 'zh' ? '调用时长' : 'elapsed'}>{formatElapsed(elapsedMs)}</span> : null}
         </summary>
         <ToolItemActions item={item} locale={locale} onPreviewFile={onPreviewFile} onOpenFile={onOpenFile} />
         <DiffView hunks={hunks} locale={locale} />
@@ -901,14 +1258,15 @@ function ToolDetails({
     );
   }
   const toolSummary = summarizeToolItem(item, locale);
-  const elapsedMs = useElapsedMs(item.timestamp, item.status ?? 'completed', (item as ThreadItem & { completedAt?: string | null }).completedAt);
   return (
-    <details className={compact ? 'message tool inlineTool' : 'message tool'}>
+    <details className={compact ? 'message tool inlineTool' : 'message tool'} open={active ? true : undefined}>
       <summary className="toolSummary">
+        {toolSummary.status ? <span className={`toolSummaryStatus ${item.status ?? ''}`} title={locale === 'zh' ? '工具状态' : 'Tool status'} aria-label={locale === 'zh' ? '工具状态' : 'Tool status'}>{toolSummary.status}</span> : null}
         <span className="toolSummaryMain">
           <strong className="toolSummaryName">{toolSummary.name}</strong>
           {toolSummary.value ? <span className="toolSummaryValue">{toolSummary.value}</span> : null}
           {toolSummary.meta ? <span className="toolSummaryMeta">{toolSummary.meta}</span> : null}
+          {failureSummary ? <span className="toolSummaryError" title={failureSummary}>{failureSummary}</span> : null}
         </span>
         {elapsedMs !== null ? (
           <span className="toolElapsed" title={locale === 'zh' ? '调用时长' : 'elapsed'}>
@@ -917,7 +1275,6 @@ function ToolDetails({
               : (locale === 'zh' ? `用时 ${formatElapsed(elapsedMs)}` : `${formatElapsed(elapsedMs)}`)}
           </span>
         ) : null}
-        {toolSummary.status ? <span className="toolSummaryStatus">{toolSummary.status}</span> : null}
       </summary>
       <RemoteAgentStream item={item} locale={locale} />
       <ToolItemActions item={item} locale={locale} onPreviewFile={onPreviewFile} onOpenFile={onOpenFile} />
@@ -1031,7 +1388,16 @@ function ChildActivityList({ items, locale }: { items: ThreadItem[]; locale: Loc
           );
         }
         if (item.type === 'error') {
-          return <div className="childActivityError" role="alert" key={item.id}><Icon name="alert" /><span>{item.message}</span></div>;
+          return (
+            <ErrorNotice
+              info={item.info}
+              message={item.message ?? item.text ?? item.error?.message}
+              detail={item.detail}
+              locale={locale}
+              className="childActivityError"
+              key={item.id}
+            />
+          );
         }
         return <ToolDetails item={item} locale={locale} key={item.id} compact />;
       })}
@@ -1079,7 +1445,7 @@ function MessageFrame({
   const regenerateTitle = locale === 'zh' ? '重新回答' : 'Regenerate response';
   const runAction = action === 'branch' ? onBranch : onRollback;
   const showActions = showActionRow && item.status !== 'in_progress';
-  const moodVariant = messageMoodVariant(item, text);
+  const moodVariant = messageMoodVariant(item);
   return (
     <div className={align === 'user' ? 'messageBlock user' : 'messageBlock agent'}>
       {align === 'agent' ? (
@@ -1130,7 +1496,7 @@ function MessageFrame({
   );
 }
 
-function messageMoodVariant(item: ThreadItem, text: string): RobotMoodVariant {
+function messageMoodVariant(item: ThreadItem): RobotMoodVariant {
   // 进行中不再播放 working/thinking 头像动画——流式输出旁已有 StreamingOutputIcon，
   // 避免同一气泡两个"思考"动画重复。失败/取消保留警示表情。
   // — English: no working/thinking avatar animation while in progress — the
@@ -1306,11 +1672,169 @@ function formatArgValue(value: unknown, key = ''): string {
 
 function formatToolStatus(status: string | undefined, locale: Locale): string {
   if (!status) return '';
-  if (locale !== 'zh') return status;
-  if (status === 'completed') return '完成';
-  if (status === 'in_progress') return '进行中';
-  if (status === 'failed') return '失败';
-  return status;
+  if (status === 'completed') return '✓';
+  if (status === 'in_progress') return '•';
+  if (status === 'failed') return '!';
+  if (status === 'cancelled' || status === 'canceled') return '×';
+  return locale === 'zh' ? '•' : '•';
+}
+
+function toolFailureSummary(item: ThreadItem, locale: Locale): string {
+  if (!('status' in item) || item.status !== 'failed') return '';
+  const candidate = item as ThreadItem & {
+    error?: { message?: string };
+    aggregatedOutput?: string;
+    exitCode?: number | null;
+  };
+  const message = candidate.error?.message?.trim();
+  if (message) {
+    const code = (candidate.error as { code?: string } | undefined)?.code?.trim();
+    return truncateInline(formatSuanliziErrorMessage((item as ThreadItem & { info?: Parameters<typeof formatSuanliziErrorMessage>[0] }).info, code ? `${code}: ${message}` : message, locale), 180);
+  }
+  const output = typeof candidate.aggregatedOutput === 'string'
+    ? candidate.aggregatedOutput.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).at(-1) ?? ''
+    : '';
+  if (output) return truncateInline(output, 180);
+  if (candidate.exitCode !== undefined && candidate.exitCode !== null) {
+    return locale === 'zh' ? `退出码 ${candidate.exitCode}` : `exit code ${candidate.exitCode}`;
+  }
+  return locale === 'zh' ? '工具调用失败' : 'Tool call failed';
+}
+
+function takeContiguousToolItems(items: ThreadItem[], start: number): ThreadItem[] {
+  const batch: ThreadItem[] = [];
+  for (let index = start; index < items.length && isToolItem(items[index]); index += 1) batch.push(items[index]);
+  return batch;
+}
+
+/** collab_tool_call 状态点颜色（与 workbench AgentTree 的语义一致） */
+function agentStatusColor(status: string | undefined): string {
+  if (status === 'running') return '#22c55e';
+  if (status === 'failed') return '#ef4444';
+  if (status === 'interrupted' || status === 'stale' || status === 'waiting') return '#f97316';
+  return '#94a3b8';
+}
+
+function isAgentRowLive(item: ThreadItem): boolean {
+  return item.status === 'in_progress' || item.agentStatus === 'running';
+}
+
+/**
+ * 气泡底部的子 Agent 行：进行中渲染为常显 live 行（不折叠，长正文也不会被掩盖），
+ * 已完成渲染为紧凑 chip。点击 agent 名字 → 打开右侧详情视图。
+ * — Chinese: sub-agent row at the bottom of an assistant bubble; live rows stay
+ *   expanded, finished agents collapse to a chip. Clicking the name opens the
+ *   right-hand detail view.
+ */
+function AgentTurnRow({
+  item,
+  locale,
+  directory,
+  childActivity,
+  onOpenAgent,
+}: {
+  item: ThreadItem;
+  locale: Locale;
+  directory: Record<string, SubagentDirectoryEntry>;
+  childActivity: ThreadItem[];
+  onOpenAgent?: (threadId: string) => void;
+}) {
+  const zh = locale === 'zh';
+  const threadId = item.newThreadId ?? item.receiverThreadId ?? '';
+  const entry = threadId ? directory[threadId] : undefined;
+  const label = entry?.label || item.prompt?.replace(/\s+/g, ' ').slice(0, 24) || (zh ? '子 Agent' : 'Sub-agent');
+  const live = isAgentRowLive(item);
+  const status = entry?.status ?? (live ? 'running' : item.agentStatus ?? item.status);
+  const elapsedMs = useElapsedMs(item.timestamp, live ? 'in_progress' : 'completed', (item as ThreadItem & { completedAt?: string | null }).completedAt);
+  const latestActivity = childActivity[childActivity.length - 1];
+  const currentAction = live
+    ? (entry?.currentAction || summarizeChildActivity(latestActivity, zh))
+    : summarizeChildActivity(latestActivity, zh) || item.prompt?.replace(/\s+/g, ' ').slice(0, 80) || '';
+  const instruction = item.prompt?.replace(/\s+/g, ' ').trim();
+  const nameButton = threadId && onOpenAgent ? (
+    <button
+      type="button"
+      className="agentNameButton"
+      title={zh ? '查看该 Agent 详情' : 'View agent details'}
+      aria-label={zh ? `查看 ${label} 详情` : `View ${label} details`}
+      onClick={() => onOpenAgent(threadId)}
+    >
+      {label}
+    </button>
+  ) : <strong className="agentNameText">{label}</strong>;
+
+  if (live) {
+    return (
+      <div className="turnAgentSection" data-agent-status={status}>
+        <div className="turnAgentLiveRow" role="status" aria-live="polite">
+          <span className="turnAgentStatusDot" style={{ backgroundColor: agentStatusColor(status) }} aria-hidden="true" />
+          {nameButton}
+          <span className="turnAgentAction" title={instruction || currentAction}>{currentAction || (zh ? '运行中…' : 'Running…')}</span>
+          {elapsedMs !== null ? <span className="toolElapsed">{formatElapsed(elapsedMs)}</span> : null}
+          <span className="turnAgentSpinner" aria-hidden="true"><i /><i /><i /></span>
+        </div>
+      </div>
+    );
+  }
+
+  const failed = status === 'failed' || item.status === 'failed';
+  return (
+    <div className="turnAgentSection" data-agent-status={status}>
+      <div className={`turnAgentChip${failed ? ' failed' : ''}`}>
+        <span className="turnAgentStatusDot" style={{ backgroundColor: agentStatusColor(status) }} aria-hidden="true" />
+        {nameButton}
+        {currentAction ? <span className="turnAgentAction" title={currentAction}>{currentAction}</span> : null}
+        {elapsedMs !== null ? <span className="toolElapsed">{formatElapsed(elapsedMs)}</span> : null}
+        {failed ? <span className="turnAgentFailedBadge">{zh ? '失败' : 'Failed'}</span> : null}
+      </div>
+      <RemoteAgentTrail item={item} locale={locale} />
+    </div>
+  );
+}
+
+/** 远程 Agent（spawn_remote_agent）的状态轨迹：收进小折叠，避免挤占正文。 */
+function RemoteAgentTrail({ item, locale }: { item: ThreadItem; locale: Locale }) {
+  if (item.type !== 'collab_tool_call' || item.tool !== 'spawn_remote_agent') return null;
+  const trail = item.remoteStatusTrail ?? [];
+  if (trail.length === 0) return null;
+  const zh = locale === 'zh';
+  return (
+    <details className="turnAgentRemoteTrail">
+      <summary>{zh ? `状态轨迹（${trail.length}）` : `Status trail (${trail.length})`}</summary>
+      {trail.map((entry, index) => (
+        <div className="turnAgentRemoteTrailEntry" key={`trail-${index}`}>
+          <span className="turnAgentRemoteTrailState">{entry.state}</span>
+          <span className="turnAgentRemoteTrailTime">{entry.timestamp}</span>
+          {entry.text ? <span className="turnAgentRemoteTrailText">{entry.text}</span> : null}
+        </div>
+      ))}
+    </details>
+  );
+}
+
+function summarizeChildActivity(item: ThreadItem | undefined, zh: boolean): string {
+  if (!item) return '';
+  switch (item.type) {
+    case 'tool_call':
+      return item.toolName || '';
+    case 'mcp_tool_call':
+      return `${item.server || 'mcp'}:${item.tool || 'tool'}`;
+    case 'command_execution':
+      return item.command?.replace(/\s+/g, ' ').slice(0, 60) || '';
+    case 'file_change': {
+      const firstPath = item.changes?.[0]?.path;
+      const name = firstPath ? firstPath.split(/[/\\]/).pop() : '';
+      return item.changes && item.changes.length > 1 && name ? `${name} +${item.changes.length - 1}` : (name || '');
+    }
+    case 'agent_message':
+      return item.text?.replace(/\s+/g, ' ').trim().slice(0, 60) || '';
+    case 'reasoning':
+      return zh ? '思考中…' : 'Thinking…';
+    case 'error':
+      return item.error?.message || item.message || (zh ? '出错' : 'Error');
+    default:
+      return '';
+  }
 }
 
 function truncateInline(value: string, maxLength: number): string {

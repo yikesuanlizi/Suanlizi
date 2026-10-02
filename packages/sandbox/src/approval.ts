@@ -1,5 +1,5 @@
 // 引入协议层的审批请求类型
-import type { ApprovalRequest, PersistentAccessScope, TemporaryAccessScope } from '@nexus/protocol';
+import type { ApprovalRequest, PersistentAccessScope, TemporaryAccessScope } from '@suanlizi/protocol';
 
 /**
  * Callback interface for Human-In-The-Loop approval.

@@ -15,7 +15,7 @@ import type {
   PlanStep,
   TaskBudget,
   TaskUsage,
-} from '@nexus/protocol';
+} from '@suanlizi/protocol';
 
 // 默认任务预算：步数/令牌/重规划/连续失败/时长/外部写入/下载字节上限
 // — English: default task budget — step/token/replan/consecutive-failure/duration/write/download caps

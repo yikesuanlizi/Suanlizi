@@ -51,7 +51,7 @@ async function startViteDev(): Promise<void> {
 function launchElectronDev() {
   return electron.launch({
     args: [MAIN_JS, '--disable-gpu'],
-    env: { ...process.env, NEXUS_ELECTRON_LOAD: 'dev', NEXUS_DISABLE_SINGLE_INSTANCE: '1', NEXUS_UI_URL: viteUiUrl },
+    env: { ...process.env, SUANLIZI_ELECTRON_LOAD: 'dev', SUANLIZI_DISABLE_SINGLE_INSTANCE: '1', SUANLIZI_UI_URL: viteUiUrl },
   });
 }
 
@@ -61,7 +61,7 @@ async function browserApi<T>(app: ElectronApplication, call: string, arg?: unkno
   const win = (await app.windows())[0] as Page;
   return win.evaluate(
     ([callExpr, argValue]) => {
-      const api = (window as unknown as { nexusDesktop: { browser: Record<string, (a: unknown) => Promise<unknown>> } }).nexusDesktop.browser;
+      const api = (window as unknown as { suanliziDesktop: { browser: Record<string, (a: unknown) => Promise<unknown>> } }).suanliziDesktop.browser;
       return api[callExpr](argValue) as Promise<unknown>;
     },
     [call, arg],

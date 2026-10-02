@@ -2,6 +2,7 @@
 // 设计目标：从 ThreadItem timeline + ThreadChildInfo 树派生三列工作台所需状态
 
 import type { ThreadChildInfo, ThreadItem } from '../../shared/types.js';
+import { formatSuanliziErrorMessage } from '@suanlizi/protocol';
 
 /** Agent 节点状态徽章 */
 export type AgentStatus = 'idle' | 'running' | 'completed' | 'failed' | 'waiting';
@@ -190,12 +191,12 @@ export function stageStatusFromItem(item: ThreadItem): StageStatus {
 /** 从 ThreadItem 派生阶段标题 */
 export function stageTitleFromItem(item: ThreadItem, locale: 'zh' | 'en'): string {
   const typeLabel = stageTypeLabel(stageTypeFromItem(item.type), locale);
-  const detail = itemDetailText(item);
+  const detail = itemDetailText(item, locale);
   return detail ? `${typeLabel}: ${detail}` : typeLabel;
 }
 
 /** 提取 item 的简要描述文本 */
-function itemDetailText(item: ThreadItem): string {
+function itemDetailText(item: ThreadItem, locale: 'zh' | 'en' = 'zh'): string {
   if (item.type === 'tool_call' || item.type === 'mcp_tool_call') {
     return item.toolName || item.tool || '';
   }
@@ -218,7 +219,7 @@ function itemDetailText(item: ThreadItem): string {
     return total > 0 ? `${done}/${total}` : '';
   }
   if (item.type === 'error') {
-    return item.error?.message ? truncate(item.error.message, 40) : '';
+    return item.error?.message ? truncate(formatSuanliziErrorMessage(item.info, item.error.message, locale), 40) : '';
   }
   if (item.type === 'context_compaction') {
     return item.summary ? String(item.summary).slice(0, 40) : '';
@@ -280,7 +281,7 @@ function extractTokenUsage(item: ThreadItem): { input: number; output: number; t
 }
 
 /** 从 StageNode 构建 StageDetail */
-export function buildStageDetail(stage: StageNode): StageDetail {
+export function buildStageDetail(stage: StageNode, locale: 'zh' | 'en' = 'zh'): StageDetail {
   const item = stage.items[0];
   if (!item) {
     return { stage, input: undefined, output: undefined };
@@ -399,7 +400,7 @@ export function selectStageDetail(agent: AgentNode, stageId: string, locale: 'zh
   const stages = selectStagesForAgent(agent, locale);
   const stage = stages.find((s) => s.id === stageId);
   if (!stage) return null;
-  return buildStageDetail(stage);
+  return buildStageDetail(stage, locale);
 }
 
 /** 工具：把 SubagentStatusRow.tone 映射成 AgentStatus */

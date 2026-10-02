@@ -22,6 +22,6 @@ tags: knowledge, ingestion, document, pdf, docx, xlsx, pptx
 
 提取结果与纯文本一样必须经过统一 `SecretRedactor`。脱敏失败的文件不得写入 catalog、FTS、快照或模型上下文，只能写入跳过原因和统计。
 
-提取器必须是预置或受信任的 Nexus Skill。启动或同步时如果预置 Skill 不在配置的 Skill 目录，应先安装/恢复对应内置 Skill；安装失败则让该文件进入可追踪的 `extraction_failed`，不能悄悄回退为乱码或原始二进制。
+提取器必须是预置或受信任的 Suanlizi Skill。启动或同步时如果预置 Skill 不在配置的 Skill 目录，应先安装/恢复对应内置 Skill；安装失败则让该文件进入可追踪的 `extraction_failed`，不能悄悄回退为乱码或原始二进制。
 
 每个来源文件要记录原文件大小、提取器名称、提取器版本、内容哈希和跳过原因。快照完成后不可变，后续同步生成新快照。

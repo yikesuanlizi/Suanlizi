@@ -21,7 +21,7 @@
 
 import { mkdir, readFile, rename, appendFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { browserTaskEventSchema, type BrowserTaskEvent } from '@nexus/protocol';
+import { browserTaskEventSchema, type BrowserTaskEvent } from '@suanlizi/protocol';
 
 // 检查点文件路径约定：任务隔离目录下的固定文件名。
 // — English: canonical checkpoint file path inside the per-task isolated dir.

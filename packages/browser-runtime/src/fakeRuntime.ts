@@ -19,7 +19,7 @@ import type {
   Observation,
   PageGraph,
   Postcondition,
-} from '@nexus/protocol';
+} from '@suanlizi/protocol';
 
 // ─── 站点定义 ────────────────────────────────────────────────────────────────
 // 元素定义：ref 为稳定标识（如 'link-result-1'），观测时映射为 [eN]。

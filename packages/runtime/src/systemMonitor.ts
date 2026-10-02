@@ -16,7 +16,7 @@ import type {
   SystemMonitorStatus,
   SystemMonitorSnapshot,
   SystemMonitorLevel,
-} from '@nexus/protocol';
+} from '@suanlizi/protocol';
 
 /** 监控配置。 */
 // — Chinese: monitor configuration
@@ -65,6 +65,27 @@ export const DEFAULT_SYSTEM_MONITOR_CONFIG: SystemMonitorConfig = {
     diskSevereBytes: 500 * 1024 * 1024, // 500 MB
   },
 };
+
+/**
+ * 生成未启用或尚未完成首次采样时使用的状态快照。
+ * 采样数据只保存在运行时内存，不写入持久化存储。
+ */
+export function createEmptySystemMonitorStatus(enabled = false): SystemMonitorStatus {
+  return {
+    snapshot: {
+      timestamp: new Date().toISOString(),
+      cpuUsage: 0,
+      cpuCount: 0,
+      memTotal: 0,
+      memUsed: 0,
+      memUsage: 0,
+      disks: [],
+    },
+    level: 'none',
+    recommendation: enabled ? 'Sampling has not completed yet.' : 'System performance sampling is disabled.',
+    enabled,
+  };
+}
 
 /** 级别变化监听器：接收新的完整状态。 */
 // — Chinese: level-change listener: receives the full new status
@@ -152,20 +173,7 @@ export class SystemMonitor implements SystemMonitorInterface {
   // — Chinese: get current status; returns an "unknown" status if never sampled
   getStatus(): SystemMonitorStatus {
     if (!this.currentStatus) {
-      return {
-        snapshot: {
-          timestamp: new Date().toISOString(),
-          cpuUsage: 0,
-          cpuCount: 0,
-          memTotal: 0,
-          memUsed: 0,
-          memUsage: 0,
-          disks: [],
-        },
-        level: 'none',
-        recommendation: 'Not sampled yet.',
-        enabled: this.config.enabled,
-      };
+      return createEmptySystemMonitorStatus(this.config.enabled);
     }
     return this.currentStatus;
   }

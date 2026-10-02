@@ -6,8 +6,8 @@ import type {
   ThreadWorkingSetSnapshot,
   TurnId,
   UserInput,
-} from '@nexus/protocol';
-import type { ThreadStore } from '@nexus/storage';
+} from '@suanlizi/protocol';
+import type { ThreadStore } from '@suanlizi/storage';
 import { createHash } from 'node:crypto';
 import {
   buildEpisodePromptBlock,

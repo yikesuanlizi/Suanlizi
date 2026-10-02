@@ -5,7 +5,7 @@ import type {
   SkillModule,
   SkillParameter,
   SkillRollbackReason,
-} from '@nexus/extensions';
+} from '@suanlizi/extensions';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 

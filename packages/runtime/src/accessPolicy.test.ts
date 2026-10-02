@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { AccessPolicyConfig, AccessRequest } from '@nexus/protocol';
+import type { AccessPolicyConfig, AccessRequest } from '@suanlizi/protocol';
 import { evaluateAccessRequest } from './accessPolicy.js';
 
 const baseRequest: AccessRequest = {
   access: 'read',
-  target: { kind: 'path', path: 'E:\\langchain\\Nexus\\README.md' },
+  target: { kind: 'path', path: 'E:\\langchain\\Suanlizi\\README.md' },
   threadId: 'thread-1',
   turnId: 'turn-1',
   toolName: 'read_file',
@@ -16,7 +16,7 @@ describe('evaluateAccessRequest', () => {
   it('allows workspace reads and writes in workspace mode', () => {
     const policy: AccessPolicyConfig = {
       mode: 'workspace',
-      workspaceRoot: 'E:\\langchain\\Nexus',
+      workspaceRoot: 'E:\\langchain\\Suanlizi',
       persistentRules: [],
       temporaryGrants: [],
     };
@@ -28,7 +28,7 @@ describe('evaluateAccessRequest', () => {
   it('prompts for external paths in workspace mode', () => {
     const policy: AccessPolicyConfig = {
       mode: 'workspace',
-      workspaceRoot: 'E:\\langchain\\Nexus',
+      workspaceRoot: 'E:\\langchain\\Suanlizi',
       persistentRules: [],
       temporaryGrants: [],
     };
@@ -45,7 +45,7 @@ describe('evaluateAccessRequest', () => {
   it('denies when a persistent deny matches even if temporary allow exists', () => {
     const policy: AccessPolicyConfig = {
       mode: 'workspace',
-      workspaceRoot: 'E:\\langchain\\Nexus',
+      workspaceRoot: 'E:\\langchain\\Suanlizi',
       persistentRules: [
         {
           id: 'deny-docs',
@@ -81,7 +81,7 @@ describe('evaluateAccessRequest', () => {
   it('allows matching temporary grant for the same turn', () => {
     const policy: AccessPolicyConfig = {
       mode: 'chat',
-      workspaceRoot: 'E:\\langchain\\Nexus\\.nexus\\chat-workspace',
+      workspaceRoot: 'E:\\langchain\\Suanlizi\\.suanlizi\\chat-workspace',
       persistentRules: [],
       temporaryGrants: [
         {
@@ -106,7 +106,7 @@ describe('evaluateAccessRequest', () => {
   it('keeps persistent workspace and thread rules inside their declared scope', () => {
     const policy: AccessPolicyConfig = {
       mode: 'chat',
-      workspaceRoot: 'E:\\langchain\\Nexus',
+      workspaceRoot: 'E:\\langchain\\Suanlizi',
       persistentRules: [
         {
           id: 'workspace-localhost',
@@ -114,7 +114,7 @@ describe('evaluateAccessRequest', () => {
           access: 'network',
           target: { kind: 'network', host: 'localhost:5173' },
           scope: 'workspace',
-          workspaceRoot: 'E:\\langchain\\Nexus',
+          workspaceRoot: 'E:\\langchain\\Suanlizi',
         },
         {
           id: 'thread-click',
@@ -132,7 +132,7 @@ describe('evaluateAccessRequest', () => {
       ...baseRequest,
       access: 'network',
       target: { kind: 'network', host: 'localhost:5173' },
-      workspaceRoot: 'E:\\langchain\\Nexus',
+      workspaceRoot: 'E:\\langchain\\Suanlizi',
     }).decision).toBe('allow');
     expect(evaluateAccessRequest(policy, {
       ...baseRequest,
@@ -156,7 +156,7 @@ describe('evaluateAccessRequest', () => {
   it('matches typed Ops host, service and workspace targets by scope', () => {
     const policy: AccessPolicyConfig = {
       mode: 'chat',
-      workspaceRoot: 'E:\\langchain\\Nexus',
+      workspaceRoot: 'E:\\langchain\\Suanlizi',
       persistentRules: [
         {
           id: 'ops-host',
@@ -170,7 +170,7 @@ describe('evaluateAccessRequest', () => {
           id: 'ops-workspace',
           effect: 'allow',
           access: 'read',
-          target: { kind: 'workspace', workspaceRoot: 'E:\\langchain\\Nexus', relativePath: 'src' },
+          target: { kind: 'workspace', workspaceRoot: 'E:\\langchain\\Suanlizi', relativePath: 'src' },
           scope: 'global',
         },
       ],
@@ -187,18 +187,18 @@ describe('evaluateAccessRequest', () => {
     }).decision).toBe('prompt');
     expect(evaluateAccessRequest(policy, {
       ...baseRequest,
-      target: { kind: 'workspace', workspaceRoot: 'E:\\langchain\\Nexus', relativePath: 'src/components/App.tsx' },
+      target: { kind: 'workspace', workspaceRoot: 'E:\\langchain\\Suanlizi', relativePath: 'src/components/App.tsx' },
     }).decision).toBe('allow');
     expect(evaluateAccessRequest(policy, {
       ...baseRequest,
-      target: { kind: 'workspace', workspaceRoot: 'E:\\langchain\\Nexus', relativePath: 'docs/design.md' },
+      target: { kind: 'workspace', workspaceRoot: 'E:\\langchain\\Suanlizi', relativePath: 'docs/design.md' },
     }).decision).toBe('prompt');
   });
 
   it('hard-denies writes and commands against typed Ops remote targets', () => {
     const policy: AccessPolicyConfig = {
       mode: 'danger_full_access',
-      workspaceRoot: 'E:\\langchain\\Nexus',
+      workspaceRoot: 'E:\\langchain\\Suanlizi',
       persistentRules: [],
       temporaryGrants: [],
     };

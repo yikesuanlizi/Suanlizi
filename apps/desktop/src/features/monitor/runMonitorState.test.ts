@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { initialRunMonitorState, runMonitorReducer, type RunMonitorState } from './runMonitorState.js';
 import type { RunEvent, RunRecord } from '../../shared/types.js';
-import type { RunTraceEnvelope } from '@nexus/protocol';
+import type { RunTraceEnvelope } from '@suanlizi/protocol';
 
 function makeRun(runId: string): RunRecord {
   return {

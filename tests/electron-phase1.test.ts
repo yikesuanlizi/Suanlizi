@@ -60,7 +60,7 @@ async function startViteDev(): Promise<void> {
 function launchElectronDev() {
   return electron.launch({
     args: [MAIN_JS, '--disable-gpu'],
-    env: { ...process.env, NEXUS_ELECTRON_LOAD: 'dev', NEXUS_DISABLE_SINGLE_INSTANCE: '1', NEXUS_UI_URL: viteUiUrl },
+    env: { ...process.env, SUANLIZI_ELECTRON_LOAD: 'dev', SUANLIZI_DISABLE_SINGLE_INSTANCE: '1', SUANLIZI_UI_URL: viteUiUrl },
   });
 }
 
@@ -74,7 +74,7 @@ afterAll(async () => {
 });
 
 describe('Phase 1 · Electron 桌面壳', () => {
-  it('React 工作台在 Electron 中运行（dev 模式加载 5178）+ nexusDesktop API 可用', async () => {
+  it('React 工作台在 Electron 中运行（dev 模式加载 5178）+ suanliziDesktop API 可用', async () => {
     const app = await launchElectronDev();
     try {
       const win = await app.firstWindow();
@@ -85,7 +85,7 @@ describe('Phase 1 · Electron 桌面壳', () => {
       expect(hasRootContent).toBeGreaterThan(0);
 
       const apiShape = await win.evaluate(() => {
-        const api = (window as unknown as { nexusDesktop?: Record<string, unknown> }).nexusDesktop;
+        const api = (window as unknown as { suanliziDesktop?: Record<string, unknown> }).suanliziDesktop;
         if (!api) return null;
         return {
           hasBrowser: typeof api.browser === 'object',
@@ -106,11 +106,11 @@ describe('Phase 1 · Electron 桌面壳', () => {
       await win.waitForSelector('#root', { timeout: 20_000 });
 
       const initial = await win.evaluate(() =>
-        (window as unknown as { nexusDesktop: { windowControls: { isMaximized(): Promise<boolean> } } }).nexusDesktop.windowControls.isMaximized());
+        (window as unknown as { suanliziDesktop: { windowControls: { isMaximized(): Promise<boolean> } } }).suanliziDesktop.windowControls.isMaximized());
       expect(initial).toBe(false);
 
       const toggled = await win.evaluate(async () => {
-        const controls = (window as unknown as { nexusDesktop: { windowControls: { toggleMaximize(): Promise<void>; isMaximized(): Promise<boolean> } } }).nexusDesktop.windowControls;
+        const controls = (window as unknown as { suanliziDesktop: { windowControls: { toggleMaximize(): Promise<void>; isMaximized(): Promise<boolean> } } }).suanliziDesktop.windowControls;
         await controls.toggleMaximize();
         const maximized = await controls.isMaximized();
         await controls.toggleMaximize();
@@ -131,11 +131,11 @@ describe('Phase 1 · Electron 桌面壳', () => {
       await win.waitForSelector('#root', { timeout: 20_000 });
 
       const caps = await win.evaluate(() =>
-        (window as unknown as { nexusDesktop: { desktop: { capabilities(): Promise<unknown> } } }).nexusDesktop.desktop.capabilities());
+        (window as unknown as { suanliziDesktop: { desktop: { capabilities(): Promise<unknown> } } }).suanliziDesktop.desktop.capabilities());
       expect(caps).toMatchObject({ desktop: true, weixinBridge: { managedAvailable: false } });
 
       const opened = await win.evaluate(() =>
-        (window as unknown as { nexusDesktop: { desktop: { openPath(p: string): Promise<boolean> } } }).nexusDesktop.desktop.openPath('Z:\\__nexus_missing__\\nope.txt'));
+        (window as unknown as { suanliziDesktop: { desktop: { openPath(p: string): Promise<boolean> } } }).suanliziDesktop.desktop.openPath('Z:\\__suanlizi_missing__\\nope.txt'));
       expect(opened).toBe(false);
     } finally {
       await app.close();

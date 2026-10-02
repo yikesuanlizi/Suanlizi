@@ -20,7 +20,7 @@ function splitByFencedCode(text: string): Array<{ kind: 'text' | 'code'; text: s
 }
 
 function normalizeMarkdownChunk(text: string): string {
-  const lines = text.split('\n');
+  const lines = stripTaggedReasoning(text).split('\n');
   const output: string[] = [];
   for (let index = 0; index < lines.length; index++) {
     const line = lines[index] ?? '';
@@ -45,6 +45,11 @@ function normalizeMarkdownChunk(text: string): string {
     output.push(line);
   }
   return output.join('\n');
+}
+
+/** Hide provider reasoning tags that may exist in older persisted messages. */
+function stripTaggedReasoning(text: string): string {
+  return text.replace(/<think\s*>[\s\S]*?<\/think\s*>/gi, '');
 }
 
 function isTableStart(lines: string[], index: number): boolean {

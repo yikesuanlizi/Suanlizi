@@ -21,8 +21,8 @@
 //   between the Rust host and the Node sidecar: every browser action must pass
 //   through BrowserTaskOrchestrator (policy/budget/ledger/events/checkpoint).
 import { createInterface, type Interface } from 'node:readline';
-import type { AccessRule, ActionIntent, BrowserTaskEvent, BrowserTaskState, ClassifiedError, TaskBudget } from '@nexus/protocol';
-import { normalizeAccessPolicyConfig } from '@nexus/protocol';
+import type { AccessRule, ActionIntent, BrowserTaskEvent, BrowserTaskState, ClassifiedError, TaskBudget } from '@suanlizi/protocol';
+import { normalizeAccessPolicyConfig } from '@suanlizi/protocol';
 import { ipcCodec } from '../ipc/codec.js';
 import { IPC_VERSION } from '../ipc/ipcTypes.js';
 import type { ProtocolFrame } from '../ipc/ipcTypes.js';
@@ -213,7 +213,7 @@ export function createRuntimeHostEntry(deps: {
   // 无 UI 的进程内审批实现：发 approval.requested 事件帧，挂起直到 approval.resolve。
   // — English: in-process approval without a UI — emits approval.requested and
   //   suspends until approval.resolve arrives.
-  function resolveApprovalForHost(request: import('@nexus/protocol').ApprovalRequest): Promise<boolean> {
+  function resolveApprovalForHost(request: import('@suanlizi/protocol').ApprovalRequest): Promise<boolean> {
     return new Promise<boolean>((resolve) => {
       approvalWaiters.set(request.requestId, resolve);
       emitHostEvent(

@@ -1,8 +1,10 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Locale } from '../config/config.js';
 import type { ThreadChildInfo, ThreadItem, ThreadMeta } from '../shared/types.js';
 import type { TaskRuntimeMonitorState } from '../features/monitor/taskRuntimeMonitor.js';
-import type { RunControlCapabilities, RunTraceEnvelope, RunTraceSummary } from '@nexus/protocol';
+import type { RunControlCapabilities, RunTraceEnvelope, RunTraceSummary } from '@suanlizi/protocol';
+import type { OpsTaskSession } from '@suanlizi/protocol';
+import type { OpsAnchorAction } from './OpsTaskAnchorCard.js';
 import type { ExternalPreviewRequest } from './WorkspaceFilesPanel.js';
 import { WorkspaceWorkbench } from './workbench/WorkspaceWorkbench.js';
 import type { WorkbenchTab } from './workbench/WorkbenchTabs.js';
@@ -34,6 +36,10 @@ export function RightPane({
   responsiveMode,
   onCloseRequest,
   onAddFileToConversation,
+  showOps = false,
+  opsTask = null,
+  opsTaskBusy = false,
+  onOpsTaskAction,
 }: {
   activeTab?: RightPaneTab;
   activeThreadId: string;
@@ -59,18 +65,39 @@ export function RightPane({
   responsiveMode?: 'side' | 'overlay' | 'sheet';
   onCloseRequest?(): void;
   onAddFileToConversation?(path: string): void;
+  showOps?: boolean;
+  opsTask?: OpsTaskSession | null;
+  opsTaskBusy?: boolean;
+  onOpsTaskAction?(action: OpsAnchorAction): void | Promise<void>;
 }) {
   void activeThreadTitle;
   void taskRuntimeState;
-  const [activeTab, setActiveTab] = useState<RightPaneTab>(() => initialActiveTab ?? readStoredRightPaneTab());
+  const hasActiveThread = Boolean(activeThreadId && activeThread);
+  const threadScope = hasActiveThread ? activeThreadId.trim() : '';
+  const [activeTab, setActiveTab] = useState<RightPaneTab>(() => (
+    hasActiveThread ? (initialActiveTab ?? readStoredRightPaneTab(threadScope)) : 'activity'
+  ));
+  const contextKey = `${activeThreadId}::${workspaceRoot}`;
+  const previousContextKeyRef = useRef<string | null>(null);
+  const contextChanged = previousContextKeyRef.current !== null && previousContextKeyRef.current !== contextKey;
+
+  useEffect(() => {
+    const previous = previousContextKeyRef.current;
+    previousContextKeyRef.current = contextKey;
+    if (previous === contextKey) return;
+    const nextTab = threadScope ? readStoredRightPaneTab(threadScope) : 'activity';
+    setActiveTab(nextTab);
+    onTabChange?.(nextTab);
+  }, [contextKey, onTabChange, threadScope]);
 
   const handleTabChange = useCallback((tab: RightPaneTab) => {
+    if (!threadScope) return;
     setActiveTab(tab);
     try {
-      localStorage.setItem('nexus.rightPane.tab', tab);
+      localStorage.setItem(rightPaneStorageKey(threadScope), tab);
     } catch { /* best-effort local UI preference */ }
     onTabChange?.(tab);
-  }, [onTabChange]);
+  }, [onTabChange, threadScope]);
 
   return (
     <WorkspaceWorkbench
@@ -86,7 +113,7 @@ export function RightPane({
       locale={locale}
       workspaceRoot={workspaceRoot}
       externalPreviewRequest={externalPreviewRequest}
-      activeTab={activeTab}
+      activeTab={contextChanged ? 'activity' : activeTab}
       onTabChange={handleTabChange}
       onJumpToMonitor={onJumpToMonitor}
       onInterrupt={onInterrupt}
@@ -96,14 +123,24 @@ export function RightPane({
       onAddFileToConversation={onAddFileToConversation}
       responsiveMode={responsiveMode}
       onCloseRequest={onCloseRequest}
+      showOps={showOps}
+      opsTask={opsTask}
+      opsTaskBusy={opsTaskBusy}
+      onOpsTaskAction={onOpsTaskAction}
     />
   );
 }
 
-function readStoredRightPaneTab(): RightPaneTab {
+function rightPaneStorageKey(scope: string): string {
+  return `nexus.rightPane.tab:${encodeURIComponent(scope)}`;
+}
+
+function readStoredRightPaneTab(scope?: string): RightPaneTab {
+  const normalized = scope?.trim();
+  if (!normalized) return 'activity';
   try {
-    const stored = localStorage.getItem('nexus.rightPane.tab');
-    if (stored === 'files' || stored === 'agents' || stored === 'activity' || stored === 'terminal') return stored;
+    const stored = localStorage.getItem(rightPaneStorageKey(normalized));
+    if (stored === 'files' || stored === 'agents' || stored === 'activity' || stored === 'terminal' || stored === 'ops') return stored;
     if (stored === 'status') return 'activity';
   } catch { /* best-effort local UI preference */ }
   return 'activity';

@@ -34,7 +34,7 @@ describe('buildAgentTree', () => {
     expect(agents).toHaveLength(1);
     const main = agents[0];
     expect(main.id).toBe('thread_main');
-    expect(main.name).toBe('Nexus 主控 Agent');
+    expect(main.name).toBe('Suanlizi 主控 Agent');
     expect(main.role).toBe('主 Agent');
     expect(main.depth).toBe(0);
     expect(main.parentId).toBeNull();
@@ -123,7 +123,7 @@ describe('buildAgentTree', () => {
       runtimeItems: [],
       locale: 'zh',
     });
-    expect(agentsZh[0].name).toBe('Nexus 主控 Agent');
+    expect(agentsZh[0].name).toBe('Suanlizi 主控 Agent');
     expect(agentsZh[0].currentStep).toBe('正在处理任务');
 
     const agentsEn = buildAgentTree({
@@ -134,7 +134,7 @@ describe('buildAgentTree', () => {
       runtimeItems: [],
       locale: 'en',
     });
-    expect(agentsEn[0].name).toBe('Nexus Primary Agent');
+    expect(agentsEn[0].name).toBe('Suanlizi Primary Agent');
     expect(agentsEn[0].currentStep).toBe('Working on task');
   });
 });

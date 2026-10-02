@@ -1,8 +1,8 @@
 import { PassThrough } from 'node:stream';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { describe, expect, it, vi } from 'vitest';
-import type { RunEvent, RunRecord, ThreadStore } from '@nexus/storage';
-import type { RunTraceEnvelope, RunTracePage, ThreadItem, TurnMeta } from '@nexus/protocol';
+import type { RunEvent, RunRecord, ThreadStore } from '@suanlizi/storage';
+import type { RunTraceEnvelope, RunTracePage, ThreadItem, TurnMeta } from '@suanlizi/protocol';
 import { handleRunMonitorRoute } from './runMonitorRoute.js';
 import type { TenantContext } from '../shared/tenant.js';
 import { ActiveRunRegistry } from '../runtime/activeRunRegistry.js';

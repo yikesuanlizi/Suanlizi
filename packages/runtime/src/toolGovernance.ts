@@ -1,6 +1,6 @@
 // 工具治理中间件：为 runtime 提供工具调用频率限制、工具黑名单、只读沙箱检查、命令执行策略以及人工审批等能力。
-import type { ApprovalHandler, PermissionPreset, Sandbox } from '@nexus/sandbox';
-import type { AccessRequest, ApprovalRequest } from '@nexus/protocol';
+import type { ApprovalHandler, PermissionPreset, Sandbox } from '@suanlizi/sandbox';
+import type { AccessRequest, ApprovalRequest } from '@suanlizi/protocol';
 import type { RuntimeMiddleware, RuntimeToolResponse } from './middleware.js';
 
 // ToolGovernanceConfig：工具治理策略配置

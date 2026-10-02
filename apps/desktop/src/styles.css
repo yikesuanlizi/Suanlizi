@@ -322,6 +322,16 @@
 
 
 @layer components {
+
+/* 列表行内的品牌图标：等比缩放，禁止被拉伸变形。 */
+.settingsLayer .modelPresetRowIcon .modelBrandIcon,
+.settingsLayer .modelPresetRowIcon img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  display: block;
+}
+
   .settingsDrawer .settingsHeaderTitle {
     display: flex;
     align-items: center;
@@ -1111,6 +1121,137 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
   position: fixed !important;
   inset: 0 !important;
   z-index: 1400 !important;
+}
+
+@layer components {
+  main.appShell:is(.theme-light, .theme-dark, .theme-system) .settingsLayer .settingsDrawer .settingsSectionBlock {
+    border: 0 !important;
+    border-bottom: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+  }
+
+  main.appShell:is(.theme-light, .theme-dark, .theme-system) .settingsLayer .settingsDrawer .settingsToggleList {
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+  }
+
+  main.appShell:is(.theme-light, .theme-dark, .theme-system) .settingsLayer .settingsDrawer .settingsToggleRow {
+    border-top: 0 !important;
+    border-bottom: 0 !important;
+  }
+
+  main.appShell:is(.theme-light, .theme-dark, .theme-system) .settingsLayer .settingsDrawer .settingsToggleRow:focus-within {
+    outline: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+
+  main.appShell:is(.theme-light, .theme-dark, .theme-system) .settingsLayer .settingsDrawer .settingsThresholdActions {
+    border-top: 0 !important;
+  }
+}
+
+/* System sampling summary in the monitor header. Hidden entirely when sampling is off. */
+.systemMonitorWidget {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: min(44vw, 390px);
+  min-height: 25px;
+  padding: 0 7px;
+  border: 1px solid var(--border-subtle, #d8dde3);
+  border-radius: 7px;
+  background: var(--bg-subtle, #f5f6f7);
+  color: var(--text-secondary, #5f6872);
+  font-size: 10px;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.systemMonitorWidget__metric,
+.systemMonitorWidget__level {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.systemMonitorWidget__level {
+  color: var(--text-primary, #25282d);
+  font-weight: 650;
+}
+
+.systemMonitorWidget__level--light { color: #a36b00; }
+.systemMonitorWidget__level--moderate { color: #b45309; }
+.systemMonitorWidget__level--severe { color: #b42318; }
+
+.systemMonitorHelp,
+.settingsHelpBadge {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  color: var(--text-tertiary, #7a838d);
+  background: transparent;
+  font-size: 9px !important;
+  font-weight: 700;
+  line-height: 1 !important;
+  cursor: help;
+}
+
+.settingsToggleContent {
+  display: flex !important;
+  align-items: center;
+  gap: 6px;
+}
+
+@media (max-width: 720px) {
+  .systemMonitorWidget { max-width: 42vw; gap: 4px; padding-inline: 5px; }
+  .systemMonitorWidget__metric:nth-of-type(4) { display: none; }
+}
+
+/* Model selectors must remain above the credential row and stay visible in the drawer. */
+.settingsLayer .settingsDrawer .modelConfigurationCard,
+.settingsLayer .settingsDrawer .modelConfigurationBlock,
+.settingsLayer .settingsDrawer .defaultModelConfigurationBlock,
+.settingsLayer .settingsDrawer .modelPresetManagementCard {
+  overflow: visible !important;
+  position: relative !important;
+}
+
+.settingsLayer .settingsDrawer .defaultModelConfigurationBlock {
+  z-index: 220 !important;
+}
+
+.settingsLayer .settingsDrawer .providerKeyCard {
+  z-index: 110 !important;
+}
+
+.settingsLayer .settingsDrawer .modelPresetManagementCard,
+.settingsLayer .settingsDrawer .modelPresetSelect {
+  z-index: 280 !important;
+}
+
+.settingsLayer .settingsDrawer .modelProviderSelect .dropdownMenu,
+.settingsLayer .settingsDrawer .modelPresetSelect .dropdownMenu {
+  z-index: 320 !important;
+}
+
+.settingsLayer .settingsDrawer .modelPresetSelect .dropdownMenu {
+  top: auto !important;
+  bottom: calc(100% + 6px) !important;
 }
 
 /* 权限页最终布局覆盖：避免通用 settingsCard 网格压缩只读模式和值域列表。 */
@@ -3259,7 +3400,7 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
   }
 
   .messageBlock {
-    @apply grid w-fit max-w-4xl shrink-0 gap-1.5;
+    @apply grid w-fit min-w-0 max-w-full shrink-0 gap-1.5;
   }
 
   .messageBlock.user {
@@ -3267,7 +3408,7 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
   }
 
   .messageBlock.agent {
-    @apply w-full max-w-4xl justify-items-start;
+    @apply w-full min-w-0 max-w-full justify-items-start;
   }
 
   .messageBlock.agent > .message.agent {
@@ -3367,7 +3508,8 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
   }
 
   .assistantTurnBubble {
-    @apply grid gap-2;
+    @apply grid min-w-0 gap-2;
+    overflow-wrap: anywhere;
   }
 
   .assistantTurnText {
@@ -3375,11 +3517,13 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
   }
 
   .richMessageText {
-    @apply grid gap-2;
+    @apply grid min-w-0 gap-2;
+    overflow-wrap: anywhere;
   }
 
   .messageText {
-    @apply m-0 whitespace-pre-wrap;
+    @apply m-0 min-w-0 max-w-full whitespace-pre-wrap;
+    overflow-wrap: anywhere;
   }
 
   .markdownMessageText {
@@ -5035,7 +5179,7 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
     @apply bottom-[calc(100%+8px)] left-auto right-0 top-auto min-w-[140px];
   }
 
-  /* ── Nexus desktop workspace skin ──────────────────────────────────────── */
+  /* ── Suanlizi desktop workspace skin ──────────────────────────────────────── */
   .appShell {
     grid-template-columns: 294px minmax(0, 1fr);
     background:
@@ -5958,11 +6102,11 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
   }
 
   .messageBlock {
-    max-width: min(840px, 92%);
+    max-width: 100%;
   }
 
   .messageBlock.agent {
-    width: min(840px, 92%);
+    width: 100%;
   }
 
   .message {
@@ -8806,7 +8950,7 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
     backdrop-filter: none;
   }
 
-  /* nexus111 skin: shared web/desktop visual pass. */
+  /* suanlizi111 skin: shared web/desktop visual pass. */
   .appShell {
     --nx-bg: #f8fafc;
     --nx-sidebar: #f1f5f9;
@@ -9577,7 +9721,7 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
     grid-template-columns: 40px minmax(0, 1fr);
     column-gap: 12px;
     align-items: start;
-    width: min(880px, 92%);
+    width: 100%;
   }
 
   .messageBlock.agent > .messageAgentAvatar {
@@ -13476,6 +13620,27 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
     @apply flex min-w-0 items-center gap-1.5 text-xs text-slate-700;
   }
 
+  .liveActivityEventStatus {
+    @apply flex h-4 w-4 shrink-0 items-center justify-center text-[11px] font-semibold leading-none;
+  }
+
+  .liveActivityEventStatus.status-completed {
+    color: #2b9b6a;
+  }
+
+  .liveActivityEventStatus.status-in_progress {
+    color: #b88a35;
+  }
+
+  .liveActivityEventStatus.status-failed {
+    color: #d05252;
+  }
+
+  .liveActivityEventStatus.status-cancelled,
+  .liveActivityEventStatus.status-canceled {
+    color: #d05252;
+  }
+
   .liveActivityEventAgent {
     @apply max-w-[104px] shrink-0 truncate rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600;
   }
@@ -13778,14 +13943,28 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
 }
 
 @layer components {
-  /* Product shell visual recovery: keep the settings modal as a real three-part desktop dialog. */
+  /* 设置是全屏页面，不是居中悬浮对话框。 */
   .settingsDrawer {
     display: grid !important;
-    grid-template-rows: 68px minmax(0, 1fr) 58px !important;
-    width: min(1120px, calc(100vw - 48px)) !important;
-    height: min(680px, calc(100vh - 40px)) !important;
+    grid-template-rows: 68px minmax(0, 1fr) !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: none !important;
+    max-height: none !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
     padding: 0 !important;
     overflow: hidden !important;
+  }
+
+  .settingsLayer {
+    display: block !important;
+    padding: 0 !important;
+  }
+
+  .settingsLayer > .scrim {
+    display: none !important;
   }
 
   .settingsHeader {
@@ -13878,11 +14057,15 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
     min-width: 0 !important;
   }
 
-  .settingsDrawer .modelPresetManagementCard .solidButton,
   .settingsDrawer .scopeApplyActions .solidButton {
     width: auto !important;
-    min-width: 140px;
     padding-inline: 18px !important;
+  }
+
+  .settingsDrawer .modelPresetManagementCard .solidButton {
+    width: auto !important;
+    min-width: 0 !important;
+    padding-inline: 9px !important;
   }
 
   .settingsDrawer .modelPresetManagementCard .solidButton {
@@ -15279,7 +15462,7 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
   background: #ffffff;
 }
 
-/* Nexus motion polish guard */
+/* Suanlizi motion polish guard */
 :root {
   --nx-motion-fast: 140ms;
   --nx-motion-medium: 240ms;
@@ -16306,6 +16489,7 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
   display: grid;
   min-height: 220px;
   place-items: center;
+  gap: 10px;
   margin: 0;
   border: 1px dashed rgba(148, 163, 184, 0.36);
   border-radius: 14px;
@@ -16539,6 +16723,14 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
   background: #0f172a;
   color: #e5e7eb;
 }
+
+  .runExplorer__retry {
+    min-height: 27px;
+    padding: 0 10px;
+    border-radius: 9px;
+    font-size: 11px;
+    cursor: pointer;
+  }
 
 .appShell.theme-dark .traceTimeline__empty,
 .appShell.theme-dark .runExplorer__empty,
@@ -17073,6 +17265,181 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
   }
 }
 
+/* Tool rows stay on one compact line: status marker, name/details, duration. */
+.appShell :is(.message.tool, .message.inlineTool) > summary.toolSummary {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  min-width: 0 !important;
+  gap: 6px !important;
+  white-space: nowrap !important;
+}
+.appShell :is(.message.tool, .message.inlineTool) > summary.toolSummary .toolSummaryMain {
+  display: inline-flex !important;
+  min-width: 0 !important;
+  flex: 1 1 auto !important;
+  overflow: hidden !important;
+  align-items: baseline !important;
+}
+.appShell :is(.message.tool, .message.inlineTool) > summary.toolSummary .toolSummaryName,
+.appShell :is(.message.tool, .message.inlineTool) > summary.toolSummary .toolSummaryValue,
+.appShell :is(.message.tool, .message.inlineTool) > summary.toolSummary .toolSummaryMeta {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+.appShell :is(.message.tool, .message.inlineTool) > summary.toolSummary .toolElapsed {
+  flex: 0 0 auto !important;
+  white-space: nowrap !important;
+}
+.appShell :is(.message.tool, .message.inlineTool) > summary.toolSummary .toolSummaryError {
+  flex: 0 1 42% !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  color: var(--nx-danger-text, var(--nx-text-muted)) !important;
+}
+
+/* Error evidence is persistent. This rule intentionally comes after legacy
+   dismiss animations so later compatibility blocks cannot hide it. */
+.appShell :is(.message.error, .assistantTurnError, .childActivityError, .workspaceFileError, .gitNexusError, .gitNexusResultError) {
+  animation: none !important;
+  opacity: 1 !important;
+  max-height: none !important;
+  margin-block: 8px !important;
+  overflow: visible !important;
+  pointer-events: auto !important;
+}
+
+/* Chat transcript must adapt to the available column instead of being clipped
+   by legacy fixed-width blocks or nested scroll containers. */
+.appShell .messageBlock,
+.appShell .messageBlock > *,
+.appShell .assistantTurnBubble,
+.appShell .assistantTurnText,
+.appShell .richMessageText,
+.appShell .reasoningDetails,
+.appShell .reasoningDetailsBody,
+.appShell .toolBatchDetails,
+.appShell .toolBatchItems,
+.appShell .message.tool,
+.appShell .message.inlineTool {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  overflow-x: hidden !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+}
+.appShell .reasoningDetailsBody {
+  max-height: none !important;
+  overflow-y: visible !important;
+  overscroll-behavior: auto !important;
+}
+
+/* Keep the last reply above the composer even when the composer grows. */
+.appShell .transcript {
+  padding-bottom: 0 !important;
+  scroll-padding-bottom: 0 !important;
+}
+
+.appShell .transcriptEndSentinel {
+  flex: 0 0 72px;
+  width: 1px;
+  min-height: 72px;
+  pointer-events: none;
+}
+
+/* A small gap marker bridges submit -> first streamed event without adding a card. */
+.appShell .turnPreparingBlock {
+  display: flex;
+  align-items: center;
+  width: min(840px, 100%);
+  min-height: 28px;
+  margin: 2px 0 8px 52px;
+  color: var(--nx-chat-muted, var(--nx-text-faint));
+}
+.appShell .turnPreparingIndicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 22px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.appShell .turnPreparingDots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  width: 15px;
+  height: 12px;
+}
+.appShell .turnPreparingDots i {
+  display: block;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: .4;
+  animation: turnPreparingDot 1.1s ease-in-out infinite;
+}
+.appShell .turnPreparingDots i:nth-child(2) { animation-delay: .14s; }
+.appShell .turnPreparingDots i:nth-child(3) { animation-delay: .28s; }
+@keyframes turnPreparingDot {
+  0%, 60%, 100% { opacity: .35; transform: translateY(0); }
+  30% { opacity: .95; transform: translateY(-2px); }
+}
+@media (max-width: 760px) {
+  .appShell .turnPreparingBlock { margin-left: 0; }
+}
+
+/* Tool state is a compact leading signal; the tool name carries the label. */
+.appShell .message summary.toolSummary { justify-content: flex-start; }
+.appShell .toolSummaryStatus {
+  display: inline-grid;
+  flex: 0 0 14px;
+  width: 14px;
+  place-items: center;
+  font-size: 12px !important;
+  font-weight: 700;
+  line-height: 1;
+}
+.appShell .toolSummaryStatus.completed { color: #2b9b6a !important; }
+.appShell .toolSummaryStatus.in_progress { color: #b88a35 !important; }
+.appShell .toolSummaryStatus.failed,
+.appShell .toolSummaryStatus.cancelled,
+.appShell .toolSummaryStatus.canceled { color: #d05252 !important; }
+.appShell .toolSummaryMain {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: baseline;
+  gap: 6px;
+}
+.settingsInlineStatusIcon {
+  display: inline-grid;
+  width: 14px;
+  height: 14px;
+  margin-left: 4px;
+  place-items: center;
+  vertical-align: -2px;
+  cursor: help;
+}
+.settingsInlineStatusIcon svg { width: 13px; height: 13px; }
+.settingsInlineStatusIcon.warning { color: #c8922f; }
+.settingsInlineStatusIcon.danger { color: #d05252; }
+
+/* Errors are persisted transcript evidence and must remain visible. */
+.appShell :is(.message.error, .assistantTurnError, .childActivityError, .workspaceFileError, .gitNexusError, .gitNexusResultError) {
+  animation: none !important;
+  opacity: 1 !important;
+  max-height: none !important;
+  overflow: visible !important;
+  pointer-events: auto !important;
+}
+
 /* 输入框使用显式拖拽条，避免浏览器右下角缩放角标被发送按钮遮挡。 */
 .appShell .composer .composerResizeHandle {
   display: grid;
@@ -17284,8 +17651,10 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
 }
 .appShell :is(.message.tool, .message.inlineTool) > summary { min-height: 22px; padding: 0; color: var(--nx-text-muted); font-size: 11px; }
 .appShell .message.tool .toolSummaryValue { color: var(--nx-text-muted) !important; font-weight: 500; }
-.appShell .message.tool .toolSummaryMeta,
-.appShell .message.tool .toolSummaryStatus { color: var(--nx-text-faint) !important; }
+.appShell .message.tool .toolSummaryMeta { color: var(--nx-text-faint) !important; }
+.appShell .message.tool .toolSummaryStatus:not(.completed):not(.in_progress):not(.failed):not(.cancelled):not(.canceled) {
+  color: var(--nx-text-faint) !important;
+}
 .appShell .message.tool > pre { margin: 4px 0 0; padding: 7px 0 0; border: 0; border-top: 1px solid var(--nx-control-border); border-radius: 0; background: transparent; font-size: 11px; }
 
 .appShell .childActivityReasoning {
@@ -17329,6 +17698,9 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
 .appShell .toolBatchChevron svg { width: 14px; height: 14px; }
 .appShell .toolBatchDetails[open] .toolBatchChevron { transform: rotate(90deg); }
 .appShell .toolBatchStats { color: var(--nx-text-faint); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.appShell .toolBatchPeek { display: flex; align-items: center; gap: 5px; min-width: 0; flex: 1 1 auto; overflow: hidden; font-size: 11px; }
+.appShell .toolBatchPeek strong { flex: 0 0 auto; color: var(--nx-text-muted); font-weight: 600; }
+.appShell .toolBatchPeek span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--nx-text-faint); }
 .appShell .toolElapsed { color: var(--nx-text-faint); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .appShell .toolBatchItems { display: grid; gap: 2px; margin: 4px 0 0 10px; }
 
@@ -17399,6 +17771,11 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
   border-left: 1px solid var(--nx-control-border);
   color: var(--nx-text-muted);
   font-size: 12px;
+  /* 思考输出固定比例高度，超出内部滚动，避免把气泡拉得巨长。
+     — Chinese: cap the reasoning body height; content scrolls inside. */
+  max-height: 180px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 @keyframes reasoningPulse { 0%, 100% { opacity: .28; transform: translateX(0); } 50% { opacity: 1; transform: translateX(1px); } }
 
@@ -17464,6 +17841,9 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
   border-left: 1px solid var(--nx-control-border);
   color: var(--nx-text-muted);
   font-size: 12px;
+  max-height: 180px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 @keyframes reasoningPulse { 0%, 100% { opacity: .28; transform: translateX(0); } 50% { opacity: 1; transform: translateX(1px); } }
 
@@ -18222,7 +18602,7 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
   }
 }
 
-/* Nexus visual contract: final semantic surface guard for light and dark clients. */
+/* Suanlizi visual contract: final semantic surface guard for light and dark clients. */
 :root {
   --nx-surface-canvas: #0a0e13;
   --nx-surface-raised: #121820;
@@ -18509,12 +18889,6 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
   }
 
   .appShell .workspaceGroupActions {
-    opacity: 0;
-    transition: opacity var(--nx-motion-fast);
-  }
-
-  .appShell .workspaceGroup:hover .workspaceGroupActions,
-  .appShell .workspaceGroup:focus-within .workspaceGroupActions {
     opacity: 1;
   }
 
@@ -18648,7 +19022,721 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
   }
 }
 
-/* Nexus conversation surface contract */
+/* Suanlizi conversation surface contract */
+
+/* ─── 气泡底部子 Agent 行（AgentTurnRow）─── */
+/* — Chinese: sub-agent row at the bottom of an assistant bubble */
+.appShell .turnAgentSection {
+  margin: 6px 0 2px;
+}
+
+.appShell .turnAgentLiveRow,
+.appShell .turnAgentChip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 28px;
+  padding: 2px 8px;
+  border: 1px solid var(--nx-control-border);
+  border-radius: 8px;
+  background: var(--nx-surface-overlay);
+  color: var(--nx-text-primary);
+}
+
+.appShell .turnAgentLiveRow {
+  border-color: color-mix(in srgb, #22c55e 32%, var(--nx-control-border));
+}
+
+.appShell .turnAgentChip {
+  min-height: 24px;
+  opacity: 0.92;
+}
+
+.appShell .turnAgentChip.failed {
+  border-color: color-mix(in srgb, #ef4444 36%, var(--nx-control-border));
+}
+
+.appShell .turnAgentStatusDot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.appShell .turnAgentLiveRow .turnAgentStatusDot {
+  animation: agentStatusPulse 1.5s ease-in-out infinite;
+}
+
+.appShell .agentNameButton {
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--nx-text-primary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.appShell .agentNameButton:hover {
+  text-decoration: underline;
+}
+
+.appShell .agentNameText {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--nx-text-primary);
+}
+
+.appShell .turnAgentAction {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--nx-text-muted);
+}
+
+.appShell .turnAgentFailedBadge {
+  flex: 0 0 auto;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #ef4444 14%, transparent);
+  color: #ef4444;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.appShell .turnAgentSpinner {
+  flex: 0 0 auto;
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+}
+
+.appShell .turnAgentSpinner i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--nx-text-faint);
+  animation: reasoningPulse 1.2s ease-in-out infinite;
+}
+
+.appShell .turnAgentSpinner i:nth-child(2) { animation-delay: .2s; }
+.appShell .turnAgentSpinner i:nth-child(3) { animation-delay: .4s; }
+
+/* ─── 命令执行块：命令恒显，仅输出可折叠 ─── */
+/* — Chinese: command-execution block — the command line stays visible; only output folds */
+.appShell .commandExecBlock {
+  margin: 4px 0;
+  padding: 6px 0 6px 10px;
+  border-left: 1px solid var(--nx-control-border);
+}
+
+.appShell .commandExecBlock.failed {
+  border-left-color: color-mix(in srgb, #ef4444 55%, var(--nx-control-border));
+}
+
+.appShell .commandExecHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.appShell .commandExecCmd {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--nx-text-primary);
+}
+
+.appShell .commandExecBlock .toolSummaryError {
+  margin: 3px 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #ef4444;
+  font-size: 11px;
+}
+
+.appShell .commandExecOutput {
+  margin: 4px 0 0;
+}
+
+.appShell .commandExecOutput > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 20px;
+  color: var(--nx-text-faint);
+  font-size: 11px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.appShell .commandExecOutput > summary::-webkit-details-marker { display: none; }
+
+.appShell .commandExecOutputPeek {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: .75;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.appShell .commandExecOutput > pre,
+.appShell .commandExecOutputShort {
+  margin: 4px 0 0;
+  padding: 7px 0 0;
+  border: 0;
+  border-top: 1px solid var(--nx-control-border);
+  background: transparent;
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--nx-text-muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.appShell .commandExecPending {
+  margin: 4px 0 0;
+  color: var(--nx-text-faint);
+  font-size: 11px;
+}
+
+.appShell .commandExecExit {
+  margin: 3px 0 0;
+  color: #ef4444;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.appShell .turnAgentRemoteTrail {
+  margin: 3px 0 0;
+  padding: 0 0 0 10px;
+  border-left: 1px solid var(--nx-control-border);
+  font-size: 11px;
+}
+
+.appShell .turnAgentRemoteTrail > summary {
+  min-height: 20px;
+  color: var(--nx-text-faint);
+  cursor: pointer;
+}
+
+.appShell .turnAgentRemoteTrailEntry {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.appShell .turnAgentRemoteTrailState {
+  flex: 0 0 auto;
+  font-weight: 600;
+  color: var(--nx-text-muted);
+}
+
+.appShell .turnAgentRemoteTrailTime {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--nx-text-faint);
+}
+
+.appShell .turnAgentRemoteTrailText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--nx-text-muted);
+}
+
+/* ─── 右侧智能体详情视图（AgentConversationView）─── */
+/* — Chinese: right-pane agent detail view */
+
+.appShell .workbenchAgentDetailWrap {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.appShell .agentDetailView {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.appShell .agentDetailHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding: 8px 10px;
+  border: 1px solid var(--nx-control-border);
+  border-radius: 10px;
+  background: var(--nx-surface-overlay);
+}
+
+.appShell .agentDetailBack {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--nx-control-border);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--nx-text-muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.appShell .agentDetailBack:hover {
+  border-color: color-mix(in srgb, var(--nx-brand) 58%, var(--nx-control-border));
+  background: var(--nx-brand-soft);
+  color: var(--nx-text-primary);
+}
+
+.appShell .agentDetailTitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.appShell .agentDetailTitle strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--nx-text-primary);
+}
+
+.appShell .agentDetailNameWrap {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.appShell .agentDetailRoleDetail {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  color: var(--nx-text-faint);
+}
+
+.appShell .agentDetailTitle .agentStatusDot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.appShell .agentDetailTitle .agentStatusDot[data-status="running"],
+.appShell .agentDetailTitle .agentStatusDot[data-status="waiting_user_input"] { background: #22c55e; }
+.appShell .agentDetailTitle .agentStatusDot[data-status="failed"] { background: #ef4444; }
+.appShell .agentDetailTitle .agentStatusDot[data-status="interrupted"],
+.appShell .agentDetailTitle .agentStatusDot[data-status="stale"],
+.appShell .agentDetailTitle .agentStatusDot[data-status="queued"] { background: #f97316; }
+.appShell .agentDetailTitle .agentStatusDot[data-status="idle"],
+.appShell .agentDetailTitle .agentStatusDot[data-status="completed"],
+.appShell .agentDetailTitle .agentStatusDot[data-status="closed"] { background: #94a3b8; }
+
+.appShell .agentDetailStatusBadge {
+  flex: 0 0 auto;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--nx-surface-panel);
+  border: 1px solid var(--nx-control-border);
+  color: var(--nx-text-muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.appShell .agentDetailStatusBadge.status-running { color: #22c55e; }
+.appShell .agentDetailStatusBadge.status-failed { color: #ef4444; }
+
+.appShell .agentDetailElapsed {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--nx-text-muted);
+}
+
+.appShell .agentDetailInstruction {
+  flex: 0 0 auto;
+  border: 1px solid var(--nx-control-border);
+  border-radius: 10px;
+  background: var(--nx-surface-panel);
+  overflow: hidden;
+}
+
+.appShell .agentDetailInstructionToggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.appShell .agentDetailInstructionLabel {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--nx-text-faint);
+}
+
+.appShell .agentDetailInstructionSummary {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--nx-text-muted);
+}
+
+.appShell .agentDetailInstructionChevron {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  color: var(--nx-text-faint);
+  transition: transform .15s ease;
+}
+
+.appShell .agentDetailInstructionChevron.open {
+  transform: rotate(90deg);
+}
+
+.appShell .agentDetailInstruction blockquote {
+  margin: 0;
+  padding: 8px 12px 10px;
+  border-top: 1px solid var(--nx-control-border);
+  border-left: 0;
+  color: var(--nx-text-primary);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.appShell .agentDetailTimeline {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.appShell .agentDetailTimelineEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 24px 0;
+  text-align: center;
+}
+
+.appShell .agentDetailTimelineEmpty p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--nx-text-muted);
+}
+
+.appShell .agentDetailTimelineEmpty span {
+  font-size: 11px;
+  color: var(--nx-text-faint);
+}
+
+.appShell .agentDetailFooter {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  border: 1px solid var(--nx-control-border);
+  border-radius: 10px;
+  background: var(--nx-surface-overlay);
+  color: var(--nx-text-muted);
+  font-size: 11px;
+}
+
+.appShell .agentDetailFooter strong {
+  color: var(--nx-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Agent 卡片点击层：整卡可点进详情，但覆盖层不遮挡机器人互动 ─── */
+/* — Chinese: card-wide click layer for opening agent details */
+.appShell .agentStageCardClickLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.appShell .agentStageAvatarCard .agentStageCardClickLayer {
+  /* 主卡：机器人头像要保留互动，点击层只覆盖文字区 */
+  left: 148px;
+}
+
+.appShell .agentStageAvatarCard,
+.appShell .agentStageCard {
+  position: relative;
+}
+
+.appShell .agentStageInfoButton {
+  z-index: 2;
+}
+
+.appShell .agentStageHeroAvatar,
+.appShell .agentNudgeBubble {
+  z-index: 2;
+}
+
+/* ─── 命令终端预览面板：右侧栏内只读实时观看 agent 命令输出 ─── */
+/* — Chinese: read-only command-terminal preview pane in the right workbench */
+.appShell .workbenchCommandTerminal {
+  flex: 0 0 auto;
+  height: 42%;
+  min-height: 220px;
+  border-top: 1px solid var(--nx-control-border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.appShell .commandTerminalPane {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  background: var(--nx-surface-panel);
+}
+
+.appShell .commandTerminalHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--nx-control-border);
+}
+
+.appShell .commandTerminalHeader strong {
+  flex: 1 1 auto;
+  font-size: 12px;
+  color: var(--nx-text-primary);
+}
+
+.appShell .commandTerminalRunning {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #22c55e 14%, transparent);
+  color: #22c55e;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.appShell .commandTerminalClose {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--nx-text-muted);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.appShell .commandTerminalClose:hover {
+  background: var(--nx-surface-overlay);
+  color: var(--nx-text-primary);
+}
+
+.appShell .commandTerminalTabs {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+  overflow-x: auto;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--nx-control-border);
+}
+
+.appShell .commandTerminalTab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  max-width: 200px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--nx-control-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--nx-text-muted);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.appShell .commandTerminalTab.active {
+  border-color: color-mix(in srgb, var(--nx-brand) 58%, var(--nx-control-border));
+  background: var(--nx-brand-soft);
+  color: var(--nx-text-primary);
+}
+
+.appShell .commandTerminalTabDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.appShell .commandTerminalTabDot.status-in_progress { background: #22c55e; }
+.appShell .commandTerminalTabDot.status-failed { background: #ef4444; }
+.appShell .commandTerminalTabDot.status-completed { background: #94a3b8; }
+
+.appShell .commandTerminalTabLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.appShell .commandTerminalBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 10px;
+  font-family: "Cascadia Mono", Consolas, "Microsoft YaHei UI", monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--nx-text-primary);
+}
+
+.appShell .commandTerminalCmdLine {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 4px;
+  color: var(--nx-brand);
+}
+
+.appShell .commandTerminalCmdLine code {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  color: var(--nx-text-primary);
+}
+
+.appShell .commandTerminalOutput {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--nx-text-muted);
+}
+
+.appShell .commandTerminalCursor {
+  display: inline-block;
+  width: 7px;
+  height: 13px;
+  background: var(--nx-text-primary);
+  animation: commandTerminalBlink 1s steps(1) infinite;
+}
+
+@keyframes commandTerminalBlink {
+  50% { opacity: 0; }
+}
+
+.appShell .commandTerminalExit {
+  margin-top: 6px;
+  color: #ef4444;
+  font-size: 11px;
+}
+
+.appShell .commandTerminalEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 100%;
+  text-align: center;
+}
+
+.appShell .commandTerminalEmpty p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--nx-text-muted);
+}
+
+.appShell .commandTerminalEmpty span {
+  max-width: 260px;
+  font-size: 11px;
+  color: var(--nx-text-faint);
+}
+
+.appShell .commandExecPreviewBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+  height: 20px;
+  padding: 0 6px;
+  border: 1px solid var(--nx-control-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--nx-text-muted);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.appShell .commandExecPreviewBtn:hover {
+  border-color: color-mix(in srgb, var(--nx-brand) 58%, var(--nx-control-border));
+  background: var(--nx-brand-soft);
+  color: var(--nx-text-primary);
+}
+
+.appShell .commandExecPreviewBtn svg {
+  width: 11px;
+  height: 11px;
+}
+
 .appShell .messageBlock.agent .message.agent {
   border-color: var(--nx-control-border);
   background: var(--nx-surface-panel);
@@ -18752,7 +19840,7 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
   color: var(--nx-text-primary);
 }
 
-/* Nexus workbench surface contract */
+/* Suanlizi workbench surface contract */
 .appShell .workbenchPane {
   background: var(--nx-surface-raised);
   color: var(--nx-text-primary);
@@ -18877,13 +19965,59 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
   border-bottom-color: var(--nx-control-border) !important;
 }
 
+/* Compact right panes use icons while keeping accessible names in the DOM. */
+.appShell .workbenchPane {
+  container-type: inline-size;
+  container-name: workbench-pane;
+}
+
+@container workbench-pane (max-width: 360px) {
+  .appShell .workbenchPane .workbenchTabs {
+    gap: 3px !important;
+    padding-inline: 6px !important;
+  }
+
+  .appShell .workbenchPane .workbenchPrimaryTabs {
+    flex: 0 0 auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    gap: 2px !important;
+  }
+
+  .appShell .workbenchPane .workbenchPrimaryTabs > button {
+    flex: 0 0 34px !important;
+    width: 34px !important;
+    min-width: 34px !important;
+    padding-inline: 0 !important;
+    justify-content: center;
+  }
+
+  .appShell .workbenchPane .workbenchTabs button > span:not(.workbenchTabBadge),
+  .appShell .workbenchPane .workbenchDynamicTab > button:first-child > span {
+    display: none;
+  }
+
+  .appShell .workbenchPane .workbenchDynamicTab > button:first-child {
+    width: 34px !important;
+    min-width: 34px !important;
+    padding-inline: 0 !important;
+    justify-content: center;
+  }
+
+  .appShell .workbenchPane .workbenchDynamicTabClose {
+    flex-basis: 27px !important;
+    width: 27px !important;
+    min-width: 27px !important;
+  }
+}
+
 .appShell .workbenchPane .workbenchTabs button.active {
   border-color: color-mix(in srgb, var(--nx-brand) 58%, var(--nx-control-border)) !important;
   background: var(--nx-brand-soft) !important;
   color: var(--nx-text-primary) !important;
 }
 
-/* Nexus settings shell surface contract */
+/* Suanlizi settings shell surface contract */
 .settingsLayer.theme-dark {
   --nx-settings-raised: #17191c;
   --nx-settings-panel: #1d2024;
@@ -19130,7 +20264,7 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
   box-shadow: inset 2px 0 0 var(--nx-settings-brand) !important;
 }
 
-/* Nexus settings workbench density contract */
+/* Suanlizi settings workbench density contract */
 .settingsLayer .settingsDrawer .settingsContent {
   padding: 28px 42px 40px !important;
 }
@@ -22448,6 +23582,27 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
   font-size: 10px;
 }
 
+.appShell .composerBottom .modeIndicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 6px;
+  color: var(--nx-text-muted);
+  font-size: 10px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.appShell .composerBottom .modeIndicator svg {
+  width: 14px;
+  height: 14px;
+}
+
+.appShell .composerBottom .modeIndicatorOps {
+  color: var(--nx-text);
+}
+
 .appShell .rightPaneDivider {
   width: 7px;
   background: transparent;
@@ -22536,6 +23691,9 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
 }
 
 .appShell .liveActivityRecent {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
   gap: 0;
   margin-top: 14px;
 }
@@ -22634,7 +23792,11 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
 }
 
 .appShell .workspaceThreadsHeader {
-  padding: 8px 8px 5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 0;
+  padding: 8px 8px 4px;
 }
 
 .appShell .searchLauncher {
@@ -22740,6 +23902,16 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
   .appShell .tokenUsageBar {
     display: none;
   }
+}
+
+/* Terminal error evidence must stay available for copying and retry decisions. */
+.appShell :is(.message.error, .assistantTurnError, .childActivityError, .workspaceFileError, .gitNexusError, .gitNexusResultError) {
+  animation: none !important;
+  opacity: 1 !important;
+  max-height: none !important;
+  margin-block: 8px !important;
+  overflow: visible !important;
+  pointer-events: auto !important;
 }
 
 .appShell .workspaceGroupList { display: block !important; gap: 0 !important; padding: 2px 7px 13px !important; }
@@ -23219,15 +24391,15 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
   line-height: 1.45;
 }
 
-html[data-nexus-theme='light'],
-html[data-nexus-theme='light'] body.electron-shell,
-html[data-nexus-theme='light'] body.electron-shell #root {
+html[data-suanlizi-theme='light'],
+html[data-suanlizi-theme='light'] body.electron-shell,
+html[data-suanlizi-theme='light'] body.electron-shell #root {
   background: linear-gradient(110deg, #f3f3f3 0%, #f5f2ef 46%, #f9f2eb 100%) !important;
 }
 
-html[data-nexus-theme='dark'],
-html[data-nexus-theme='dark'] body.electron-shell,
-html[data-nexus-theme='dark'] body.electron-shell #root {
+html[data-suanlizi-theme='dark'],
+html[data-suanlizi-theme='dark'] body.electron-shell,
+html[data-suanlizi-theme='dark'] body.electron-shell #root {
   background: #202020 !important;
 }
 
@@ -23271,6 +24443,42 @@ html[data-nexus-theme='dark'] body.electron-shell #root {
 
 .appShell .reasoningDetails[data-running="true"] > summary::before {
   content: 'THINKING';
+}
+
+/* Chromium 在 flex summary 上只把点击算在 summary 自身（::before 的 THINK）。
+   时长和圆点点不中。保持贴在一起，不要被 .message summary 的 justify-between 拉开。 */
+.appShell .reasoningDetails > summary,
+.appShell .childActivityReasoning > summary {
+  display: inline-flex;
+  width: auto;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 8px;
+  padding-right: 12px;
+  cursor: pointer;
+}
+.appShell .reasoningDetails > summary > *,
+.appShell .childActivityReasoning > summary > * {
+  flex: 0 0 auto;
+  margin: 0;
+  pointer-events: none;
+}
+.appShell .reasoningDetails > summary::after,
+.appShell .childActivityReasoning > summary::after {
+  flex: 0 0 auto;
+  width: 3px;
+  height: 3px;
+  margin: 0;
+  padding: 0;
+  border-radius: 50%;
+}
+.appShell .reasoningDetails > summary::after {
+  background: var(--nx-brand);
+  box-shadow: 6px 0 var(--nx-brand), 12px 0 var(--nx-brand);
+}
+.appShell .childActivityReasoning > summary::after {
+  background: var(--nx-text-faint);
+  box-shadow: 6px 0 var(--nx-text-faint), 12px 0 var(--nx-text-faint);
 }
 
 /* Keep the chat name legible in the narrower sidebar. Secondary controls
@@ -23372,13 +24580,13 @@ html[data-nexus-theme='dark'] body.electron-shell #root {
   min-width: 0;
 }
 
-.appShell .threadListHeader > .miniIconButton {
+.appShell .workspaceThreadsHeader > .miniIconButton {
   position: relative;
   z-index: 3;
-  flex: 0 0 30px;
-  width: 30px;
-  min-width: 30px;
-  height: 30px;
+  flex: 0 0 34px;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
   display: grid;
   place-items: center;
   visibility: visible !important;
@@ -23388,49 +24596,49 @@ html[data-nexus-theme='dark'] body.electron-shell #root {
 
 /* Search is rendered through a body portal, so theme it from the root marker
    rather than relying on the app shell as an ancestor. */
-html[data-nexus-theme='light'] .searchDialog {
+html[data-suanlizi-theme='light'] .searchDialog {
   border-color: #d8dee8;
   background: var(--nx-card, #fff);
   color: #111827;
   box-shadow: 0 22px 70px rgba(15, 23, 42, .18);
 }
 
-html[data-nexus-theme='light'] .searchDialogLayer {
+html[data-suanlizi-theme='light'] .searchDialogLayer {
   background: rgba(15, 23, 42, .24);
 }
 
-html[data-nexus-theme='light'] .searchDialogInput {
+html[data-suanlizi-theme='light'] .searchDialogInput {
   border-color: #d8dee8;
   background: #f8fafc;
   color: #475569;
 }
 
-html[data-nexus-theme='light'] .searchDialogInput input,
-html[data-nexus-theme='dark'] .searchDialogInput input {
+html[data-suanlizi-theme='light'] .searchDialogInput input,
+html[data-suanlizi-theme='dark'] .searchDialogInput input {
   border: 0 !important;
   background: transparent !important;
   color: #111827;
 }
 
-html[data-nexus-theme='dark'] .searchDialogInput input {
+html[data-suanlizi-theme='dark'] .searchDialogInput input {
   color: #f1f4f8;
 }
 
-html[data-nexus-theme='light'] .searchDialogResults span {
+html[data-suanlizi-theme='light'] .searchDialogResults span {
   color: #111827;
 }
 
-html[data-nexus-theme='light'] .searchDialogResults small,
-html[data-nexus-theme='light'] .searchDialogResults p {
+html[data-suanlizi-theme='light'] .searchDialogResults small,
+html[data-suanlizi-theme='light'] .searchDialogResults p {
   color: #475569;
 }
 
-html[data-nexus-theme='light'] .searchDialogResults button:hover:not(:disabled) {
+html[data-suanlizi-theme='light'] .searchDialogResults button:hover:not(:disabled) {
   background: #f1f5f9;
 }
 
-html[data-nexus-theme='dark'] .searchDialog,
-html[data-nexus-theme='dark'] .searchDialogInput {
+html[data-suanlizi-theme='dark'] .searchDialog,
+html[data-suanlizi-theme='dark'] .searchDialogInput {
   color: #f1f4f8;
 }
 
@@ -23474,6 +24682,13 @@ html[data-nexus-theme='dark'] .searchDialogInput {
   min-width: 0;
   max-width: 100%;
   box-sizing: border-box;
+}
+
+.appShell .workspaceThreadsHeader > .searchLauncher {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  max-width: none;
 }
 
 /* Deep grayscale skin: opaque surfaces, one neutral palette across the workspace,
@@ -24131,7 +25346,7 @@ html[data-nexus-theme='dark'] .searchDialogInput {
 
 .settingsLayer .settingsDrawer .modelConfigurationDivider {
   height: 1px;
-  margin: 0 18px;
+  margin: 10px 18px !important;
   background: var(--nx-settings-border, #dce2eb);
 }
 
@@ -24174,6 +25389,91 @@ html[data-nexus-theme='dark'] .searchDialogInput {
 
 .settingsLayer .settingsDrawer .modelConfigurationCard + .modelPresetManagementCard {
   margin-top: 24px !important;
+}
+
+/* Compact model controls: keep the API field and apply action on one line. */
+.settingsLayer .settingsDrawer .modelBaseUrlRow {
+  grid-column: 1 / -1 !important;
+  display: flex !important;
+  align-items: flex-end !important;
+  gap: 8px !important;
+  width: min(100%, 520px) !important;
+  min-width: 0 !important;
+}
+
+.settingsLayer .settingsDrawer .modelBaseUrlRow > .settingsField,
+.settingsLayer .settingsDrawer .modelBaseUrlRow > .wideField {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+}
+
+
+/* Keep the explicit context window compact beside the endpoint. */
+.settingsLayer .settingsDrawer .modelBaseUrlRow {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(96px, 132px) auto !important;
+  align-items: end !important;
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+}
+
+.settingsLayer .settingsDrawer .modelBaseUrlRow > .settingsField,
+.settingsLayer .settingsDrawer .modelBaseUrlRow > .wideField,
+.settingsLayer .settingsDrawer .modelBaseUrlRow > .modelContextField {
+  min-width: 0 !important;
+  width: auto !important;
+}
+
+.settingsLayer .settingsDrawer .modelBaseUrlRow .modelContextField {
+  min-width: 96px !important;
+}
+
+.settingsLayer .settingsDrawer .modelBaseUrlRow .modelContextField .settingsFieldLabel {
+  white-space: nowrap;
+}
+
+.settingsLayer .settingsDrawer .modelPresetManagementCard {
+  margin-top: 24px !important;
+}
+
+.settingsLayer .settingsDrawer .modelPresetEditorRow {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  gap: 7px !important;
+  min-width: 0 !important;
+  overflow-x: auto !important;
+  scrollbar-width: none;
+}
+
+.settingsLayer .settingsDrawer .modelPresetEditorRow::-webkit-scrollbar {
+  display: none;
+}
+
+.settingsLayer .settingsDrawer .modelPresetEditorRow > .settingsInlineFieldLabel {
+  flex: 0 0 auto !important;
+  color: var(--nx-settings-text-muted, #526078);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.settingsLayer .settingsDrawer .modelPresetEditorRow > .wideField {
+  flex: 0 1 300px !important;
+  width: 300px !important;
+  min-width: 180px !important;
+  max-width: 300px !important;
+}
+
+.settingsLayer .settingsDrawer .modelPresetEditorRow :is(.textButton, .solidButton) {
+  flex: 0 0 auto !important;
+  width: auto !important;
+  min-width: 0 !important;
+  min-height: 30px !important;
+  height: 30px !important;
+  padding: 0 9px !important;
+  white-space: nowrap !important;
 }
 
 @media (max-width: 760px) {
@@ -24254,7 +25554,7 @@ html[data-nexus-theme='dark'] .searchDialogInput {
 }
 
 .appShell .messageBlock.agent {
-  max-width: min(840px, 100%);
+  max-width: 100%;
 }
 
 .appShell .messageBlock.agent > .message.agent {
@@ -24485,10 +25785,8 @@ html[data-nexus-theme='dark'] .searchDialogInput {
   stroke-width: 2.25;
 }
 
-.appShell .assistantTurnError,
-.appShell .childActivityError {
-  animation: nexusErrorNoticeDismiss 5.8s ease forwards;
-}
+/* 失败是可追溯状态，不再整条淡出；用户可继续查看短说明和原始错误。 */
+
 
 .appShell .toastNotice {
   inset: auto auto 86px 50%;
@@ -24521,10 +25819,10 @@ html[data-nexus-theme='dark'] .searchDialogInput {
   border-radius: 10px !important;
   background: var(--nx-chat-field) !important;
   color: var(--nx-chat-ink) !important;
-  animation: nexusErrorNoticeDismiss 5.8s ease forwards;
+  animation: suanliziErrorNoticeDismiss 5.8s ease forwards;
 }
 
-@keyframes nexusErrorNoticeDismiss {
+@keyframes suanliziErrorNoticeDismiss {
   0%, 72% { opacity: 1; max-height: 180px; margin-block: 8px; overflow: hidden; }
   100% { opacity: 0; max-height: 0; margin-block: 0; padding-block: 0; border-width: 0 !important; border-color: transparent !important; overflow: hidden; pointer-events: none; }
 }
@@ -24629,9 +25927,8 @@ html[data-nexus-theme='dark'] .searchDialogInput {
   background: rgba(16, 18, 20, .72) !important;
 }
 
-.appShell :is(.message.error, .assistantTurnError, .childActivityError) {
-  animation: nexusErrorNoticeDismiss 5.8s ease forwards;
-}
+/* 深色收口前的旧淡出规则只覆盖会话错误；保留 workspace/GitNexus 的行为不变。 */
+
 
 /* 全局深色主题收口：设置层、工作台控件和旧兼容样式统一使用深灰，不再泄露蓝黑色。 */
 .appShell:is(.theme-dark, .theme-system) {
@@ -26125,4 +27422,906 @@ main.appShell.theme-light .commandChip {
   position: fixed !important;
   inset: 0 !important;
   z-index: 1400 !important;
+}
+
+/* 监控设置最终收口：移除残留卡片边框，整行点击仍保持可用。 */
+@layer components {
+  main.appShell:is(.theme-light, .theme-dark, .theme-system) .settingsLayer .settingsDrawer .settingsSectionBlock {
+    border: 0 !important;
+    border-bottom: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+  }
+
+  main.appShell:is(.theme-light, .theme-dark, .theme-system) .settingsLayer .settingsDrawer .settingsToggleList {
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+  }
+
+  main.appShell:is(.theme-light, .theme-dark, .theme-system) .settingsLayer .settingsDrawer .settingsToggleRow {
+    border-top: 0 !important;
+    border-bottom: 0 !important;
+  }
+
+  main.appShell:is(.theme-light, .theme-dark, .theme-system) .settingsLayer .settingsDrawer .settingsToggleRow:focus-within {
+    outline: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+
+  main.appShell:is(.theme-light, .theme-dark, .theme-system) .settingsLayer .settingsDrawer .settingsThresholdActions {
+    border-top: 0 !important;
+  }
+}
+
+/* 采样摘要只保留信息本身，不再显示灰色卡片描边。 */
+.systemMonitorWidget {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  padding-inline: 2px !important;
+}
+
+/* Monitor settings use row interaction without a focus frame. Keep the
+   drawer edge transparent too; the surface separation comes from layout. */
+.settingsLayer .settingsDrawer {
+  border-color: transparent !important;
+}
+
+.settingsLayer .settingsDrawer .settingsToggleRow:focus-within {
+  outline: none !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+main.appShell:is(.theme-light, .theme-dark, .theme-system) .settingsLayer .settingsDrawer {
+  border: 1px solid transparent !important;
+}
+
+/* Final preset layout: a stable label/select/actions grid and uniform portal rows. */
+.settingsLayer .settingsDrawer .modelPresetManagementCard > .modelPresetEditorRow {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, minmax(180px, 1fr)) auto !important;
+  align-items: center !important;
+  gap: 8px !important;
+  overflow: visible !important;
+}
+
+.settingsLayer .settingsDrawer .modelPresetManagementCard > .modelPresetEditorRow > .settingsInlineFieldLabel {
+  grid-column: 1 !important;
+  min-width: max-content !important;
+}
+
+.settingsLayer .settingsDrawer .modelPresetManagementCard > .modelPresetEditorRow > .wideField {
+  grid-column: 2 !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 360px !important;
+  flex: none !important;
+}
+
+.settingsLayer .settingsDrawer .modelPresetManagementCard .modelPresetSelect,
+.settingsLayer .settingsDrawer .modelPresetManagementCard .modelPresetSelect .dropdownButton {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+
+.settingsLayer .settingsDrawer .modelPresetManagementCard .modelPresetActionRow {
+  grid-column: 3 !important;
+  justify-self: end !important;
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 6px !important;
+  width: max-content !important;
+  max-width: 100% !important;
+}
+
+.appShell .dropdownMenuPortal.modelPresetSelect {
+  min-width: 0 !important;
+  max-width: calc(100vw - 16px) !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+.appShell .dropdownMenuPortal.modelPresetSelect > .dropdownOption,
+.appShell .dropdownMenuPortal.modelPresetSelect > .dropdownOptionRow {
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+.appShell .dropdownMenuPortal.modelPresetSelect > .dropdownOptionRow {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  gap: 6px !important;
+  align-items: stretch !important;
+}
+
+.appShell .dropdownMenuPortal.modelPresetSelect .dropdownOption {
+  width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  align-items: center !important;
+}
+
+.appShell .dropdownMenuPortal.modelPresetSelect .dropdownOptionLabel {
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
+
+.appShell .dropdownMenuPortal.modelPresetSelect .dropdownOptionLabel > span:not(.dropdownIcon) {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.appShell .dropdownMenuPortal.modelPresetSelect .dropdownOptionBadge {
+  max-width: 8ch !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+/* The preset menu is portaled outside .settingsDrawer. Keep its destructive
+   action consistent with the compact in-drawer control instead of falling
+   back to the browser's default button chrome. */
+.appShell .dropdownMenuPortal.modelPresetSelect .dropdownOptionAction {
+  appearance: none !important;
+  align-self: center !important;
+  min-width: 0 !important;
+  width: auto !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  margin: 0 !important;
+  padding: 0 8px !important;
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--nx-text-muted, #64748b) !important;
+  font-size: 11px !important;
+  font-weight: 650 !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+  cursor: pointer !important;
+}
+
+.appShell .dropdownMenuPortal.modelPresetSelect .dropdownOptionAction.danger {
+  color: var(--nx-danger, #c84c4c) !important;
+}
+
+.appShell .dropdownMenuPortal.modelPresetSelect .dropdownOptionAction:hover:not(:disabled),
+.appShell .dropdownMenuPortal.modelPresetSelect .dropdownOptionAction:focus-visible {
+  background: color-mix(in srgb, var(--nx-danger, #c84c4c) 10%, transparent) !important;
+  color: var(--nx-danger, #c84c4c) !important;
+  outline: none !important;
+}
+
+.appShell .dropdownMenuPortal.modelPresetSelect .dropdownOptionAction:disabled {
+  cursor: not-allowed !important;
+  opacity: .45 !important;
+}
+
+@media (max-width: 760px) {
+  .settingsLayer .settingsDrawer .modelPresetManagementCard > .modelPresetEditorRow {
+    grid-template-columns: auto minmax(0, 1fr) !important;
+  }
+
+  .settingsLayer .settingsDrawer .modelPresetManagementCard > .modelPresetEditorRow > .wideField {
+    max-width: none !important;
+  }
+
+  .settingsLayer .settingsDrawer .modelPresetManagementCard .modelPresetActionRow {
+    grid-column: 1 / -1 !important;
+    justify-self: start !important;
+    width: 100% !important;
+  }
+}
+
+/* Final tool-row contract: status, tool name and elapsed time share one line. */
+.appShell :is(.message.tool, .message.inlineTool) > summary.toolSummary {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  min-width: 0 !important;
+  gap: 6px !important;
+  white-space: nowrap !important;
+}
+.appShell :is(.message.tool, .message.inlineTool) > summary.toolSummary .toolSummaryMain {
+  display: inline-flex !important;
+  min-width: 0 !important;
+  flex: 1 1 auto !important;
+  overflow: hidden !important;
+  align-items: baseline !important;
+}
+.appShell :is(.message.tool, .message.inlineTool) > summary.toolSummary .toolSummaryName,
+.appShell :is(.message.tool, .message.inlineTool) > summary.toolSummary .toolSummaryValue,
+.appShell :is(.message.tool, .message.inlineTool) > summary.toolSummary .toolSummaryMeta {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+.appShell :is(.message.tool, .message.inlineTool) > summary.toolSummary .toolElapsed {
+  flex: 0 0 auto !important;
+  white-space: nowrap !important;
+}
+
+/* Error evidence must remain visible after all legacy compatibility rules. */
+.appShell :is(.message.error, .assistantTurnError, .childActivityError, .workspaceFileError, .gitNexusError, .gitNexusResultError) {
+  animation: none !important;
+  opacity: 1 !important;
+  max-height: none !important;
+  margin-block: 8px !important;
+  overflow: visible !important;
+  pointer-events: auto !important;
+}
+
+/* 自定义厂商图标：用户注册的 custom_* 渠道使用浏览器 favicon。 */
+/* English: custom provider icons use the favicon captured from a browser tab. */
+.appShell .dropdownIcon .modelBrandIcon.brand-custom,
+.appShell .dropdownOptionLabel .modelBrandIcon.brand-custom,
+.settingsLayer .settingsDrawer .modelBrandIcon.brand-custom {
+  display: block;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  border-radius: 3px;
+}
+/* Chat tool and reasoning rows need stronger ink than disabled chrome. */
+.appShell .toolBatchDetails > summary,
+.appShell .toolBatchIcon,
+.appShell .toolBatchChevron,
+.appShell .toolBatchStats,
+.appShell .toolElapsed,
+.appShell .reasoningDetails,
+.appShell .reasoningDetails > summary,
+.appShell .reasoningDetails .reasoningElapsed {
+  color: var(--nx-chat-ink) !important;
+}
+.appShell .toolBatchDetails {
+  border-left-color: color-mix(in srgb, var(--nx-chat-ink) 28%, transparent) !important;
+}
+.appShell .reasoningDetailsBody,
+.appShell .message.tool > pre,
+.appShell .message.inlineTool > pre,
+.appShell .internalItemDetails pre {
+  color: var(--nx-chat-ink) !important;
+}
+/* Plan / Goal / Ops 是只读入口状态；Dynamic Workflow 属于思考程度第四档。 */
+.appShell .composerBottom .modeIndicator {
+  pointer-events: auto;
+  user-select: none;
+  border: 0;
+  background: transparent;
+}
+
+.appShell .composerBottom .modeIndicatorIcon,
+.appShell .composerBottom .modeIndicatorDismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.appShell .composerBottom .modeIndicatorDismiss {
+  width: 16px;
+  height: 16px;
+  margin-left: 2px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: currentColor;
+  cursor: pointer;
+}
+
+.appShell .composerBottom .modeIndicatorDismiss:hover,
+.appShell .composerBottom .modeIndicatorDismiss:focus-visible {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  outline: none;
+}
+
+.appShell .composerBottom .modeIndicatorDismiss svg {
+  width: 12px;
+  height: 12px;
+}
+
+.appShell .composerActions .permissionSelect .dropdownButton.tone-warning,
+.appShell .composerActions .permissionSelect .dropdownButton.tone-warning,
+.appShell .composerActions .permissionSelect .dropdownOption.tone-warning,
+.appShell .composerActions .permissionSelect .dropdownButton.tone-warning .dropdownSelectedValue > span:not(.dropdownIcon),
+.appShell .composerActions .permissionSelect .dropdownOption.tone-warning .dropdownOptionLabel > span:not(.dropdownIcon),
+.appShell .composerActions .permissionSelect .dropdownButton.tone-warning .dropdownIcon svg,
+.appShell .composerActions .permissionSelect .dropdownOption.tone-warning .dropdownOptionLabel svg {
+  color: #f97316 !important;
+}
+/* 完全自主必须保持橙色，内层文字与图标一起继承语义色。 */
+.appShell .composerActions .permissionSelect .dropdownButton.tone-warning,
+.appShell .composerActions .permissionSelect .dropdownOption.tone-warning {
+  color: #f97316 !important;
+}
+
+/* 模型配置列表：全部平铺，每行编辑/删除图标；新建在右上角。 */
+.appShell .modelPresetSectionHeader,
+.appShell .settingsDrawer .modelPresetSectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.appShell .modelPresetNewButton,
+.appShell .settingsDrawer .modelPresetNewButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.appShell .modelPresetNewButton svg,
+.appShell .settingsDrawer .modelPresetNewButton svg {
+  width: 14px;
+  height: 14px;
+}
+
+.appShell .modelPresetList,
+.appShell .settingsDrawer .modelPresetList {
+  display: grid;
+  gap: 2px;
+  margin-top: 10px;
+}
+
+.appShell .modelPresetRow,
+.appShell .settingsDrawer .modelPresetRow {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.appShell .modelPresetRow:hover,
+.appShell .settingsDrawer .modelPresetRow:hover {
+  background: #f8fafc;
+  border-color: #e8edf4;
+}
+
+.appShell .modelPresetRow.active,
+.appShell .settingsDrawer .modelPresetRow.active {
+  background: #f1f5f9;
+}
+
+.appShell .modelPresetRow.editing,
+.appShell .settingsDrawer .modelPresetRow.editing {
+  border-color: #cbd5e1;
+}
+
+.appShell .modelPresetRowIcon,
+.appShell .settingsDrawer .modelPresetRowIcon {
+  display: inline-grid;
+  place-items: center;
+  color: #64748b;
+}
+
+.appShell .modelPresetRowText,
+.appShell .settingsDrawer .modelPresetRowText {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.appShell .modelPresetRowText strong,
+.appShell .settingsDrawer .modelPresetRowText strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.appShell .modelPresetRowText small,
+.appShell .settingsDrawer .modelPresetRowText small {
+  font-size: 11px;
+  color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.appShell .modelPresetRowBadge,
+.appShell .settingsDrawer .modelPresetRowBadge {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.appShell .modelPresetRowActions,
+.appShell .settingsDrawer .modelPresetRowActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+
+.appShell .modelPresetRowActions .miniIconButton,
+.appShell .settingsDrawer .modelPresetRowActions .miniIconButton {
+  color: #64748b;
+}
+
+.appShell .modelPresetRowActions .miniIconButton.danger,
+.appShell .settingsDrawer .modelPresetRowActions .miniIconButton.danger {
+  color: #b91c1c;
+}
+
+.appShell .modelPresetEmpty,
+.appShell .settingsDrawer .modelPresetEmpty {
+  margin: 10px 0 2px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+/* 新建 / 编辑共用的统一面板 */
+.appShell .modelEditorPanel,
+.appShell .settingsDrawer .modelEditorPanel {
+  display: grid;
+  gap: 12px;
+}
+
+.appShell .modelEditorActions,
+.appShell .settingsDrawer .modelEditorActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.appShell.theme-dark .modelPresetRow:hover,
+.settingsLayer.theme-dark .modelPresetRow:hover {
+  background: #1e293b;
+  border-color: #334155;
+}
+
+.appShell.theme-dark .modelPresetRow.active,
+.settingsLayer.theme-dark .modelPresetRow.active {
+  background: #1e293b;
+}
+
+.appShell.theme-dark .modelPresetRowText strong,
+.settingsLayer.theme-dark .modelPresetRowText strong {
+  color: #e2e8f0;
+}
+
+.appShell.theme-dark .modelPresetRowText small,
+.settingsLayer.theme-dark .modelPresetRowText small,
+.appShell.theme-dark .modelPresetEmpty,
+.settingsLayer.theme-dark .modelPresetEmpty {
+  color: #94a3b8;
+}
+
+.appShell.theme-dark .modelPresetRowBadge,
+.settingsLayer.theme-dark .modelPresetRowBadge {
+  background: #334155;
+  color: #cbd5e1;
+}
+
+/* 页头只留图标的新建按钮 */
+.appShell .settingsDrawer .settingsPageHeaderAction.iconOnly,
+.settingsLayer .settingsDrawer .settingsPageHeaderAction.iconOnly {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+}
+
+.appShell .settingsDrawer .settingsPageHeaderAction.iconOnly svg,
+.settingsLayer .settingsDrawer .settingsPageHeaderAction.iconOnly svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* ── 新建 / 编辑模型：真正的悬浮弹窗 ── */
+.settingsLayer .modelEditorLayer {
+  position: fixed;
+  inset: 0;
+  z-index: 1002;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.settingsLayer .modelEditorScrim {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  background: rgba(15, 23, 42, .34);
+  cursor: default;
+}
+
+.settingsLayer .modelEditorPanel {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 18px;
+  width: min(720px, calc(100vw - 48px));
+  max-height: calc(100vh - 80px);
+  overflow: auto;
+  padding: 22px 24px;
+  border: 1px solid var(--nx-settings-border, #dce2eb);
+  border-radius: 14px;
+  background: var(--nx-settings-surface, #fff);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, .22);
+}
+
+.settingsLayer.theme-dark .modelEditorPanel {
+  background: #111418;
+  border-color: rgba(255, 255, 255, .12);
+}
+
+.settingsLayer .modelEditorHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settingsLayer .modelEditorHeader h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--nx-settings-text, #172033);
+}
+
+.settingsLayer .modelEditorActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* 弹窗内的表单：整齐双列栅格；每行两栏等高对齐，窄屏退化为单列。 */
+.settingsLayer .modelEditorPanel .settingsFormGrid,
+.settingsLayer .modelEditorPanel .settingsFormGrid.three {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 14px 18px;
+}
+
+/* 每个字段纵向排列，标签与控件贴齐，避免行高参差。 */
+.settingsLayer .modelEditorPanel .settingsFormGrid > .settingsField,
+.settingsLayer .modelEditorPanel .settingsFormGrid > label {
+  display: grid;
+  grid-template-rows: auto auto;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* 控件统一高度与宽度，视觉上对齐成网格。 */
+.settingsLayer .modelEditorPanel .settingsFormGrid input,
+.settingsLayer .modelEditorPanel .settingsFormGrid .dropdownButton {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  box-sizing: border-box;
+}
+
+@media (max-width: 640px) {
+  .settingsLayer .modelEditorPanel .settingsFormGrid,
+  .settingsLayer .modelEditorPanel .settingsFormGrid.three {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* 密钥输入：输入框与眼睛按钮同排，整行高度与其它字段一致。 */
+.settingsLayer .modelEditorPanel .settingsInputWithSuffix {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.settingsLayer .modelEditorPanel .settingsInputWithSuffix .miniIconButton {
+  width: 34px;
+  height: 34px;
+}
+
+/* 上下文等数字输入进入双列后不再单独占一行。 */
+.settingsLayer .modelEditorPanel .modelContextField,
+.settingsLayer .modelEditorPanel .modelBaseUrlRow {
+  grid-column: auto;
+  display: grid;
+  grid-template-rows: auto auto;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* 字段标签统一基线，避免双列行高参差。 */
+.settingsLayer .modelEditorPanel .settingsFieldLabel {
+  display: block;
+  min-height: 16px;
+  line-height: 16px;
+}
+
+/* 模型按厂商归组，厂商与子模型共用一条对齐基线。 */
+.settingsLayer .modelProviderGroup { border-bottom: 1px solid var(--settings-border); padding: 3px 0 5px; }
+.settingsLayer .modelProviderGroup:last-child { border-bottom: 0; }
+.settingsLayer .modelProviderRow { display: grid; grid-template-columns: 22px minmax(0,1fr) auto auto; align-items: center; gap: 10px; min-height: 38px; padding: 3px 10px; color: var(--settings-text); }
+.settingsLayer .modelProviderRow > strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.settingsLayer .modelProviderCount { color: var(--settings-text-muted); font-size: 11px; }
+.settingsLayer .modelProviderGroup .modelPresetRow { grid-template-columns: minmax(0,1fr) auto auto; margin-left: 32px; min-height: 34px; padding: 5px 8px; }
+.settingsLayer .modelProviderGroup .modelPresetRowText strong { color: var(--settings-text-sub); font-weight: 500; }
+.settingsLayer .modelProviderRow .miniIconButton { display: inline-grid; place-items: center; width: 28px; height: 28px; }
+
+.settingsLayer .modelProviderActions { display: inline-flex; align-items: center; gap: 2px; }
+
+/* 自定义厂商图标编辑：与模型编辑复用全屏遮罩，内容只占一列。 */
+.settingsLayer .modelIconEditorPanel { width: min(440px, calc(100vw - 32px)); }
+.settingsLayer .modelIconCandidates { display: grid; gap: 4px; max-height: 188px; overflow-y: auto; margin: 14px 0; }
+.settingsLayer .modelIconCandidate { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: 9px; width: 100%; padding: 7px 9px; border: 1px solid transparent; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.settingsLayer .modelIconCandidate:hover, .settingsLayer .modelIconCandidate:focus-visible { background: var(--nx-settings-control, #f4f5f6); border-color: var(--nx-settings-border, #dce2eb); }
+.settingsLayer .modelIconCandidate img { width: 18px; height: 18px; object-fit: contain; }
+.settingsLayer .modelIconCandidate span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.settingsLayer .modelIconCandidate small, .settingsLayer .modelIconEmpty { color: var(--nx-settings-text-muted, #777); }
+.settingsLayer .modelIconEmpty { margin: 14px 0; font-size: 12px; }
+
+/* 模型上下文由服务端探测；只读值与双列表单中的输入保持同一高度。 */
+.settingsLayer .modelEditorPanel .modelContextValue {
+  display: flex; align-items: center; min-height: 36px; padding: 0 11px;
+  border: 1px solid var(--settings-border); color: var(--settings-text-sub);
+  font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+
+/* 上下文参考列表：与模型配置完全独立，只在保存模型时复制一次长度。 */
+.settingsLayer .modelContextReferencesPanel { width: min(640px, calc(100vw - 32px)); }
+.settingsLayer .modelContextReferencesToolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; color: var(--nx-settings-text-muted, #777); font-size: 12px; }
+.settingsLayer .modelContextReferencesToolbar > span { min-width: 0; }
+.settingsLayer .modelContextReferencesList { display: grid; gap: 8px; max-height: min(52vh, 460px); overflow-y: auto; padding: 2px 1px; }
+.settingsLayer .modelContextReferenceRow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(150px, .42fr) 34px; align-items: center; gap: 8px; }
+.settingsLayer .modelContextReferenceRow input { width: 100%; min-width: 0; height: 34px; box-sizing: border-box; }
+.settingsLayer .modelContextReferenceRow .miniIconButton { width: 34px; height: 34px; }
+.settingsLayer .modelContextField .modelContextInputWrap { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; min-width: 0; }
+.settingsLayer .modelContextField .modelContextInputWrap input { width: 100%; min-width: 0; height: 34px; box-sizing: border-box; }
+.settingsLayer .modelContextSource { color: var(--nx-settings-text-muted, #777); font-size: 11px; white-space: nowrap; }
+@media (max-width: 560px) {
+  .settingsLayer .modelContextReferencesToolbar { align-items: flex-start; }
+  .settingsLayer .modelContextReferenceRow { grid-template-columns: minmax(0, 1fr) 34px; }
+  .settingsLayer .modelContextReferenceRow input:nth-child(2) { grid-column: 1; }
+  .settingsLayer .modelContextReferenceRow .miniIconButton { grid-column: 2; grid-row: 1 / span 2; }
+  .settingsLayer .modelContextField .modelContextInputWrap { grid-template-columns: minmax(0, 1fr); }
+  .settingsLayer .modelContextSource { white-space: normal; }
+}
+
+/* 模型编辑器：来源放标签行，输入保持整列宽度。 */
+.settingsLayer .modelEditorPanel .modelContextField .settingsFieldLabel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.settingsLayer .modelEditorPanel .modelContextField .modelContextInputWrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* 错误先给短说明，原始响应只在详情中展开。 */
+.appShell :is(.message.error, .assistantTurnError, .childActivityError) .errorNoticeToggle {
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--nx-text-muted);
+  font: inherit;
+  line-height: inherit;
+  cursor: pointer;
+}
+
+.appShell :is(.message.error, .assistantTurnError, .childActivityError) .errorNoticeToggle:hover,
+.appShell :is(.message.error, .assistantTurnError, .childActivityError) .errorNoticeToggle:focus-visible {
+  color: var(--nx-text-primary);
+}
+
+.appShell :is(.message.error, .assistantTurnError, .childActivityError) .errorNoticeRaw {
+  flex-basis: 100%;
+  max-height: 240px;
+  margin: 2px 0 0;
+  padding: 8px;
+  overflow: auto;
+  border: 1px solid var(--nx-chat-line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--nx-chat-ink) 3%, transparent);
+  color: var(--nx-chat-ink);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 最近事件从整行按钮改为内容 + 操作区，长详情独立展开。 */
+.appShell .liveActivityEvent {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+
+.appShell .liveActivityEventText,
+.appShell .liveActivityEventDetail {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.appShell .liveActivityEventText {
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.appShell .liveActivityEventDetail {
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.appShell .liveActivityEventSummary {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.appShell .liveActivityEventName {
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+.appShell .liveActivityEventName > .liveActivityEventTitle {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.appShell .liveActivityEventActions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.appShell .liveActivityEventJump,
+.appShell .liveActivityEventDetailToggle {
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--nx-text-muted);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.appShell .liveActivityEventJump:hover,
+.appShell .liveActivityEventJump:focus-visible,
+.appShell .liveActivityEventDetailToggle:hover,
+.appShell .liveActivityEventDetailToggle:focus-visible {
+  background: var(--nx-surface-overlay);
+  color: var(--nx-text-primary);
+}
+
+.appShell .liveActivityEventRaw {
+  flex-basis: 100%;
+  max-height: 180px;
+  margin: 4px 0 0;
+  padding: 8px;
+  overflow: auto;
+  border: 1px solid var(--nx-control-border);
+  border-radius: 8px;
+  background: var(--nx-surface-panel);
+  color: var(--nx-text-primary);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.appShell .inspectorField__value--prewrap {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 模型列表限定宽度并放入低对比边框，厂商与模型操作共用右对齐基线。 */
+.settingsLayer .modelPresetSection .modelPresetList {
+  width: min(780px, 100%);
+  margin: 14px auto 0;
+  padding: 4px 0;
+  border: 1px solid var(--nx-settings-border, #dce2eb);
+  border-radius: 10px;
+  background: var(--nx-settings-surface, #fff);
+}
+
+.settingsLayer .modelProviderGroup .modelPresetRow {
+  padding-right: 10px;
+}
+
+.settingsLayer.theme-dark .modelPresetSection .modelPresetList {
+  border-color: #30353b;
+  background: #1d2024;
+}
+/* Agent transcript column must own the full content edge; legacy avatar tracks
+   clipped fold markers even when the avatar was visually removed. */
+.appShell .messageBlock.agent {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  column-gap: 0 !important;
+}
+.appShell .messageBlock.agent > .messageAgentAvatar {
+  display: none !important;
+}
+.appShell .messageBlock.agent > :not(.messageAgentAvatar) {
+  grid-column: 1 !important;
+}
+
+/* 浅色侧栏：工作区按钮悬浮不能变成近白字，否则图标在白底上看不见。 */
+main.appShell.theme-light .workspaceGroupActions button,
+main.appShell.theme-light .workspaceGroupActions button:hover:not(:disabled),
+main.appShell.theme-light .workspaceGroupActions button:focus-visible,
+main.appShell.theme-light .workspaceThreadActions button,
+main.appShell.theme-light .workspaceThreadActions button:hover:not(:disabled),
+main.appShell.theme-light .workspaceThreadActions button:focus-visible,
+main.appShell.theme-light .threadModuleHeader > button:not(.threadModuleToggle),
+main.appShell.theme-light .threadModuleHeader > button:not(.threadModuleToggle):hover:not(:disabled),
+main.appShell.theme-light .threadModuleAction,
+main.appShell.theme-light .threadModuleAction:hover:not(:disabled),
+main.appShell.theme-light .miniIconButton,
+main.appShell.theme-light .miniIconButton:hover:not(:disabled) {
+  color: #1f2937 !important;
+  opacity: 1 !important;
+}
+
+main.appShell.theme-light .workspaceGroupActions button:hover:not(:disabled),
+main.appShell.theme-light .workspaceGroupActions button:focus-visible,
+main.appShell.theme-light .workspaceThreadActions button:hover:not(:disabled),
+main.appShell.theme-light .workspaceThreadActions button:focus-visible,
+main.appShell.theme-light .threadModuleAction:hover:not(:disabled),
+main.appShell.theme-light .miniIconButton:hover:not(:disabled) {
+  background: rgba(31, 41, 55, .08) !important;
+}
+
+main.appShell.theme-light .workspaceGroupActions button svg,
+main.appShell.theme-light .workspaceThreadActions button svg,
+main.appShell.theme-light .threadModuleAction svg,
+main.appShell.theme-light .miniIconButton svg {
+  stroke: #1f2937 !important;
+  fill: none !important;
+  opacity: 1 !important;
 }

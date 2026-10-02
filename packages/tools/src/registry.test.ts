@@ -141,4 +141,39 @@ describe('ToolRegistry output truncation', () => {
       }),
     ]);
   });
+
+  it('forwards cancellation to the tool and preserves its structured result', async () => {
+    const registry = new ToolRegistry();
+    let signalSeen: AbortSignal | undefined;
+    registry.register({
+      name: 'cancellable',
+      description: 'test tool',
+      parameters: { type: 'object' },
+      requiredPolicy: 'readonly',
+      async execute(_args, context) {
+        signalSeen = context.signal;
+        return new Promise((resolve) => {
+          context.signal?.addEventListener('abort', () => resolve({
+            status: 'failed',
+            output: 'cancelled by signal',
+            error: { message: 'cancelled by signal', code: 'TOOL_CANCELLED' },
+          }), { once: true });
+        });
+      },
+    });
+    const controller = new AbortController();
+    const execution = registry.execute(
+      'cancellable',
+      {},
+      { workspaceRoot: process.cwd(), threadId: 'thread', turnId: 'turn', approved: false, signal: controller.signal },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    controller.abort(new Error('User cancelled the turn'));
+
+    await expect(execution).resolves.toMatchObject({
+      status: 'failed',
+      error: { code: 'TOOL_CANCELLED' },
+    });
+    expect(signalSeen?.aborted).toBe(true);
+  });
 });

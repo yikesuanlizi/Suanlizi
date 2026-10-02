@@ -1,7 +1,7 @@
 # Electron 打包配置（Phase 5）
 # — English: electron-builder configuration (Phase 5).
-appId: com.nexus.desktop
-productName: Nexus
+appId: com.suanlizi.desktop
+productName: Suanlizi
 directories:
   output: release
   buildResources: build
@@ -19,6 +19,12 @@ files:
 #   ElectronWebContentsRuntime).
 npmRebuild: false
 
+# Windows 任务栏和运行中的窗口显式使用新图标（桌面快捷方式仍由 win.icon 生成）。
+# — English: explicit runtime icon for the Windows taskbar and window.
+extraResources:
+  - from: build/icon.ico
+    to: icon.ico
+
 # 无远程仓库（本地 .git 无 remote），禁用自动更新元数据生成，
 # 否则 electron-builder 在 updateInfoBuilder 崩（null provider）。
 # — English: no remote repository (local .git without remote) — disable publish
@@ -30,13 +36,11 @@ win:
     - target: nsis
       arch:
         - x64
-  # 图标暂用默认；替换为 build/icon.ico 后即可启用。
-  # — English: default icon for now; drop build/icon.ico to enable a custom one.
-  # icon: build/icon.ico
+  icon: build/icon.ico
 
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
   perMachine: false
   createDesktopShortcut: true
-  shortcutName: Nexus
+  shortcutName: Suanlizi

@@ -2,9 +2,9 @@
 // — English: approval diff preview parser: extract diff hunks from tool call payload
 import type { DiffViewHunk } from './DiffView.js';
 
-// 轻量级 Nexus patch 解析（仅用于审批预览，不写入文件）
-// — English: lightweight Nexus patch parser for approval preview only
-export function parseNexusPatchForPreview(patchText: string): DiffViewHunk[] {
+// 轻量级 Suanlizi patch 解析（仅用于审批预览，不写入文件）
+// — English: lightweight Suanlizi patch parser for approval preview only
+export function parseSuanliziPatchForPreview(patchText: string): DiffViewHunk[] {
   const lines = patchText.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
   const hunks: DiffViewHunk[] = [];
   let i = 0;
@@ -138,7 +138,7 @@ export function extractApprovalDiffHunks(payload: unknown): DiffViewHunk[] {
   const obj = payload as Record<string, unknown>;
   // apply_patch: { patch: "*** Begin Patch..." }
   if (typeof obj.patch === 'string') {
-    return parseNexusPatchForPreview(obj.patch);
+    return parseSuanliziPatchForPreview(obj.patch);
   }
   // write_file: { filePath, content }
   if (typeof obj.filePath === 'string' && typeof obj.content === 'string') {

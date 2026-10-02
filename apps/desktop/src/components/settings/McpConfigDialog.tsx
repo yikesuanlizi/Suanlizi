@@ -43,7 +43,7 @@ export function McpConfigDialog({
           <div>
             <h2 id="mcp-panel-title">{mcpPanelTitle}</h2>
             <p className="dialogMessage">{mcpDraftSourceUrl
-              ? (locale === 'zh' ? '已识别 MCP 来源 URL。请根据 README 或文档补全启动命令后再保存；Nexus 不会把 URL 直接当作命令执行。' : 'Detected an MCP source URL. Fill in the launch command from its README or docs before saving; Nexus will not execute a URL as a command.')
+              ? (locale === 'zh' ? '已识别 MCP 来源 URL。请根据 README 或文档补全启动命令后再保存；Suanlizi 不会把 URL 直接当作命令执行。' : 'Detected an MCP source URL. Fill in the launch command from its README or docs before saving; Suanlizi will not execute a URL as a command.')
               : (locale === 'zh' ? '命令、参数和启用状态都会立即影响当前插件中心中的 MCP 配置。' : 'Command, args, and enabled state immediately affect the MCP configuration in Plugin Hub.')}
             </p>
           </div>

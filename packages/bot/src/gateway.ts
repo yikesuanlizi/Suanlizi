@@ -1,5 +1,5 @@
-import type { ThreadMeta } from '@nexus/protocol';
-import type { ThreadStore } from '@nexus/storage';
+import type { ThreadMeta } from '@suanlizi/protocol';
+import type { ThreadStore } from '@suanlizi/storage';
 import type {
   BotDedupeState,
   BotInboundMessage,

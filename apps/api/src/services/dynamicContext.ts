@@ -1,5 +1,5 @@
-import type { RuntimeTurnContext } from '@nexus/runtime';
-import type { ThreadStore } from '@nexus/storage';
+import type { RuntimeTurnContext } from '@suanlizi/runtime';
+import type { ThreadStore } from '@suanlizi/storage';
 import { BOT_CONFIG_KEY, normalizeBotConfig } from '../config/botConfig.js';
 
 export function createDynamicContextProvider(store: ThreadStore): (ctx: RuntimeTurnContext) => Promise<string[]> {

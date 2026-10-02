@@ -31,8 +31,8 @@ async function installFakeNpx(binDir: string): Promise<void> {
     spyScript,
     [
       "const fs = require('node:fs');",
-      "const logPath = process.env.NEXUS_FAKE_NPX_LOG;",
-      "if (!logPath) throw new Error('missing NEXUS_FAKE_NPX_LOG');",
+      "const logPath = process.env.SUANLIZI_FAKE_NPX_LOG;",
+      "if (!logPath) throw new Error('missing SUANLIZI_FAKE_NPX_LOG');",
       "fs.writeFileSync(logPath, JSON.stringify({ cwd: process.cwd(), argv: process.argv.slice(2) }));",
       "console.log('indexed ok');",
     ].join('\n'),
@@ -109,15 +109,15 @@ describe('gitNexusAnalyzeTool', () => {
   });
 
   it('runs npx -y gitnexus@latest analyze in the workspace root', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-gitnexus-analyze-'));
-    const binDir = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-fake-npx-'));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-gitnexus-analyze-'));
+    const binDir = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-fake-npx-'));
     const logPath = path.join(root, 'npx-call.json');
     await installFakeNpx(binDir);
 
     const originalPath = process.env.PATH;
-    const originalLogPath = process.env.NEXUS_FAKE_NPX_LOG;
+    const originalLogPath = process.env.SUANLIZI_FAKE_NPX_LOG;
     process.env.PATH = `${binDir}${path.delimiter}${originalPath ?? ''}`;
-    process.env.NEXUS_FAKE_NPX_LOG = logPath;
+    process.env.SUANLIZI_FAKE_NPX_LOG = logPath;
     try {
       const result = await gitNexusAnalyzeTool.execute(
         {},
@@ -136,8 +136,8 @@ describe('gitNexusAnalyzeTool', () => {
       expect(call.argv).toEqual(['-y', 'gitnexus@latest', 'analyze']);
     } finally {
       process.env.PATH = originalPath;
-      if (originalLogPath === undefined) delete process.env.NEXUS_FAKE_NPX_LOG;
-      else process.env.NEXUS_FAKE_NPX_LOG = originalLogPath;
+      if (originalLogPath === undefined) delete process.env.SUANLIZI_FAKE_NPX_LOG;
+      else process.env.SUANLIZI_FAKE_NPX_LOG = originalLogPath;
     }
   });
 });
@@ -153,12 +153,12 @@ describe('webSearchTool', () => {
       `);
 
     const result = await webSearchTool.execute(
-      { query: 'Nexus', maxResults: 1 },
+      { query: 'Suanlizi', maxResults: 1 },
       { workspaceRoot: process.cwd(), threadId: 'thread', turnId: 'turn', approved: false },
     );
 
     expect(result.status).toBe('completed');
-    expect(result.output).toContain('Web search results for "Nexus"');
+    expect(result.output).toContain('Web search results for "Suanlizi"');
     expect(result.output).toContain('Example & Result');
     expect(result.output).toContain('https://example.com/page?x=1&y=2');
     expect(result.output).toContain('A useful snippet about the result.');
@@ -306,7 +306,7 @@ describe('webFetchTool', () => {
 
 describe('readFileTool', () => {
   it('asks runtime access policy before reading a file', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-read-file-access-'));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-read-file-access-'));
     await fs.writeFile(path.join(root, 'note.txt'), 'hello\n', 'utf-8');
     const requestAccess = vi.fn(async (request) => ({
       decision: 'deny' as const,
@@ -332,7 +332,7 @@ describe('readFileTool', () => {
   });
 
   it('returns line metadata and file segment artifact refs for large files', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-read-file-'));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-read-file-'));
     await fs.writeFile(
       path.join(root, 'large.txt'),
       Array.from({ length: 80 }, (_, index) => `line ${index + 1}`).join('\n'),
@@ -365,7 +365,7 @@ describe('readFileTool', () => {
   });
 
   it('falls back to GB18030 when reading non-UTF-8 Chinese text files', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-read-file-gbk-'));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-read-file-gbk-'));
     await fs.writeFile(
       path.join(root, 'gbk.txt'),
       Buffer.from([0xd6, 0xd0, 0xce, 0xc4, 0xb2, 0xe2, 0xca, 0xd4, 0x0a]),
@@ -383,7 +383,7 @@ describe('readFileTool', () => {
   });
 
   it('returns a full file fingerprint with read_file results', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-read-file-fingerprint-'));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-read-file-fingerprint-'));
     await fs.writeFile(path.join(root, 'note.txt'), 'hello\n', 'utf-8');
 
     const result = await readFileTool.execute(
@@ -405,7 +405,7 @@ describe('readFileTool', () => {
   });
 
   it('fails closed when reading a stale managed document artifact', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-stale-artifact-'));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-stale-artifact-'));
     const sourcePath = path.join(root, 'source.docx');
     await writeMinimalDocx(sourcePath, '源文件版本一');
     const extracted = await readDocumentTool.execute(
@@ -437,7 +437,7 @@ describe('readFileTool', () => {
 
 describe('readDocumentTool', () => {
   it('asks runtime access policy before extracting a document', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-read-document-access-'));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-read-document-access-'));
     const docxPath = path.join(root, 'brief.docx');
     await writeMinimalDocx(docxPath, '版本一 内容');
     const requestAccess = vi.fn(async (request) => ({
@@ -462,7 +462,7 @@ describe('readDocumentTool', () => {
   });
 
   it('extracts docx to a managed artifact and reuses it while fresh', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-read-document-'));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-read-document-'));
     const docxPath = path.join(root, 'brief.docx');
     await writeMinimalDocx(docxPath, '版本一 内容');
 
@@ -487,7 +487,7 @@ describe('readDocumentTool', () => {
   });
 
   it('refreshes the artifact after the source document changes', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-read-document-refresh-'));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-read-document-refresh-'));
     const docxPath = path.join(root, 'brief.docx');
     await writeMinimalDocx(docxPath, '版本一 内容');
     await readDocumentTool.execute(
@@ -508,7 +508,7 @@ describe('readDocumentTool', () => {
   });
 
   it('returns structured failures for missing or unreadable source documents', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-read-document-fail-'));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-read-document-fail-'));
 
     const missing = await readDocumentTool.execute(
       { filePath: 'missing.docx' },
@@ -536,7 +536,7 @@ describe('readDocumentTool', () => {
 
 describe('listFilesTool', () => {
   it('lists workspace directories and files with a bounded output', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-list-files-'));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-list-files-'));
     await fs.mkdir(path.join(root, 'src'));
     await fs.writeFile(path.join(root, 'package.json'), '{}\n', 'utf-8');
     await fs.writeFile(path.join(root, 'src', 'index.ts'), 'export {};\n', 'utf-8');
@@ -597,7 +597,7 @@ function escapeXml(value: string): string {
 
 describe('searchContentTool', () => {
   it('returns matches with file segment artifact refs instead of only plain text', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-search-content-'));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-search-content-'));
     await fs.writeFile(
       path.join(root, 'src.ts'),
       ['alpha', 'needle one', 'middle', 'needle two', 'omega'].join('\n'),
@@ -634,9 +634,33 @@ describe('searchContentTool', () => {
   });
 });
 
+describe('writeFileTool', () => {
+  it('requests access for the canonical external target behind a workspace link', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-write-link-workspace-'));
+    const external = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-write-link-external-'));
+    await fs.symlink(external, path.join(root, 'linked'), process.platform === 'win32' ? 'junction' : 'dir');
+    const requestAccess = vi.fn(async (request) => ({
+      decision: 'deny' as const,
+      request,
+      source: 'approval_required' as const,
+      justification: 'External target requires explicit approval',
+    }));
+
+    const result = await writeFileTool.execute(
+      { filePath: 'linked/blocked.txt', content: 'must not escape the workspace' },
+      { workspaceRoot: root, threadId: 'thread', turnId: 'turn', approved: true, requestAccess },
+    );
+
+    expect(result.error?.code).toBe('ACCESS_DENIED');
+    const target = requestAccess.mock.calls[0]?.[0]?.target.path as string;
+    await expect(fs.realpath(path.dirname(target))).resolves.toBe(await fs.realpath(external));
+    await expect(fs.access(path.join(external, 'blocked.txt'))).rejects.toThrow();
+  });
+});
+
 describe('applyPatchTool', () => {
   it('asks runtime access policy before applying a patch', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-apply-patch-access-'));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-apply-patch-access-'));
     await fs.writeFile(path.join(root, 'src.txt'), 'alpha\n', 'utf-8');
     const requestAccess = vi.fn(async (request) => ({
       decision: 'deny' as const,
@@ -669,8 +693,8 @@ describe('applyPatchTool', () => {
     await expect(fs.readFile(path.join(root, 'src.txt'), 'utf-8')).resolves.toBe('alpha\n');
   });
 
-  it('applies Nexus multi-hunk update patches', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-apply-patch-'));
+  it('applies Suanlizi multi-hunk update patches', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-apply-patch-'));
     await fs.writeFile(
       path.join(root, 'src.txt'),
       ['alpha', 'beta', 'gamma', 'delta'].join('\n'),
@@ -714,7 +738,7 @@ describe('applyPatchTool', () => {
   });
 
   it('fails verification instead of silently skipping missing update context', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-apply-patch-missing-'));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-apply-patch-missing-'));
     await fs.writeFile(path.join(root, 'src.txt'), 'actual\n', 'utf-8');
 
     const result = await applyPatchTool.execute(
@@ -737,7 +761,7 @@ describe('applyPatchTool', () => {
   });
 
   it('splits a pure rename move into a source delete and a target add change', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-apply-patch-move-'));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-apply-patch-move-'));
     await fs.writeFile(path.join(root, 'a.txt'), 'alpha\nbeta\n', 'utf-8');
 
     const result = await applyPatchTool.execute(
@@ -767,7 +791,7 @@ describe('applyPatchTool', () => {
   });
 
   it('splits a move with content edits into a source delete and a target add change', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-apply-patch-move-edit-'));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-apply-patch-move-edit-'));
     await fs.writeFile(path.join(root, 'a.txt'), ['alpha', 'beta', 'gamma'].join('\n'), 'utf-8');
 
     const result = await applyPatchTool.execute(
@@ -798,5 +822,22 @@ describe('applyPatchTool', () => {
     await expect(fs.readFile(path.join(root, 'b.txt'), 'utf-8')).resolves.toBe(
       ['alpha', 'beta moved', 'gamma'].join('\n'),
     );
+  });
+});
+
+describe('shellCommandTool', () => {
+  it('terminates a running command when the turn signal is cancelled', async () => {
+    const controller = new AbortController();
+    const command = process.platform === 'win32' ? 'ping -n 6 127.0.0.1 > NUL' : 'sleep 5';
+    const execution = shellCommandTool.execute(
+      { command },
+      { workspaceRoot: process.cwd(), threadId: 'thread', turnId: 'turn', approved: true, signal: controller.signal },
+    );
+    setTimeout(() => controller.abort(new Error('cancelled in test')), 30).unref?.();
+
+    await expect(execution).resolves.toMatchObject({
+      status: 'failed',
+      error: { code: 'TOOL_CANCELLED' },
+    });
   });
 });

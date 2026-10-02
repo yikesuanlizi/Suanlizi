@@ -8,8 +8,8 @@ import type {
   AgentDecisionResponse,
   CommandStatus,
   SystemMonitorInterface,
-} from '@nexus/protocol';
-import type { SandboxLevel } from '@nexus/sandbox';
+} from '@suanlizi/protocol';
+import type { SandboxLevel } from '@suanlizi/sandbox';
 import type { WebProviderRouterOptions } from './web/provider.js';
 
 /** Schema for tool parameters (JSON Schema subset). */
@@ -86,6 +86,13 @@ export interface ToolContext {
   /** 系统监控模块引用（可选），启用后 agent 可查询主机 CPU/内存/磁盘状态 */
   // — Chinese: system monitor reference (optional), enables agent to query host CPU/memory/disk
   systemMonitor?: SystemMonitorInterface;
+  /**
+   * 长时命令的流式输出回调（可选）：shell 等工具在执行期间逐段推送输出增量，
+   * 运行时把它包装成 command_output.delta 事件转发给前端，实现"终端式"实时预览。
+   * — Chinese: streaming output callback for long-running commands; the runtime
+   *   forwards deltas as command_output.delta events for live terminal preview.
+   */
+  onOutputDelta?: (delta: string) => void;
   /** Runtime-owned, durable user decision request. */
   requestUserDecision?: (input: {
     prompt: string;
@@ -234,9 +241,18 @@ export class ToolRegistry {
       };
     }
 
+    const controller = new AbortController();
+    const forwardAbort = () => controller.abort(ctx.signal?.reason ?? new Error('Tool execution cancelled'));
+    if (ctx.signal?.aborted) forwardAbort();
+    else ctx.signal?.addEventListener('abort', forwardAbort, { once: true });
+
     try {
       const timeout = tool.timeoutMs ?? 60_000;
-      const result = await withTimeout(tool.execute(args, ctx), timeout);
+      const result = await withTimeout(
+        () => tool.execute(args, { ...ctx, signal: controller.signal }),
+        timeout,
+        controller,
+      );
       // Truncate output
       // 截断超出 maxOutputLength 的输出，并在 data 上附 truncation 元数据
       const maxLen = tool.maxOutputLength ?? 50_000;
@@ -253,11 +269,20 @@ export class ToolRegistry {
       }
       return result;
     } catch (err) {
+      const aborted = controller.signal.aborted;
+      const abortReason = controller.signal.reason instanceof Error
+        ? controller.signal.reason.message
+        : 'Tool execution cancelled';
       return {
-        output: `Tool error: ${String(err)}`,
+        output: aborted ? abortReason : `Tool error: ${String(err)}`,
         status: 'failed',
-        error: { message: String(err), code: 'EXECUTION_ERROR' },
+        error: {
+          message: aborted ? abortReason : String(err),
+          code: aborted && abortReason.includes('timed out') ? 'TOOL_TIMEOUT' : aborted ? 'TOOL_CANCELLED' : 'EXECUTION_ERROR',
+        },
       };
+    } finally {
+      ctx.signal?.removeEventListener('abort', forwardAbort);
     }
   }
 }
@@ -317,14 +342,37 @@ function withTruncationMetadata(
 
 /** Wrap a promise with a timeout. */
 // 给任意 Promise 套上超时控制，超时后 reject 并清理计时器
-async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+async function withTimeout<T>(run: () => Promise<T>, ms: number, controller: AbortController): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`Tool execution timed out after ${ms}ms`)), ms);
+  let abortFallbackTimer: NodeJS.Timeout | undefined;
+  let rejectAfterAbort: ((reason?: unknown) => void) | undefined;
+  const abortFallback = new Promise<never>((_, reject) => {
+    rejectAfterAbort = reject;
   });
+  const beginAbort = (): void => {
+    if (abortFallbackTimer || !rejectAfterAbort) return;
+    // Give cooperative tools a brief window to release their child process and
+    // return their own structured cancellation result before forcing the turn on.
+    abortFallbackTimer = setTimeout(() => {
+      rejectAfterAbort?.(controller.signal.reason instanceof Error
+        ? controller.signal.reason
+        : new Error('Tool execution cancelled'));
+    }, 250);
+  };
+  timer = setTimeout(() => {
+    controller.abort(new Error(`Tool execution timed out after ${ms}ms`));
+  }, ms);
+  const onAbort = (): void => beginAbort();
+  if (controller.signal.aborted) onAbort();
+  else controller.signal.addEventListener('abort', onAbort, { once: true });
   try {
-    return await Promise.race([promise, timeout]);
+    const execution = Promise.resolve().then(run);
+    // The timeout only aborts the derived signal. `abortFallback` protects the
+    // runtime from tools that ignore it, without preempting cooperative cleanup.
+    return await Promise.race([execution, abortFallback]);
   } finally {
     if (timer) clearTimeout(timer);
+    if (abortFallbackTimer) clearTimeout(abortFallbackTimer);
+    controller.signal.removeEventListener('abort', onAbort);
   }
 }

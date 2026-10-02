@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { ThreadItem, ThreadMeta, ThreadRuntimeState, ThreadSpawnEdge, TurnMeta } from '@nexus/protocol';
-import type { ThreadStore } from '@nexus/storage';
+import type { ThreadItem, ThreadMeta, ThreadRuntimeState, ThreadSpawnEdge, TurnMeta } from '@suanlizi/protocol';
+import type { ThreadStore } from '@suanlizi/storage';
 import { buildThreadChildInfos } from './threadChildren.js';
 
 class ChildStore implements ThreadStore {

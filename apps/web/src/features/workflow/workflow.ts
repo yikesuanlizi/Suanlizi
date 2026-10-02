@@ -1,4 +1,5 @@
 import type { ThreadItem, ThreadMeta } from '../../shared/types.js';
+import { formatSuanliziErrorMessage } from '@suanlizi/protocol';
 
 export const THREAD_WORKFLOW_TAG = 'workflow';
 export const THREAD_WORKFLOW_PROJECT_TAG = 'workflowProject';
@@ -262,7 +263,9 @@ export function createWorkflowDraftErrorItem(message: string, locale: 'zh' | 'en
     id: `${turnId}_assistant`,
     type: 'agent_message',
     turnId,
-    text: locale === 'zh' ? `工作流草案生成失败：${message}` : `Workflow draft planning failed: ${message}`,
+    text: locale === 'zh'
+      ? `工作流草案生成失败：${formatSuanliziErrorMessage(undefined, message, locale)}`
+      : `Workflow draft planning failed: ${formatSuanliziErrorMessage(undefined, message, locale)}`,
     timestamp: now.toISOString(),
   };
 }

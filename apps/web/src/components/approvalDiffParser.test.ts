@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractApprovalDiffHunks, parseNexusPatchForPreview, buildWriteFileHunks } from './approvalDiffParser.js';
+import { extractApprovalDiffHunks, parseSuanliziPatchForPreview, buildWriteFileHunks } from './approvalDiffParser.js';
 
 describe('approvalDiffParser', () => {
   describe('extractApprovalDiffHunks', () => {
@@ -19,7 +19,7 @@ describe('approvalDiffParser', () => {
     });
   });
 
-  describe('parseNexusPatchForPreview - Add File', () => {
+  describe('parseSuanliziPatchForPreview - Add File', () => {
     it('parses *** Add File with all added lines', () => {
       const patch = `*** Begin Patch
 *** Add File: new.txt
@@ -27,7 +27,7 @@ describe('approvalDiffParser', () => {
 +line two
 +line three
 *** End Patch`;
-      const hunks = parseNexusPatchForPreview(patch);
+      const hunks = parseSuanliziPatchForPreview(patch);
       expect(hunks).toHaveLength(1);
       expect(hunks[0].path).toBe('new.txt');
       expect(hunks[0].addedLines).toBe(3);
@@ -38,12 +38,12 @@ describe('approvalDiffParser', () => {
     });
   });
 
-  describe('parseNexusPatchForPreview - Delete File', () => {
+  describe('parseSuanliziPatchForPreview - Delete File', () => {
     it('parses *** Delete File', () => {
       const patch = `*** Begin Patch
 *** Delete File: old.txt
 *** End Patch`;
-      const hunks = parseNexusPatchForPreview(patch);
+      const hunks = parseSuanliziPatchForPreview(patch);
       expect(hunks).toHaveLength(1);
       expect(hunks[0].path).toBe('old.txt');
       expect(hunks[0].addedLines).toBe(0);
@@ -54,7 +54,7 @@ describe('approvalDiffParser', () => {
     });
   });
 
-  describe('parseNexusPatchForPreview - Update File', () => {
+  describe('parseSuanliziPatchForPreview - Update File', () => {
     it('parses hunks with +/- lines', () => {
       const patch = `*** Begin Patch
 *** Update File: src/app.ts
@@ -64,7 +64,7 @@ describe('approvalDiffParser', () => {
  context line
 +another added
 *** End Patch`;
-      const hunks = parseNexusPatchForPreview(patch);
+      const hunks = parseSuanliziPatchForPreview(patch);
       expect(hunks).toHaveLength(1);
       expect(hunks[0].path).toBe('src/app.ts');
       expect(hunks[0].addedLines).toBe(2);
@@ -83,7 +83,7 @@ describe('approvalDiffParser', () => {
 -removed two
 +added two
 *** End Patch`;
-      const hunks = parseNexusPatchForPreview(patch);
+      const hunks = parseSuanliziPatchForPreview(patch);
       expect(hunks).toHaveLength(2);
       expect(hunks[0].addedLinesContent).toEqual(['added one']);
       expect(hunks[0].removedLinesContent).toEqual(['removed one']);
@@ -98,13 +98,13 @@ describe('approvalDiffParser', () => {
 +appended line
 *** End of File
 *** End Patch`;
-      const hunks = parseNexusPatchForPreview(patch);
+      const hunks = parseSuanliziPatchForPreview(patch);
       expect(hunks).toHaveLength(1);
       expect(hunks[0].addedLinesContent).toEqual(['appended line']);
     });
   });
 
-  describe('parseNexusPatchForPreview - Move to (rename)', () => {
+  describe('parseSuanliziPatchForPreview - Move to (rename)', () => {
     it('parses rename with content edits', () => {
       const patch = `*** Begin Patch
 *** Update File: old/path.ts
@@ -113,7 +113,7 @@ describe('approvalDiffParser', () => {
 -old line
 +new line
 *** End Patch`;
-      const hunks = parseNexusPatchForPreview(patch);
+      const hunks = parseSuanliziPatchForPreview(patch);
       // 第一个 hunk 是内容变更（路径用 moveTo 目标）
       expect(hunks[0].path).toBe('new/path.ts');
       expect(hunks[0].addedLinesContent).toEqual(['new line']);
@@ -128,7 +128,7 @@ describe('approvalDiffParser', () => {
 *** Update File: a.txt
 *** Move to: b.txt
 *** End Patch`;
-      const hunks = parseNexusPatchForPreview(patch);
+      const hunks = parseSuanliziPatchForPreview(patch);
       // 纯 rename 只生成 rename 标记 hunk
       expect(hunks).toHaveLength(1);
       expect(hunks[0].path).toBe('a.txt');
@@ -136,10 +136,10 @@ describe('approvalDiffParser', () => {
     });
   });
 
-  describe('parseNexusPatchForPreview - edge cases', () => {
+  describe('parseSuanliziPatchForPreview - edge cases', () => {
     it('handles CRLF line endings', () => {
       const patch = '*** Begin Patch\r\n*** Add File: a.txt\r\n+hello\r\n*** End Patch\r\n';
-      const hunks = parseNexusPatchForPreview(patch);
+      const hunks = parseSuanliziPatchForPreview(patch);
       expect(hunks).toHaveLength(1);
       expect(hunks[0].addedLinesContent).toEqual(['hello']);
     });
@@ -149,14 +149,14 @@ describe('approvalDiffParser', () => {
       const patch = `*** Add File: a.txt
 +hello
 *** End Patch`;
-      const hunks = parseNexusPatchForPreview(patch);
+      const hunks = parseSuanliziPatchForPreview(patch);
       // 仍然能解析（第一行不是 Begin Patch 就跳过）
       expect(hunks).toHaveLength(1);
       expect(hunks[0].addedLinesContent).toEqual(['hello']);
     });
 
     it('handles empty patch', () => {
-      expect(parseNexusPatchForPreview('')).toEqual([]);
+      expect(parseSuanliziPatchForPreview('')).toEqual([]);
     });
   });
 

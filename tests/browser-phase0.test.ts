@@ -9,20 +9,20 @@ import {
   BrowserTraceRecorder,
   FakeBrowserRuntime,
   type FakeSiteDefinition,
-} from '@nexus/browser-runtime';
+} from '@suanlizi/browser-runtime';
 import {
   buildRuntimeAccessPolicy,
   evaluateAccessRequest,
   RunTraceSession,
   type RunTraceSink,
-} from '@nexus/runtime';
+} from '@suanlizi/runtime';
 import {
   runTraceEnvelopeSchema,
   type ActionIntent,
   type RunTraceDraft,
   type RunTraceEnvelope,
   type RunTraceSummary,
-} from '@nexus/protocol';
+} from '@suanlizi/protocol';
 
 // 内存 Trace sink：append 时做 schema 校验并保留 envelope，模拟真实落库。
 // — English: in-memory trace sink — validates on append and keeps envelopes.

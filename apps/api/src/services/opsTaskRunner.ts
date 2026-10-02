@@ -10,9 +10,9 @@ import type {
   OpsTaskSession,
   OpsTaskState,
   OpsTaskTestRun,
-} from '@nexus/protocol';
+} from '@suanlizi/protocol';
 import type { OpsTaskEvent } from '../routes/opsRoute.js';
-import { redactSecrets } from '@nexus/runtime';
+import { redactSecrets } from '@suanlizi/runtime';
 
 export interface OpsObservation {
   /** Adapter-provided text is immediately redacted before becoming Evidence. */
@@ -125,7 +125,7 @@ export function buildLocalTestEnvironment(testId: string): NodeJS.ProcessEnv {
     'HOME', 'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH', 'ComSpec', 'PATHEXT',
     'LANG', 'LC_ALL',
   ];
-  const environment: NodeJS.ProcessEnv = { NEXUS_OPS_TEST: testId };
+  const environment: NodeJS.ProcessEnv = { SUANLIZI_OPS_TEST: testId };
   for (const key of allowedKeys) {
     const value = process.env[key];
     if (value !== undefined) environment[key] = value;

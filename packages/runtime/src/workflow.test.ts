@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ToolDefinition } from '@nexus/tools';
+import type { ToolDefinition } from '@suanlizi/tools';
 import {
   assertValidWorkflowDefinition,
   blockWorkflowStep,
@@ -564,12 +564,12 @@ describe('dynamic workflow runtime', () => {
       definition,
       run: createWorkflowRunFromDefinition(definition, new Date('2026-06-15T00:00:01.000Z'), registry),
       registry,
-      input: { goal: 'Nexus' },
+      input: { goal: 'Suanlizi' },
     });
 
     expect(result.run.status).toBe('completed');
-    expect(result.run.nodeRuns.find((nodeRun) => nodeRun.nodeId === 'render')?.result).toBe('{"name":"Nexus"}');
-    expect(result.run.nodeRuns.find((nodeRun) => nodeRun.nodeId === 'extract')?.result).toBe('{"name":"Nexus"}');
+    expect(result.run.nodeRuns.find((nodeRun) => nodeRun.nodeId === 'render')?.result).toBe('{"name":"Suanlizi"}');
+    expect(result.run.nodeRuns.find((nodeRun) => nodeRun.nodeId === 'extract')?.result).toBe('{"name":"Suanlizi"}');
   });
 
   it('runs registered workflow nodes while preserving editable definition history boundaries for unsealed components', () => {

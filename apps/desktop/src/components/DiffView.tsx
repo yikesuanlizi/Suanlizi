@@ -3,7 +3,7 @@ import type { Locale } from '../config/config.js';
 
 // 英文说明: DiffViewHunk mirrors the protocol FileChangeHunk shape.
 // 中文说明: DiffViewHunk 对齐 protocol 的 FileChangeHunk 结构，行内容字段可选以兼容旧数据。
-// 不直接从 @nexus/protocol 导入是因为 web/desktop 的 tsconfig 限制了 rootDir=src，
+// 不直接从 @suanlizi/protocol 导入是因为 web/desktop 的 tsconfig 限制了 rootDir=src，
 // 跨包源码导入会触发 TS6059/TS6307。
 export interface DiffViewHunk {
   path: string;

@@ -97,8 +97,8 @@ describe('ComposerBar', () => {
 
   it('keeps composer history and draft as UX-only local storage', () => {
     const source = readFileSync(join(here, 'ComposerBar.tsx'), 'utf-8');
-    expect(source).toContain('nexus.composer.history.v1');
-    expect(source).toContain('nexus.composer.draft.v1');
+    expect(source).toContain('suanlizi.composer.history.v1');
+    expect(source).toContain('suanlizi.composer.draft.v1');
     expect(source).toContain("event.key === 'ArrowUp'");
     expect(source).toContain("event.key === 'ArrowDown'");
   });
@@ -168,7 +168,7 @@ describe('ComposerBar', () => {
 
   it('uses a solid semantic send control for idle and busy states', () => {
     const styles = readFileSync(join(here, '..', 'styles.css'), 'utf-8');
-    const finalContract = styles.slice(styles.lastIndexOf('/* Nexus conversation surface contract */'));
+    const finalContract = styles.slice(styles.lastIndexOf('/* Suanlizi conversation surface contract */'));
 
     expect(finalContract).toContain('.appShell .sendButton');
     expect(finalContract).toContain('background: var(--nx-brand);');
@@ -176,24 +176,49 @@ describe('ComposerBar', () => {
     expect(finalContract).toContain('border-radius: 10px;');
   });
 
-  it('renders localized work-mode choices and routes Ops submissions through the Ops callback', () => {
-    const zh = renderComposer({ currentThreadMode: 'ops', currentTaskPreset: 'ops', onStartOps: vi.fn() });
-    const en = renderComposer({ config: { ...defaultConfig, locale: 'en' }, currentThreadMode: 'ops', currentTaskPreset: 'ops' });
+  it('renders Plan, Goal, and Ops as read-only indicators and Dynamic Workflow as thinking level four', () => {
+    const chatHtml = renderComposer();
+    const planHtml = renderComposer({ executionMode: 'plan' });
+    const goalHtml = renderComposer({ executionMode: 'goal' });
+    const opsHtml = renderComposer({ executionMode: 'ops' });
+    const workflowHtml = renderComposer({ thinkingMode: 'workflow' });
     const source = readFileSync(join(here, 'ComposerBar.tsx'), 'utf-8');
-
-    expect(zh).toContain('运维模式');
-    expect(en).toContain('Work mode');
-    expect(en).toContain('Ops mode');
-    expect(source).toContain("label: config.locale === 'zh' ? '运维模式' : 'Ops mode'");
-    expect(source).toContain("currentThreadMode === 'ops'");
-    expect(source).toContain('const isSlashFlow = Boolean(activeSlashOption) || text.startsWith(\'/\')');
-    expect(source).toContain("onStartOps('ops', text, {");
-    expect(source).toContain("onThreadModeChange('chat', null)");
-    expect(source).toContain('imageNames: images.map((image) => image.name)');
-    expect(source).toContain('opsModeAvailable');
+    const styles = readFileSync(join(here, '..', 'styles.css'), 'utf-8');
     const mainSource = readFileSync(join(here, '..', 'main.tsx'), 'utf-8');
-    expect(mainSource).toContain('startOpsTask(command.preset, command.args, attachments)');
-    expect(mainSource).toContain('runSlashCommand(command, { fileReferences: composerFileReferences');
+
+    expect(chatHtml).not.toContain('对话');
+    expect(chatHtml).not.toContain('modeIndicator');
+    expect(planHtml).toContain('modeIndicatorPlan');
+    expect(planHtml).toContain('>计划<');
+    expect(goalHtml).toContain('modeIndicatorGoal');
+    expect(goalHtml).toContain('>Goal<');
+    expect(opsHtml).toContain('modeIndicatorOps');
+    expect(opsHtml).toContain('>Ops<');
+    expect(workflowHtml).not.toContain('modeIndicator');
+    expect(planHtml).toMatch(/<span class="modeIndicator[^>]*>/);
+    expect(goalHtml).toMatch(/<span class="modeIndicator[^>]*>/);
+    expect(opsHtml).toMatch(/<span class="modeIndicator[^>]*>/);
+    expect(planHtml).toContain('modeIndicatorDismiss');
+    expect(goalHtml).toContain('modeIndicatorDismiss');
+    expect(opsHtml).toContain('modeIndicatorDismiss');
+    expect(goalHtml).not.toContain('spark');
+    expect(source).not.toContain('executionModeSelect');
+    expect(source).toContain("value: 'workflow'");
+    expect(source).toContain("label: config.locale === 'zh' ? '动态工作流'");
+    expect(source).toContain('ComposerThinkingMode');
+    expect(styles).toContain('.modeIndicator');
+    expect(styles).toContain('modeIndicatorDismiss');
+    expect(styles).toContain('pointer-events: auto;');
+    expect(styles).toContain('#f97316');
+    expect(mainSource).toContain("submitExecutionMode('goal', command.args, attachments)");
+    expect(mainSource).toContain('submitDynamicWorkflow(command.args, attachments)');
+    expect(mainSource).not.toContain("submitExecutionMode('workflow'");
+  });
+
+  it('changes the intent prompt for Plan, Goal and Dynamic Workflow', () => {
+    expect(renderComposer({ executionMode: 'plan' })).toContain('placeholder="输入规划目标…"');
+    expect(renderComposer({ executionMode: 'goal' })).toContain('placeholder="输入目标任务…"');
+    expect(renderComposer({ thinkingMode: 'workflow' })).toContain('placeholder="输入动态工作流目标…"');
   });
 
   it('keeps narrow columns from overflowing the composer controls', () => {
@@ -207,4 +232,47 @@ describe('ComposerBar', () => {
     expect(source).toContain('.composerMeta .modelPresetSelect');
     expect(source).toContain('overflow: hidden !important;');
   });
+  it('keeps every composer icon on the shared line-icon family', () => {
+    const source = readFileSync(join(here, 'ComposerBar.tsx'), 'utf-8');
+    const icons = readFileSync(join(here, 'Icon.tsx'), 'utf-8');
+
+    expect(source).toContain(`<Icon name="hand" />`);
+    expect(source).toContain(`<Icon name="messageShield" />`);
+    expect(source).toContain(`<Icon name="shieldAlert" />`);
+    expect(source).toContain("tone: 'warning'");
+    expect(source).toContain(`icon: <Icon name="layers" />`);
+    expect(source).toContain(`icon: <Icon name="workflow" />`);
+    expect(source).toContain(`icon: <Icon name="listChecks" />`);
+    expect(source).toContain(`<Icon name="imagePlus" />`);
+    expect(source).toContain("'folderOutline' : 'fileOutline'");
+    expect(source).toContain(`<Icon name="fileOutline" />`);
+    // 运行模式已收敛：不再有「缓存优先 / 长运行」下拉。
+    expect(source).not.toContain('runProfileSelect');
+    expect(source).not.toContain('runProfileLabel');
+
+    // 图标系统已完全移除 FontAwesome：不允许任何实心映射或依赖回流
+    expect(icons).not.toContain('fontAwesomeIcons');
+    expect(icons).not.toContain('FontAwesome');
+    expect(icons).not.toContain('@fortawesome');
+  });
+
+
+  it('no longer groups model presets under a 已保存 / Saved label', () => {
+    for (const file of ['ComposerBar.tsx']) {
+      const src = readFileSync(join(here, file), 'utf-8');
+      expect(src).not.toContain("'已保存'");
+      expect(src).not.toContain("'Saved'");
+      expect(src).not.toContain('dropdownGroup');
+    }
+  });
+
+  it('keeps the model preset draft concept fully removed', () => {
+    const models = readFileSync(join(here, 'settings', 'ModelsPage.tsx'), 'utf-8');
+    // 保存接口不再接受 draft/published 状态
+    expect(models).not.toContain("'draft' | 'published'");
+    for (const banned of ['保存为草稿', '保存为正式预设', '恢复草稿', '当前编辑草稿', '__draft__']) {
+      expect(models).not.toContain(banned);
+    }
+  });
+
 });

@@ -1,12 +1,12 @@
 import { Readable } from 'node:stream';
 import { describe, expect, it, vi } from 'vitest';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { ThreadStore } from '@nexus/storage';
-import type { ThreadEvent, ThreadMeta } from '@nexus/protocol';
+import type { ThreadStore } from '@suanlizi/storage';
+import type { ThreadEvent, ThreadMeta } from '@suanlizi/protocol';
 import type { AgentRunConfig } from '../config/config.js';
 import { handleBotRoute, shutdownAllDingtalkClients } from './botRoute.js';
 import { BOT_CONFIG_KEY, DEFAULT_BOT_CONFIG } from '../config/botConfig.js';
-import { DEFAULT_EPISODE_MEMORY_SETTINGS } from '@nexus/memory';
+import { DEFAULT_EPISODE_MEMORY_SETTINGS } from '@suanlizi/memory';
 
 class BotRouteStore implements Partial<ThreadStore> {
   settings = new Map<string, unknown>();
@@ -80,8 +80,8 @@ const runConfig: AgentRunConfig = {
     persistentRules: [],
     temporaryGrants: [],
   },
-  dataDir: 'E:\\langchain\\.nexus',
-  skillsRoot: 'C:\\Users\\test\\.nexus\\skills',
+  dataDir: 'E:\\langchain\\.suanlizi',
+  skillsRoot: 'C:\\Users\\test\\.suanlizi\\skills',
   webSearchMode: 'auto',
   webProvider: 'native_fetch',
   webProviderKeySource: 'config',
@@ -248,7 +248,7 @@ describe('bot route', () => {
     });
   });
 
-  it('does not treat an unmanaged service on the Weixin port as the Nexus desktop bridge', async () => {
+  it('does not treat an unmanaged service on the Weixin port as the Suanlizi desktop bridge', async () => {
     const store = new BotRouteStore();
     store.settings.set('bot.config.v1', {
       ...DEFAULT_BOT_CONFIG,
@@ -279,7 +279,7 @@ describe('bot route', () => {
       status: {
         weixin: {
           bridge: 'offline',
-          error: expect.stringContaining('non-Nexus service'),
+          error: expect.stringContaining('non-Suanlizi service'),
         },
       },
     });
@@ -523,7 +523,7 @@ describe('bot route', () => {
     ]);
   });
 
-  it('routes Weixin inbound messages to the currently bound Nexus thread', async () => {
+  it('routes Weixin inbound messages to the currently bound Suanlizi thread', async () => {
     const store = new BotRouteStore();
     store.threads.set('thread_bound', threadMeta('thread_bound', '绑定对话'));
     store.settings.set('bot.config.v1', {
@@ -834,7 +834,7 @@ describe('bot route', () => {
     shutdownAllDingtalkClients();
   });
 
-  it('relinks DingTalk DM sessions to the configured active Nexus thread', async () => {
+  it('relinks DingTalk DM sessions to the configured active Suanlizi thread', async () => {
     shutdownAllDingtalkClients();
     const store = new BotRouteStore();
     store.threads.set('thread_current', threadMeta('thread_current', '当前钉钉对话'));
@@ -889,7 +889,7 @@ describe('bot route', () => {
     await handleBotRoute({
       req: req('POST', '/api/bot/dingtalk/webhook', {
         msgtype: 'text',
-        text: { content: '这条应该进新绑定的 Nexus 对话' },
+        text: { content: '这条应该进新绑定的 Suanlizi 对话' },
         msgId: 'msg_ding_relink',
         conversationType: '1',
         senderStaffId: 'staff_1',
@@ -908,7 +908,7 @@ describe('bot route', () => {
     expect(response.body).toMatchObject({ result: { status: 'completed', threadId: 'thread_current' } });
     expect(runTurn).toHaveBeenCalledWith('thread_current', {
       type: 'text',
-      text: '这条应该进新绑定的 Nexus 对话',
+      text: '这条应该进新绑定的 Suanlizi 对话',
     });
     expect(store.settings.get('bot.sessions.v1')).toMatchObject({
       sessions: [expect.objectContaining({
@@ -992,7 +992,7 @@ describe('bot route', () => {
       openConversationId: 'cid_group_target',
       robotCode: 'ding_robot',
       msgKey: 'sampleMarkdown',
-      msgParam: JSON.stringify({ title: 'Nexus', text: '安博威的爸爸' }),
+      msgParam: JSON.stringify({ title: 'Suanlizi', text: '安博威的爸爸' }),
     });
     const reply = (response.body as { result?: { reply?: string } }).result?.reply ?? '';
     expect(reply).not.toContain('cid_group_target');

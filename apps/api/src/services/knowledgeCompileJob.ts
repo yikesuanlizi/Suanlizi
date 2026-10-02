@@ -1,14 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { readdir, readFile, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
-import type { ThreadStore } from '@nexus/storage';
-import { SecretRedactor } from '@nexus/runtime';
-import { DOCUMENT_EXTRACTOR_VERSION, extractDocumentText } from '@nexus/tools';
+import type { ThreadStore } from '@suanlizi/storage';
+import { SecretRedactor } from '@suanlizi/runtime';
+import { DOCUMENT_EXTRACTOR_VERSION, extractDocumentText } from '@suanlizi/tools';
 import {
   buildWikiLinkGraph,
   parseWikiPage,
   type WikiPageRecord,
-} from '@nexus/wiki-core';
+} from '@suanlizi/wiki-core';
 import {
   hash,
   isWithinRoot,
@@ -32,7 +32,7 @@ const MAX_BINARY_FILE_BYTES = 16 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 8 * 1024 * 1024;
 const CHUNK_SIZE = 2400;
 const SNAPSHOT_RETENTION = 8;
-const secretRedactor = new SecretRedactor({ detectorVersion: 'nexus-secret-redactor-v1' });
+const secretRedactor = new SecretRedactor({ detectorVersion: 'suanlizi-secret-redactor-v1' });
 const TEXT_EXTENSIONS = new Set([
   '.c', '.cc', '.cpp', '.css', '.go', '.h', '.hpp', '.html', '.ini', '.java', '.js',
   '.json', '.jsx', '.log', '.md', '.mdx', '.mjs', '.py', '.rs', '.scss', '.sql', '.svg',
@@ -58,6 +58,13 @@ export interface KnowledgeCompilePendingFile {
   relativePath: string;
   sizeBytes: number;
   contentHash?: string;
+  /** 已脱敏中间结果的编码载荷；禁止在 catalog 中保存明文。 */
+  encodedText?: string;
+  indexedBytes?: number;
+  sourceUpdatedAt?: string;
+  redactionVersion?: string;
+  extractor?: string;
+  extractorVersion?: string;
   stage: 'queued' | 'extracting' | 'indexing' | 'indexed' | 'skipped' | 'failed';
   failure?: string;
 }
@@ -119,6 +126,38 @@ interface JobRuntime {
   totalBytes: number;
 }
 
+function pendingFileFromCollected(file: CollectedKnowledgeFile, stage: KnowledgeCompilePendingFile['stage'] = 'indexed'): KnowledgeCompilePendingFile {
+  return {
+    relativePath: file.relativePath,
+    sizeBytes: file.sizeBytes,
+    contentHash: file.contentHash,
+    encodedText: Buffer.from(file.text, 'utf8').toString('base64'),
+    indexedBytes: file.indexedBytes,
+    sourceUpdatedAt: file.sourceUpdatedAt,
+    redactionVersion: file.redactionVersion,
+    ...(file.extractor ? { extractor: file.extractor } : {}),
+    ...(file.extractorVersion ? { extractorVersion: file.extractorVersion } : {}),
+    stage,
+  };
+}
+
+function collectedFromPending(file: KnowledgeCompilePendingFile): CollectedKnowledgeFile | null {
+  if (file.stage !== 'indexed' || typeof file.encodedText !== 'string' || !file.contentHash || !file.sourceUpdatedAt || !file.redactionVersion) return null;
+  const text = Buffer.from(file.encodedText, 'base64').toString('utf8');
+  if (!text) return null;
+  return {
+    relativePath: file.relativePath,
+    text,
+    contentHash: file.contentHash,
+    sizeBytes: file.sizeBytes,
+    indexedBytes: file.indexedBytes ?? Buffer.byteLength(text, 'utf8'),
+    sourceUpdatedAt: file.sourceUpdatedAt,
+    redactionVersion: file.redactionVersion,
+    ...(file.extractor ? { extractor: file.extractor } : {}),
+    ...(file.extractorVersion ? { extractorVersion: file.extractorVersion } : {}),
+  };
+}
+
 class JobControlError extends Error {
   constructor(readonly terminalStatus: 'paused' | 'cancelled') {
     super(`knowledge compile ${terminalStatus}`);
@@ -128,6 +167,7 @@ class JobControlError extends Error {
 const runners = new Map<string, Promise<void>>();
 const activeByBase = new Map<string, string>();
 let compileTail: Promise<void> = Promise.resolve();
+const recoveredStores = new WeakSet<object>();
 
 function now(): string {
   return new Date().toISOString();
@@ -226,7 +266,7 @@ async function discoverFiles(root: string, onFile: (file: ManifestFile) => Promi
     for (const entry of entries) {
       const absolute = path.join(directory, entry.name);
       const relativePath = path.relative(root, absolute).replaceAll(path.sep, '/');
-      if (['.git', 'node_modules', 'dist', 'dist-types', '.llmwiki', '.nexus'].includes(entry.name) && entry.isDirectory()) {
+      if (['.git', 'node_modules', 'dist', 'dist-types', '.llmwiki', '.suanlizi'].includes(entry.name) && entry.isDirectory()) {
         onSkipped(relativePath, 'excluded_directory');
         continue;
       }
@@ -402,6 +442,12 @@ function pruneSnapshots(state: CatalogState, baseId: string): string[] {
 async function executeJob(runtime: JobRuntime): Promise<void> {
   let job = await getKnowledgeJob(runtime.store, runtime.jobId, runtime.tenantId);
   if (!job || job.status === 'paused' || job.status === 'cancelled') return;
+  // A persisted pending checkpoint is content-addressed and can be reused only
+  // after the source file's size and mtime are revalidated. This keeps a pause
+  // or API restart from needlessly extracting/indexing unchanged documents.
+  const checkpointByPath = new Map(
+    (job.pendingFiles ?? []).map((file) => [file.relativePath, file] as const),
+  );
   try {
     const initialState = await loadState(runtime.store, runtime.tenantId);
     const currentBase = initialState.bases[runtime.baseId];
@@ -421,7 +467,26 @@ async function executeJob(runtime: JobRuntime): Promise<void> {
       runtime.manifest.push(file);
     }, (relativePath, reason, bytes) => { runtime.stats.skippedFiles += 1; if (bytes) runtime.stats.skippedBytes += bytes; skippedDuringDiscovery.push({ path: relativePath, reason, ...(bytes === undefined ? {} : { bytes }) }); });
     runtime.stats.skippedReasons.push(...skippedDuringDiscovery);
-    job = await persistJob(runtime.store, runtime.tenantId, job, { status: 'extracting', stage: 'extracting', totalFiles: runtime.manifest.length + runtime.stats.skippedFiles, skippedFiles: runtime.stats.skippedFiles, skippedBytes: runtime.stats.skippedBytes, ...(job.persistPending ? { pendingFiles: runtime.manifest.map((file) => ({ relativePath: file.relativePath, sizeBytes: file.sizeBytes, stage: 'queued' as const })) } : {}) });
+    if (job.persistPending) {
+      const recovered: CollectedKnowledgeFile[] = [];
+      for (const manifest of runtime.manifest) {
+        const pending = checkpointByPath.get(manifest.relativePath);
+        const restored = pending ? collectedFromPending(pending) : null;
+        if (restored && restored.sizeBytes === manifest.sizeBytes) {
+          const current = await stat(manifest.absolutePath).catch(() => null);
+          if (current?.isFile() && current.size === manifest.sizeBytes && current.mtime.toISOString() === restored.sourceUpdatedAt) {
+            recovered.push(restored);
+          }
+        }
+      }
+      runtime.files.push(...recovered);
+      runtime.totalBytes = recovered.reduce((sum, file) => sum + file.indexedBytes, 0);
+    }
+    job = await persistJob(runtime.store, runtime.tenantId, job, { status: 'extracting', stage: 'extracting', totalFiles: runtime.manifest.length + runtime.stats.skippedFiles, skippedFiles: runtime.stats.skippedFiles, skippedBytes: runtime.stats.skippedBytes, ...(job.persistPending ? { pendingFiles: runtime.manifest.map((file) => {
+      const previous = checkpointByPath.get(file.relativePath);
+      const restored = previous ? collectedFromPending(previous) : null;
+      return restored && restored.sizeBytes === file.sizeBytes ? pendingFileFromCollected(restored) : { relativePath: file.relativePath, sizeBytes: file.sizeBytes, stage: 'queued' as const };
+    }) } : {}) });
     if (job.status === 'paused' || job.status === 'cancelled') return;
     for (let index = 0; index < runtime.manifest.length; index += 1) {
       const manifest = runtime.manifest[index]!;
@@ -431,6 +496,27 @@ async function executeJob(runtime: JobRuntime): Promise<void> {
         return;
       }
       if (job.status === 'paused') return;
+      const checkpoint = checkpointByPath.get(manifest.relativePath);
+      const restored = checkpoint ? collectedFromPending(checkpoint) : null;
+      if (restored && runtime.files.some((item) => item.relativePath === manifest.relativePath && item.contentHash === restored.contentHash)) {
+        job = await persistJob(runtime.store, runtime.tenantId, job, {
+          status: 'indexing',
+          stage: 'indexing',
+          indexedFiles: runtime.files.length,
+          indexedBytes: runtime.totalBytes,
+          processedFiles: index + 1,
+          currentFile: undefined,
+          ...(job.persistPending ? { pendingFiles: runtime.manifest.map((item) => {
+            const saved = checkpointByPath.get(item.relativePath);
+            const recoveredFile = saved ? collectedFromPending(saved) : null;
+            return recoveredFile && runtime.files.some((entry) => entry.relativePath === item.relativePath && entry.contentHash === recoveredFile.contentHash)
+              ? pendingFileFromCollected(recoveredFile)
+              : { relativePath: item.relativePath, sizeBytes: item.sizeBytes, stage: 'queued' as const };
+          }) } : {}),
+        });
+        await yieldControl();
+        continue;
+      }
       job = await persistJob(runtime.store, runtime.tenantId, job, { status: 'extracting', stage: 'extracting', currentFile: manifest.relativePath, processedFiles: index, skippedFiles: runtime.stats.skippedFiles, skippedBytes: runtime.stats.skippedBytes });
       const latestStat = await stat(manifest.absolutePath).catch(() => null);
       if (latestStat?.isFile() && latestStat.size !== manifest.sizeBytes) {
@@ -441,7 +527,13 @@ async function executeJob(runtime: JobRuntime): Promise<void> {
       const file = await extractFile(runtime, manifest);
       if (file) {
         runtime.files.push(file);
-        job = await persistJob(runtime.store, runtime.tenantId, job, { status: 'indexing', stage: 'indexing', indexedFiles: runtime.files.length, indexedBytes: runtime.files.reduce((sum, item) => sum + item.indexedBytes, 0), truncated: runtime.stats.truncated, ...(job.persistPending ? { pendingFiles: runtime.manifest.map((item, itemIndex) => ({ relativePath: item.relativePath, sizeBytes: item.sizeBytes, stage: itemIndex < index ? 'indexed' as const : itemIndex === index ? 'indexing' as const : 'queued' as const, ...(itemIndex === index ? { contentHash: file.contentHash } : {}) })) } : {}) });
+        job = await persistJob(runtime.store, runtime.tenantId, job, { status: 'indexing', stage: 'indexing', indexedFiles: runtime.files.length, indexedBytes: runtime.files.reduce((sum, item) => sum + item.indexedBytes, 0), truncated: runtime.stats.truncated, ...(job.persistPending ? { pendingFiles: runtime.manifest.map((item, itemIndex) => {
+          const prior = itemIndex < index ? checkpointByPath.get(item.relativePath) : undefined;
+          const priorFile = prior ? collectedFromPending(prior) : null;
+          if (itemIndex === index) return pendingFileFromCollected(file, 'indexing');
+          if (priorFile && runtime.files.some((entry) => entry.relativePath === item.relativePath && entry.contentHash === priorFile.contentHash)) return pendingFileFromCollected(priorFile);
+          return { relativePath: item.relativePath, sizeBytes: item.sizeBytes, stage: 'queued' as const };
+        }) } : {}) });
       } else {
         const skippedReason = runtime.stats.skippedReasons.at(-1)?.reason ?? 'file_skipped';
         job = addError(job, 'extracting', skippedReason.split(':', 1)[0] ?? 'file_skipped', skippedReason, manifest.relativePath);
@@ -510,6 +602,29 @@ function scheduleJob(store: ThreadStore, tenantId: string, job: KnowledgeCompile
     if (!current || ['paused', 'cancelled', 'completed', 'failed'].includes(current.status)) return;
     await launchJob(store, tenantId, current, root);
   });
+}
+
+/** Re-queue non-terminal compile jobs after an API restart. Persisted jobs are
+ * the source of truth; a new in-memory runner is attached lazily on the first
+ * knowledge route request, so no background service is required at startup. */
+export async function recoverKnowledgeCompileJobs(store: ThreadStore, tenantId: string): Promise<void> {
+  if (recoveredStores.has(store as object)) return;
+  recoveredStores.add(store as object);
+  const state = await loadState(store, tenantId);
+  for (const job of Object.values(state.jobs)) {
+    if (isTerminal(job.status) || job.status === 'paused') continue;
+    const root = await grantRoot(state, job.sourceGrantId).catch(() => null);
+    if (!root) {
+      await persistJob(store, tenantId, job, {
+        status: 'failed',
+        stage: 'failed',
+        errors: addError(job, 'failed', 'source_unavailable', 'Knowledge source authorization is no longer available.').errors,
+        completedAt: now(),
+      });
+      continue;
+    }
+    scheduleJob(store, tenantId, job, root);
+  }
 }
 
 export async function startKnowledgeBaseCreateJob(store: ThreadStore, tenantId: string, input: { name: string; sourceGrantId: string; persistPending?: boolean }): Promise<KnowledgeJobResult> {
@@ -595,7 +710,11 @@ export async function actOnKnowledgeJob(store: ThreadStore, tenantId: string, jo
     const root = await grantRoot(state, job.sourceGrantId);
     const base = state.bases[job.knowledgeBaseId];
     if (!base || base.status === 'deleted') throw new Error('KnowledgeBase not found');
-    const resumed = { ...job, status: 'queued' as const, stage: 'queued' as const, canonicalRoot: root, requestedAction: undefined, currentFile: undefined, processedFiles: 0, indexedFiles: 0, skippedFiles: 0, indexedBytes: 0, skippedBytes: 0, truncated: false, pendingFiles: job.persistPending ? [] : undefined, updatedAt: now(), completedAt: undefined };
+    // Keep the immutable, redacted checkpoint. executeJob revalidates each
+    // indexed entry against the source before reusing it; changed entries are
+    // re-extracted and replace their checkpoint in place.
+    const checkpoint = job.persistPending ? (job.pendingFiles ?? []) : undefined;
+    const resumed = { ...job, status: 'queued' as const, stage: 'queued' as const, canonicalRoot: root, requestedAction: undefined, currentFile: undefined, processedFiles: 0, indexedFiles: checkpoint?.filter((file) => file.stage === 'indexed').length ?? 0, indexedBytes: checkpoint?.reduce((sum, file) => sum + (file.indexedBytes ?? 0), 0) ?? 0, skippedFiles: 0, skippedBytes: 0, truncated: false, pendingFiles: checkpoint, updatedAt: now(), completedAt: undefined };
     state.jobs[jobId] = resumed;
     state.bases[base.knowledgeBaseId] = { ...base, status: 'syncing', updatedAt: now(), version: base.version + 1 };
     await saveState(store, state, tenantId, false, { rebuildIndex: false });

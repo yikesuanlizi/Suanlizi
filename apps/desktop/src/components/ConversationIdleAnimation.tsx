@@ -199,10 +199,10 @@ export function ConversationIdleAnimation({ theme }: { theme: IdleTheme }) {
   }, [theme]);
 
   return (
-    <div className="conversationIdleAnimation" aria-label={theme === 'light' ? 'Nexus 空闲状态' : 'Nexus idle state'}>
+    <div className="conversationIdleAnimation" aria-label={theme === 'light' ? 'Suanlizi 空闲状态' : 'Suanlizi idle state'}>
       <canvas ref={canvasRef} className="conversationIdleAnimationCanvas" />
       <div className="conversationIdleCopy" aria-hidden="true">
-        <strong>Nexus</strong>
+        <strong>Suanlizi</strong>
         <span>等待新的对话</span>
       </div>
     </div>

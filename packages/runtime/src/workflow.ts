@@ -1,7 +1,9 @@
-import { BUILTIN_TOOLS, type ToolDefinition, type ToolParamSchema } from '@nexus/tools';
+import { BUILTIN_TOOLS, type ToolDefinition, type ToolParamSchema } from '@suanlizi/tools';
 
 export type WorkflowStepStatus = 'pending' | 'running' | 'completed' | 'failed' | 'blocked';
-export type WorkflowRunStatus = 'planned' | 'running' | 'completed' | 'failed' | 'blocked' | 'cancelled';
+// Blueprint 静态流程的旧运行状态；Script Workflow 的 `WorkflowRunStatus` 已收敛到 @suanlizi/protocol/task。
+// Legacy Blueprint run status; the Script-Workflow `WorkflowRunStatus` now lives in @suanlizi/protocol/task.
+export type BlueprintRunStatus = 'planned' | 'running' | 'completed' | 'failed' | 'blocked' | 'cancelled';
 export type WorkflowExecutorKind = 'prompt' | 'tool' | 'subagent' | 'human' | 'condition' | 'code' | 'template' | 'parameter_extractor' | 'control';
 export type WorkflowApprovalMode = 'none' | 'required';
 export type WorkflowComponentSource = 'builtin' | 'tool' | 'mcp' | 'skill' | 'subagent' | 'prompt';
@@ -105,7 +107,7 @@ export interface WorkflowExecutionRun {
   id: string;
   workflowId: string;
   goal: string;
-  status: WorkflowRunStatus;
+  status: BlueprintRunStatus;
   nodeRuns: WorkflowNodeRun[];
   createdAt: string;
   updatedAt: string;
@@ -444,7 +446,7 @@ export interface WorkflowStep {
 export interface WorkflowRun {
   id: string;
   goal: string;
-  status: WorkflowRunStatus;
+  status: BlueprintRunStatus;
   steps: WorkflowStep[];
   createdAt: string;
   updatedAt: string;
@@ -573,7 +575,7 @@ export async function planWorkflowDefinitionFromGoal(
       {
         role: 'system',
         content: [
-          '你是 Nexus workflow planner。根据用户目标生成一个线程级可视化 workflow JSON。',
+          '你是 Suanlizi workflow planner。根据用户目标生成一个线程级可视化 workflow JSON。',
           '只能使用 components 清单里的 component type；不要发明组件；不要输出解释文字；组件是封装好的，不要生成代码。',
           '优先生成图形蓝图，不要假设会立即执行；工作流必须可审阅、可保存、可回退。',
           '可以使用标准组件 start、end、prompt_task、tool_task、template、parameter_extractor、human_approval。',
@@ -1619,7 +1621,7 @@ function createWorkflowVariablePool(options: { workflowId: string; timestamp: st
       sys: [
         { namespace: 'sys', name: 'workflow_id', description: `Workflow definition id ${options.workflowId}`, valueType: 'string', readonly: true },
         { namespace: 'sys', name: 'workflow_run_id', description: 'Workflow run id assigned when a run is created.', valueType: 'string', readonly: true },
-        { namespace: 'sys', name: 'thread_id', description: 'Owning Nexus thread id.', valueType: 'string', readonly: true },
+        { namespace: 'sys', name: 'thread_id', description: 'Owning Suanlizi thread id.', valueType: 'string', readonly: true },
         { namespace: 'sys', name: 'tenant_id', description: 'Tenant id scope; never contains account ids or secrets.', valueType: 'string', readonly: true },
         { namespace: 'sys', name: 'timestamp', description: `Workflow planning timestamp ${options.timestamp}`, valueType: 'string', readonly: true },
         { namespace: 'sys', name: 'workspace_root', description: 'Workspace root path summary for the thread.', valueType: 'string', readonly: true },

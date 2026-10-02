@@ -16,8 +16,8 @@ describe('right pane sizing', () => {
     expect(source).toContain('defaultFilesPaneWidth');
     expect(source).toContain('Math.min(1080, Math.max(620, window.innerWidth * 0.5))');
     expect(source).toContain("if (mode === 'files')");
-    expect(source).toContain("localStorage.getItem('nexus.filesPaneWidth')");
-    expect(source).toContain("localStorage.getItem('nexus.standardPaneWidth')");
+    expect(source).toContain("localStorage.getItem('suanlizi.filesPaneWidth')");
+    expect(source).toContain("localStorage.getItem('suanlizi.standardPaneWidth')");
     expect(source).toContain('rightPaneAvailableMax()');
     expect(source).toContain('calc(100vw - 240px)');
     expect(source).not.toContain('55vw');

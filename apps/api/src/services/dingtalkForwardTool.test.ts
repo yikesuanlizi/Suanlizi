@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { DingtalkClient, dwsExec } from '@nexus/bot';
+import { DingtalkClient, dwsExec } from '@suanlizi/bot';
 import { DEFAULT_BOT_CONFIG, type BotConfig } from '../config/botConfig.js';
 import {
   DINGTALK_TOOL_NAME,
@@ -7,8 +7,8 @@ import {
   dingtalkForwardingSystemPrompt,
 } from './dingtalkForwardTool.js';
 
-vi.mock('@nexus/bot', async () => {
-  const actual = await vi.importActual('@nexus/bot') as typeof import('@nexus/bot');
+vi.mock('@suanlizi/bot', async () => {
+  const actual = await vi.importActual('@suanlizi/bot') as typeof import('@suanlizi/bot');
   return {
     ...actual,
     dwsExec: vi.fn(),
@@ -66,7 +66,7 @@ describe('dingtalk forward tool', () => {
     });
     const tool = tools.find((item) => item.name === DINGTALK_TOOL_NAME);
 
-    const result = await tool?.execute({ message: '冒个泡 🧋 — Nexus 助手冒泡测试', source: 'dingtalk_dm', intent: 'send_message' }, {
+    const result = await tool?.execute({ message: '冒个泡 🧋 — Suanlizi 助手冒泡测试', source: 'dingtalk_dm', intent: 'send_message' }, {
       workspaceRoot: '',
       threadId: 'thread-1',
       turnId: 'turn-1',
@@ -75,7 +75,7 @@ describe('dingtalk forward tool', () => {
 
     expect(result).toMatchObject({ status: 'completed', output: '已发送' });
     expect(sendMarkdown).toHaveBeenCalledWith(expect.objectContaining({
-      text: '冒个泡 🧋 — Nexus 助手冒泡测试',
+      text: '冒个泡 🧋 — Suanlizi 助手冒泡测试',
     }));
   });
 
@@ -148,7 +148,7 @@ describe('dingtalk forward tool', () => {
     const tool = tools.find((item) => item.name === DINGTALK_TOOL_NAME);
 
     const result = await tool?.execute({
-      message: '@史紫亿 大家好，我是 Nexus Agent OS 的 AI 助手',
+      message: '@史紫亿 大家好，我是 Suanlizi Agent OS 的 AI 助手',
       mentions: ['史紫亿'],
       source: 'dingtalk_dm',
       intent: 'send_message',
@@ -161,7 +161,7 @@ describe('dingtalk forward tool', () => {
 
     expect(result).toMatchObject({ status: 'completed', output: '已发送' });
     expect(sendWebhookText).toHaveBeenCalledWith(expect.objectContaining({
-      text: '大家好，我是 Nexus Agent OS 的 AI 助手',
+      text: '大家好，我是 Suanlizi Agent OS 的 AI 助手',
       atStaffIds: ['staff_shiziyi'],
     }));
     expect(sendText).not.toHaveBeenCalled();
@@ -679,7 +679,7 @@ describe('dingtalk forward tool', () => {
     });
     const tool = tools.find((item) => item.name === DINGTALK_TOOL_NAME);
 
-    const result = await tool?.execute({ message: '今天部署结果：全部服务已完成检查。', source: 'nexus_chat', intent: 'announce_reply' }, {
+    const result = await tool?.execute({ message: '今天部署结果：全部服务已完成检查。', source: 'suanlizi_chat', intent: 'announce_reply' }, {
       workspaceRoot: '',
       threadId: 'thread-1',
       turnId: 'turn-1',
@@ -841,7 +841,7 @@ describe('dingtalk forward tool', () => {
 
     const result = await tool?.execute({
       fileMode: 'current_message_files',
-      source: 'nexus_chat',
+      source: 'suanlizi_chat',
       intent: 'send_message',
     }, {
       workspaceRoot: '',

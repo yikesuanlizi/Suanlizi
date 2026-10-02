@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import type { ThreadStore } from '@nexus/storage';
+import type { ThreadStore } from '@suanlizi/storage';
 import {
   DEFAULT_MEMORY_SETTINGS,
   exportMemoryArtifacts,
@@ -51,20 +51,20 @@ describe('cold memory', () => {
     const candidates = extractMemoryCandidates({
       threadId: 'thread-a',
       turnId: 'turn-a',
-      workspaceRoot: 'E:/langchain/Nexus',
-      userText: '以后回答保持中文，并且 Nexus 项目只允许改 Nexus/ 目录。',
+      workspaceRoot: 'E:/langchain/Suanlizi',
+      userText: '以后回答保持中文，并且 Suanlizi 项目只允许改 Suanlizi/ 目录。',
       assistantText: '好的，我会遵守。',
       now: new Date('2026-06-19T00:00:00.000Z'),
     });
 
     expect(candidates).toEqual([
       expect.objectContaining({ type: 'preference', text: expect.stringContaining('中文') }),
-      expect.objectContaining({ type: 'project_fact', text: expect.stringContaining('Nexus/') }),
+      expect.objectContaining({ type: 'project_fact', text: expect.stringContaining('Suanlizi/') }),
     ]);
     expect(extractMemoryCandidates({
       threadId: 'thread-a',
       turnId: 'turn-b',
-      workspaceRoot: 'E:/langchain/Nexus',
+      workspaceRoot: 'E:/langchain/Suanlizi',
       userText: '你好',
       assistantText: '你好',
       now: new Date('2026-06-19T00:01:00.000Z'),
@@ -75,7 +75,7 @@ describe('cold memory', () => {
     const candidates = extractMemoryCandidates({
       threadId: 'thread-a',
       turnId: 'turn-toolchain',
-      workspaceRoot: 'E:/langchain/Nexus',
+      workspaceRoot: 'E:/langchain/Suanlizi',
       userText: '这个项目用 pnpm，不要 npm；测试命令是 pnpm vitest。',
       assistantText: '明白，后续会按 pnpm 工具链处理。',
       now: new Date('2026-06-19T00:02:00.000Z'),
@@ -94,10 +94,10 @@ describe('cold memory', () => {
     const candidates = extractMemoryCandidates({
       threadId: 'thread-a',
       turnId: 'turn-workflow',
-      workspaceRoot: 'E:/langchain/Nexus',
+      workspaceRoot: 'E:/langchain/Suanlizi',
       userText: [
         '开发流程是先写失败测试，再实现。',
-        '本机是 Windows，shell 用 PowerShell，路径根目录是 E:/langchain/Nexus。',
+        '本机是 Windows，shell 用 PowerShell，路径根目录是 E:/langchain/Suanlizi。',
       ].join('\n'),
       assistantText: '收到。',
       now: new Date('2026-06-19T00:03:00.000Z'),
@@ -125,7 +125,7 @@ describe('cold memory', () => {
       scope: 'global',
       sourceThreadId: 'thread-a',
       sourceTurnIds: ['turn-a'],
-      workspaceRoot: 'E:/langchain/Nexus',
+      workspaceRoot: 'E:/langchain/Suanlizi',
       tags: ['language'],
       confidence: 0.9,
       createdAt: now.toISOString(),
@@ -136,7 +136,7 @@ describe('cold memory', () => {
 
     expect(first.id).toBe(second.id);
     const results = await searchColdMemories(store, '中文总结', {
-      workspaceRoot: 'E:/langchain/Nexus',
+      workspaceRoot: 'E:/langchain/Suanlizi',
       limit: 3,
       tokenBudget: 500,
       now,
@@ -158,7 +158,7 @@ describe('cold memory', () => {
         scope: 'workspace',
         sourceThreadId: 'thread-a',
         sourceTurnIds: ['turn-a'],
-        workspaceRoot: 'E:/langchain/Nexus',
+        workspaceRoot: 'E:/langchain/Suanlizi',
         tags: ['lesson'],
         confidence: 0.84,
         usageCount: 0,
@@ -169,7 +169,7 @@ describe('cold memory', () => {
     ]);
 
     const results = await searchColdMemories(store, '上次那个 permission problem 怎么解决的', {
-      workspaceRoot: 'E:/langchain/Nexus',
+      workspaceRoot: 'E:/langchain/Suanlizi',
       now: new Date('2026-06-20T00:00:00.000Z'),
     });
 
@@ -182,12 +182,12 @@ describe('cold memory', () => {
       {
         id: 'mem-unrelated',
         type: 'project_fact',
-        text: 'Nexus uses pnpm for tests.',
+        text: 'Suanlizi uses pnpm for tests.',
         status: 'active',
         scope: 'workspace',
         sourceThreadId: 'thread-a',
         sourceTurnIds: ['turn-a'],
-        workspaceRoot: 'E:/langchain/Nexus',
+        workspaceRoot: 'E:/langchain/Suanlizi',
         tags: ['project'],
         confidence: 0.84,
         usageCount: 0,
@@ -198,7 +198,7 @@ describe('cold memory', () => {
     ]);
 
     const results = await searchColdMemories(store, '帮我设计登录页面', {
-      workspaceRoot: 'E:/langchain/Nexus',
+      workspaceRoot: 'E:/langchain/Suanlizi',
       now: new Date('2026-06-20T00:00:00.000Z'),
     });
 
@@ -215,7 +215,7 @@ describe('cold memory', () => {
         scope: 'workspace',
         sourceThreadId: 'thread-a',
         sourceTurnIds: ['turn-a'],
-        workspaceRoot: 'E:/langchain/Nexus',
+        workspaceRoot: 'E:/langchain/Suanlizi',
         tags: [],
         confidence: 0.5,
         usageCount: 0,
@@ -231,7 +231,7 @@ describe('cold memory', () => {
         scope: 'workspace',
         sourceThreadId: 'thread-a',
         sourceTurnIds: ['turn-b'],
-        workspaceRoot: 'E:/langchain/Nexus',
+        workspaceRoot: 'E:/langchain/Suanlizi',
         tags: ['lesson'],
         confidence: 0.8,
         usageCount: 3,
@@ -258,12 +258,12 @@ describe('cold memory', () => {
       {
         id: 'mem-a',
         type: 'project_fact',
-        text: 'Nexus memory runtime truth lives in DB.',
+        text: 'Suanlizi memory runtime truth lives in DB.',
         status: 'active',
         scope: 'workspace',
         sourceThreadId: 'thread-a',
         sourceTurnIds: ['turn-a'],
-        workspaceRoot: 'E:/langchain/Nexus',
+        workspaceRoot: 'E:/langchain/Suanlizi',
         tags: ['storage'],
         confidence: 0.88,
         usageCount: 2,
@@ -272,7 +272,7 @@ describe('cold memory', () => {
         updatedAt: '2026-06-19T00:00:00.000Z',
       },
     ]);
-    const outDir = mkdtempSync(join(tmpdir(), 'nexus-memory-export-'));
+    const outDir = mkdtempSync(join(tmpdir(), 'suanlizi-memory-export-'));
 
     const result = await exportMemoryArtifacts(store, outDir);
 
@@ -281,7 +281,7 @@ describe('cold memory', () => {
       expect.stringContaining('raw_memories.md'),
       expect.stringContaining('rollout_summaries/thread-a.md'),
     ]);
-    expect(readFileSync(join(outDir, 'MEMORY.md'), 'utf8')).toContain('Nexus memory runtime truth lives in DB.');
+    expect(readFileSync(join(outDir, 'MEMORY.md'), 'utf8')).toContain('Suanlizi memory runtime truth lives in DB.');
   });
 
   it('defines conservative default settings', () => {

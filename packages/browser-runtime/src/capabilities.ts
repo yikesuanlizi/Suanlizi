@@ -18,7 +18,7 @@
 // — English: this module declares the capability catalog and pure health
 //   aggregation only; no Playwright / DOM implementation.
 
-import type { AccessKind, ActionEffect, ActionRisk, Postcondition } from '@nexus/protocol';
+import type { AccessKind, ActionEffect, ActionRisk, Postcondition } from '@suanlizi/protocol';
 
 // ─── 能力名 ──────────────────────────────────────────────────────────────────
 // 与 BrowserActionKind 对齐的子集（submit 由 click 组合实现，不单列能力）。

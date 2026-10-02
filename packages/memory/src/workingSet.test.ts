@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { EpisodeRecord, ThreadMeta, UserInput } from '@nexus/protocol';
-import type { ThreadStore } from '@nexus/storage';
+import type { EpisodeRecord, ThreadMeta, UserInput } from '@suanlizi/protocol';
+import type { ThreadStore } from '@suanlizi/storage';
 import {
   buildOrReuseWorkingSet,
   computeTaskFingerprint,
@@ -11,7 +11,7 @@ import {
 
 class WorkingSetStore implements ThreadStore {
   episodes: EpisodeRecord[] = [];
-  workingSets: Map<string, import('@nexus/protocol').ThreadWorkingSetSnapshot> = new Map();
+  workingSets: Map<string, import('@suanlizi/protocol').ThreadWorkingSetSnapshot> = new Map();
 
   async appendItems(): Promise<void> {}
 
@@ -47,11 +47,11 @@ class WorkingSetStore implements ThreadStore {
     if (episode) episode.usageCount += 1;
   }
 
-  async saveThreadWorkingSet(snapshot: import('@nexus/protocol').ThreadWorkingSetSnapshot): Promise<void> {
+  async saveThreadWorkingSet(snapshot: import('@suanlizi/protocol').ThreadWorkingSetSnapshot): Promise<void> {
     this.workingSets.set(snapshot.threadId, { ...snapshot });
   }
 
-  async getThreadWorkingSet(threadId: string): Promise<import('@nexus/protocol').ThreadWorkingSetSnapshot | null> {
+  async getThreadWorkingSet(threadId: string): Promise<import('@suanlizi/protocol').ThreadWorkingSetSnapshot | null> {
     return this.workingSets.get(threadId) ?? null;
   }
 
@@ -90,7 +90,7 @@ function makeThread(threadId: string): ThreadMeta {
   return {
     threadId,
     title: 'test thread',
-    workspaceRoot: 'E:/langchain/Nexus',
+    workspaceRoot: 'E:/langchain/Suanlizi',
     status: 'active',
     turnCount: 1,
     createdAt: '2026-06-20T00:00:00.000Z',

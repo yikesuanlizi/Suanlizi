@@ -1,5 +1,5 @@
-import type { ThreadId, ThreadUsage, Usage } from '@nexus/protocol';
-import type { ThreadStore } from '@nexus/storage';
+import type { ThreadId, ThreadUsage, Usage } from '@suanlizi/protocol';
+import type { ThreadStore } from '@suanlizi/storage';
 
 export function emptyUsage(threadId: ThreadId): ThreadUsage {
   return {
@@ -34,15 +34,23 @@ export function aggregateThreadUsage(threadId: ThreadId, usages: ThreadUsage[]):
   const total = usages.reduce<Usage>((sum, usage) => ({
     inputTokens: sum.inputTokens + Number(usage.total.inputTokens ?? 0),
     cachedInputTokens: sum.cachedInputTokens + Number(usage.total.cachedInputTokens ?? 0),
+    cacheWriteTokens: (sum.cacheWriteTokens ?? 0) + Number(usage.total.cacheWriteTokens ?? 0),
     outputTokens: sum.outputTokens + Number(usage.total.outputTokens ?? 0),
     reasoningOutputTokens: sum.reasoningOutputTokens + Number(usage.total.reasoningOutputTokens ?? 0),
     cacheStrategy: combineCacheStrategy(sum.cacheStrategy, usage.total.cacheStrategy),
   }), {
     inputTokens: 0,
     cachedInputTokens: 0,
+    cacheWriteTokens: 0,
     outputTokens: 0,
     reasoningOutputTokens: 0,
   });
+  const cacheReports = usages.map((usage) => usage.total.cacheReported);
+  if (cacheReports.some((reported) => reported === false)) {
+    total.cacheReported = false;
+  } else if (cacheReports.length > 0 && cacheReports.every((reported) => reported === true)) {
+    total.cacheReported = true;
+  }
   const turns = usages.flatMap((usage) => usage.turns);
   const updatedAt = usages
     .map((usage) => usage.updatedAt)

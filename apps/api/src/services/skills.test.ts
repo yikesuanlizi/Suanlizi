@@ -12,7 +12,7 @@ afterEach(() => {
 
 describe('skill file creation', () => {
   it('writes generated SKILL.md only under the configured skills root', async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), 'nexus-skills-'));
+    const root = await mkdtemp(path.join(os.tmpdir(), 'suanlizi-skills-'));
     const result = await writeSkillDraft(root, {
       name: '../Code Review Skill!!',
       description: '审查代码变更',
@@ -29,7 +29,7 @@ describe('skill file creation', () => {
   });
 
   it('deletes an installed skill directory without touching outside paths', async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), 'nexus-skills-delete-'));
+    const root = await mkdtemp(path.join(os.tmpdir(), 'suanlizi-skills-delete-'));
     await writeSkillDraft(root, {
       name: 'frontend-polish',
       description: '优化界面细节',
@@ -145,7 +145,7 @@ describe('skill draft source preparation', () => {
 
 describe('GitHub skill installation', () => {
   it('copies real skill directories with SKILL.md into the configured skills root', async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), 'nexus-install-skills-'));
+    const root = await mkdtemp(path.join(os.tmpdir(), 'suanlizi-install-skills-'));
     globalThis.fetch = async (url) => {
       const requestUrl = String(url);
       if (requestUrl.includes('/git/trees/main?recursive=1')) {
@@ -180,7 +180,7 @@ describe('GitHub skill installation', () => {
   });
 
   it('installs several explicit GitHub skill urls from one command', async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), 'nexus-install-multi-skills-'));
+    const root = await mkdtemp(path.join(os.tmpdir(), 'suanlizi-install-multi-skills-'));
     globalThis.fetch = async (url) => {
       const requestUrl = String(url);
       if (requestUrl.includes('/git/trees/main?recursive=1')) {
@@ -211,7 +211,7 @@ describe('GitHub skill installation', () => {
   });
 
   it('continues multi-url install when an earlier target is already installed', async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), 'nexus-install-partial-skills-'));
+    const root = await mkdtemp(path.join(os.tmpdir(), 'suanlizi-install-partial-skills-'));
     await writeSkillDraft(root, {
       name: 'pdf',
       description: 'Existing PDF skill.',
@@ -258,11 +258,11 @@ describe('skill install transcript items', () => {
       installed: [
         {
           name: 'frontend-design',
-          path: 'C:/Users/Alice/.nexus/skills/frontend-design',
+          path: 'C:/Users/Alice/.suanlizi/skills/frontend-design',
           sourcePath: 'skills/frontend-design',
         },
       ],
-      skillsRoot: 'C:/Users/Alice/.nexus/skills',
+      skillsRoot: 'C:/Users/Alice/.suanlizi/skills',
       agentText: '已安装 1 个 Skill：frontend-design。',
       timestamp: '2026-06-09T08:00:00.000Z',
     });
@@ -282,7 +282,7 @@ describe('skill install transcript items', () => {
         result: expect.objectContaining({
           count: 1,
           names: ['frontend-design'],
-          skillsRoot: 'C:/Users/Alice/.nexus/skills',
+          skillsRoot: 'C:/Users/Alice/.suanlizi/skills',
           sourcePaths: ['skills/frontend-design'],
         }),
       }),
@@ -311,16 +311,16 @@ describe('skill install transcript items', () => {
       installed: [
         {
           name: 'pdf',
-          path: 'E:/langchain/Nexus/skills/pdf',
+          path: 'E:/langchain/Suanlizi/skills/pdf',
           sourcePath: 'skills/pdf',
         },
         {
           name: 'docx',
-          path: 'E:/langchain/Nexus/skills/docx',
+          path: 'E:/langchain/Suanlizi/skills/docx',
           sourcePath: 'skills/docx',
         },
       ],
-      skillsRoot: 'E:/langchain/Nexus/skills',
+      skillsRoot: 'E:/langchain/Suanlizi/skills',
       agentText: '已安装 2 个 Skill：pdf, docx。',
       timestamp: '2026-06-09T08:00:00.000Z',
     });

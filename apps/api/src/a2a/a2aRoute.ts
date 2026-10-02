@@ -7,7 +7,7 @@ import {
   JsonRpcTransportHandler,
 } from '@a2a-js/sdk/server';
 import type { AgentCard, JSONRPCResponse } from '@a2a-js/sdk';
-import { NexusAgentExecutor, NexusTaskStore, type AgentRuntimePort, type TaskStoreBackend } from '@nexus/protocol';
+import { SuanliziAgentExecutor, SuanliziTaskStore, type AgentRuntimePort, type TaskStoreBackend } from '@suanlizi/protocol';
 import { readJson, sendError, sendJson } from '../shared/http.js';
 
 // SSE 响应头：与 @a2a-js/sdk 的 SSE_HEADERS 对齐
@@ -70,15 +70,15 @@ export interface A2AHandler {
  * 创建 A2A 处理器单例。
  *
  * 装配链路：
- *   NexusTaskStore（ThreadStore 适配）
- *   NexusAgentExecutor（AgentLoop 适配）
+ *   SuanliziTaskStore（ThreadStore 适配）
+ *   SuanliziAgentExecutor（AgentLoop 适配）
  *   DefaultRequestHandler（SDK 核心：消息分发、结果管理、事件消费）
  *   JsonRpcTransportHandler（JSON-RPC 协议解析）
  */
 // — Chinese: create A2A handler singleton. Wires TaskStore, AgentExecutor, RequestHandler, TransportHandler.
 export function createA2AHandler(options: A2AHandlerOptions): A2AHandler {
-  const taskStore = new NexusTaskStore(options.threadStore);
-  const agentExecutor = new NexusAgentExecutor({ agentFactory: options.agentFactory });
+  const taskStore = new SuanliziTaskStore(options.threadStore);
+  const agentExecutor = new SuanliziAgentExecutor({ agentFactory: options.agentFactory });
   const requestHandler = new DefaultRequestHandler(
     options.agentCard,
     taskStore,

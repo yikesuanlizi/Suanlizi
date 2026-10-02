@@ -1,5 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import type { ToolDefinition, ToolParamSchema, ToolResult } from '@nexus/tools';
+import { terminateProcessTree, type ToolDefinition, type ToolParamSchema, type ToolResult } from '@suanlizi/tools';
 
 // MCP 服务器配置：id、展示名称、命令和参数、是否启用
 export interface McpServerConfig {
@@ -128,7 +128,7 @@ export class McpStdioClient {
       const initialize = await this.request('initialize', {
         protocolVersion: '2024-11-05',
         capabilities: {},
-        clientInfo: { name: 'Nexus', version: '0.1.0' },
+        clientInfo: { name: 'Suanlizi', version: '0.1.0' },
       }, INITIALIZE_TIMEOUT_MS) as { serverInfo?: McpServerInfo };
       this.serverInfo = initialize.serverInfo;
       // 向服务端发送 initialized 通知，完成握手
@@ -192,9 +192,7 @@ export class McpStdioClient {
     }
     this.pending.clear();
     if (!child) return;
-    if (child.exitCode === null && !child.killed) {
-      child.kill();
-    }
+    terminateProcessTree(child);
   }
 
   // 发送 JSON-RPC 请求：写入 Content-Length 头 + body，并注册超时定时器

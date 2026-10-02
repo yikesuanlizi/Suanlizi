@@ -219,7 +219,7 @@ export function workspaceHtmlPreviewDocument(html: string, theme: 'light' | 'dar
   const dark = theme === 'dark';
   const previewBackground = dark ? '#17191c' : '#ffffff';
   const previewText = dark ? '#eceff2' : '#0f172a';
-  const previewStyle = `<style data-nexus-preview-style>
+  const previewStyle = `<style data-suanlizi-preview-style>
 html,
 body {
   box-sizing: border-box !important;
@@ -295,7 +295,7 @@ function renderPreviewContent(preview: WorkspaceFilePreview, locale: Locale, pre
 
   if (preview.previewType === 'html') {
     if (previewMode === 'source') return renderSourcePreview(preview, preview.text);
-    const theme = typeof document !== 'undefined' && (document.documentElement.dataset.nexusTheme === 'dark' || document.querySelector('.appShell.theme-dark')) ? 'dark' : 'light';
+    const theme = typeof document !== 'undefined' && (document.documentElement.dataset.suanliziTheme === 'dark' || document.querySelector('.appShell.theme-dark')) ? 'dark' : 'light';
     return <iframe className="workspaceHtmlPreview workspaceRenderedPreview" sandbox="" srcDoc={workspaceHtmlPreviewDocument(preview.text, theme)} title={`${preview.name} rendered preview`} />;
   }
 
@@ -357,7 +357,7 @@ function workspaceEntryIsHtml(entry: WorkspaceFileEntry): boolean {
   return extension === 'html' || extension === 'htm';
 }
 
-const WORKSPACE_FILE_SESSION_STORAGE_KEY = 'nexus.workspace.file.session.v1';
+const WORKSPACE_FILE_SESSION_STORAGE_KEY = 'suanlizi.workspace.file.session.v1';
 
 interface PersistedWorkspaceFileSession {
   workspaceRoot: string;
@@ -712,9 +712,10 @@ export function WorkspaceFilesPanel({
     if (!initialRect) return;
     const left = initialRect.left;
     const width = initialRect.width;
+    const right = initialRect.right;
     event.currentTarget.setPointerCapture(event.pointerId);
     function move(moveEvent: PointerEvent) {
-      const percent = ((moveEvent.clientX - left) / width) * 100;
+      const percent = ((right - moveEvent.clientX) / width) * 100;
       const clamped = Math.min(60, Math.max(15, percent));
       setTreeWidth(clamped);
       localStorage.setItem('nexus.fileTreeWidth', String(Math.round(clamped)));
@@ -762,54 +763,7 @@ export function WorkspaceFilesPanel({
           </button>
         </div>
       </header>
-      <div className="workspaceFileBody" ref={bodyRef} style={{ gridTemplateColumns: `minmax(180px, ${treeWidth}%) 7px minmax(0, 1fr)` }}>
-        <section className="workspaceFileTreePane">
-          <label className="workspaceFileSearch">
-            <Icon name="search" />
-            <input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder={locale === 'zh' ? '搜索文件...' : 'Search files...'} />
-            {searchingFiles ? (
-              <span className="workspaceSearchSpinner" role="status" aria-label={locale === 'zh' ? '正在搜索文件' : 'Searching files'} />
-            ) : null}
-          </label>
-          {error ? <p className="workspaceFileError">{error}</p> : null}
-          <div className="workspaceFileList" aria-busy={loadingPaths.size > 0}>
-            {loadingPaths.has('') ? <p>{locale === 'zh' ? '读取中...' : 'Loading...'}</p> : null}
-            {!loadingPaths.has('') && rows.length === 0 ? <p>{locale === 'zh' ? '没有文件' : 'No files'}</p> : null}
-            {rows.map(({ depth, entry }) => {
-              const opened = expanded.has(entry.path);
-              const fileIcon = workspaceFileIcon(entry, opened);
-              const rowBaseClassName = spotlightPath === entry.path ? 'workspaceFileRow spotlight' : 'workspaceFileRow';
-              const rowClassName = activePreviewPath === entry.path ? `${rowBaseClassName} active` : rowBaseClassName;
-              return (
-                <button
-                  key={entry.path}
-                  type="button"
-                  ref={(node) => {
-                    if (node) fileRowRefs.current[entry.path] = node;
-                    else delete fileRowRefs.current[entry.path];
-                  }}
-                  className={rowClassName}
-                  title={workspaceFileRowTitle(entry, workspaceRoot)}
-                  onClick={() => entry.kind === 'directory' ? toggleDirectory(entry) : void previewFile(entry)}
-                  onDoubleClick={() => entry.kind === 'file' ? void previewFile(entry, true) : undefined}
-                  onContextMenu={(event) => {
-                    event.preventDefault();
-                    setContextMenu({ entry, x: event.clientX, y: event.clientY });
-                  }}
-                  style={{ '--file-depth': depth } as React.CSSProperties}
-                >
-                  <span className="workspaceFileLeading" aria-hidden="true">
-                    {entry.kind === 'directory' ? <Icon name={opened ? 'chevronDown' : 'chevronRight'} /> : null}
-                    <Icon name={fileIcon.name} className={fileIcon.className} />
-                  </span>
-                  <span>{entry.name}</span>
-                  <small>{entry.kind === 'directory' ? (loadingPaths.has(entry.path) ? '...' : '') : formatBytes(entry.size)}</small>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-        <button className="workspaceFileDivider" type="button" aria-label={locale === 'zh' ? '调整文件面板宽度' : 'Resize file panes'} onPointerDown={startResize} />
+      <div className="workspaceFileBody" ref={bodyRef} style={{ gridTemplateColumns: `minmax(0, 1fr) 7px minmax(180px, ${treeWidth}%)` }}>
         <section className={displayedPreviewTabs.length > 0 || gitnexusOpen ? 'workspacePreviewPane' : 'workspacePreviewPane noPreviewTabs'}>
           {displayedPreviewTabs.length > 0 && !gitnexusOpen ? (
             <div className="workspacePreviewTabs">
@@ -892,6 +846,53 @@ export function WorkspaceFilesPanel({
             ) : (
               <p>{locale === 'zh' ? '选择一个文件预览。双击文件可固定到上方列表。' : 'Select a file to preview. Double-click to pin it above.'}</p>
             )}
+          </div>
+        </section>
+        <button className="workspaceFileDivider" type="button" aria-label={locale === 'zh' ? '调整文件面板宽度' : 'Resize file panes'} onPointerDown={startResize} />
+        <section className="workspaceFileTreePane">
+          <label className="workspaceFileSearch">
+            <Icon name="search" />
+            <input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder={locale === 'zh' ? '搜索文件...' : 'Search files...'} />
+            {searchingFiles ? (
+              <span className="workspaceSearchSpinner" role="status" aria-label={locale === 'zh' ? '正在搜索文件' : 'Searching files'} />
+            ) : null}
+          </label>
+          {error ? <p className="workspaceFileError">{error}</p> : null}
+          <div className="workspaceFileList" aria-busy={loadingPaths.size > 0}>
+            {loadingPaths.has('') ? <p>{locale === 'zh' ? '读取中...' : 'Loading...'}</p> : null}
+            {!loadingPaths.has('') && rows.length === 0 ? <p>{locale === 'zh' ? '没有文件' : 'No files'}</p> : null}
+            {rows.map(({ depth, entry }) => {
+              const opened = expanded.has(entry.path);
+              const fileIcon = workspaceFileIcon(entry, opened);
+              const rowBaseClassName = spotlightPath === entry.path ? 'workspaceFileRow spotlight' : 'workspaceFileRow';
+              const rowClassName = activePreviewPath === entry.path ? `${rowBaseClassName} active` : rowBaseClassName;
+              return (
+                <button
+                  key={entry.path}
+                  type="button"
+                  ref={(node) => {
+                    if (node) fileRowRefs.current[entry.path] = node;
+                    else delete fileRowRefs.current[entry.path];
+                  }}
+                  className={rowClassName}
+                  title={workspaceFileRowTitle(entry, workspaceRoot)}
+                  onClick={() => entry.kind === 'directory' ? toggleDirectory(entry) : void previewFile(entry)}
+                  onDoubleClick={() => entry.kind === 'file' ? void previewFile(entry, true) : undefined}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    setContextMenu({ entry, x: event.clientX, y: event.clientY });
+                  }}
+                  style={{ '--file-depth': depth } as React.CSSProperties}
+                >
+                  <span className="workspaceFileLeading" aria-hidden="true">
+                    {entry.kind === 'directory' ? <Icon name={opened ? 'chevronDown' : 'chevronRight'} /> : null}
+                    <Icon name={fileIcon.name} className={fileIcon.className} />
+                  </span>
+                  <span>{entry.name}</span>
+                  <small>{entry.kind === 'directory' ? (loadingPaths.has(entry.path) ? '...' : '') : formatBytes(entry.size)}</small>
+                </button>
+              );
+            })}
           </div>
         </section>
       </div>

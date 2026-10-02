@@ -44,7 +44,9 @@ export function setApplicationMenu(locale: Locale): void {
       submenu: [
         { label: t.reload, role: 'reload' },
         { label: t.forceReload, role: 'forceReload' },
-        { label: t.toggleDevTools, role: 'toggleDevTools' },
+        // F12 is the explicit fallback for windows where the focused view does
+        // not deliver before-input-event (the menu role still supports Ctrl+Shift+I).
+        { label: t.toggleDevTools, role: 'toggleDevTools', accelerator: 'F12' },
         { type: 'separator' },
         { label: t.resetZoom, role: 'resetZoom' },
         { label: t.zoomIn, role: 'zoomIn' },
@@ -85,7 +87,7 @@ const labels: Record<Locale, Record<string, string>> = {
     zoomIn: '放大',
     zoomOut: '缩小',
     toggleFullScreen: '切换全屏',
-    about: '关于 Nexus',
+    about: '关于 Suanlizi',
   },
   en: {
     file: 'File',
@@ -107,6 +109,6 @@ const labels: Record<Locale, Record<string, string>> = {
     zoomIn: 'Zoom In',
     zoomOut: 'Zoom Out',
     toggleFullScreen: 'Toggle Full Screen',
-    about: 'About Nexus',
+    about: 'About Suanlizi',
   },
 };

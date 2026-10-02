@@ -5,8 +5,8 @@ import type {
   AccessRequest,
   AccessRule,
   TemporaryAccessGrant,
-} from '@nexus/protocol';
-import { normalizeAccessPolicyConfig } from '@nexus/protocol';
+} from '@suanlizi/protocol';
+import { normalizeAccessPolicyConfig } from '@suanlizi/protocol';
 
 export function buildRuntimeAccessPolicy(input: Partial<AccessPolicyConfig> = {}): AccessPolicyConfig {
   return normalizeAccessPolicyConfig(input);

@@ -80,14 +80,14 @@ async function isPortFreeAnyAddress(port) {
 }
 
 async function chooseWeixinBridgePort() {
-  const explicit = process.env.NEXUS_WEIXIN_BRIDGE_PORT;
+  const explicit = process.env.SUANLIZI_WEIXIN_BRIDGE_PORT;
   const preferred = Number(explicit || DEFAULT_WEIXIN_BRIDGE_PORT);
   if (!Number.isInteger(preferred) || preferred <= 0) return DEFAULT_WEIXIN_BRIDGE_PORT;
   if (await isPortFree(preferred)) return preferred;
   if (explicit) return preferred;
   for (let port = DEFAULT_WEIXIN_BRIDGE_PORT + 1; port < DEFAULT_WEIXIN_BRIDGE_PORT + 40; port += 1) {
     if (await isPortFree(port)) {
-      console.warn(`[web] Weixin bridge port ${preferred} is occupied; using ${port} for this Nexus session.`);
+      console.warn(`[web] Weixin bridge port ${preferred} is occupied; using ${port} for this Suanlizi session.`);
       return port;
     }
   }
@@ -95,7 +95,7 @@ async function chooseWeixinBridgePort() {
 }
 
 function shouldStartWeixinBridge() {
-  const explicit = process.env.NEXUS_START_WEIXIN_BRIDGE?.trim().toLowerCase();
+  const explicit = process.env.SUANLIZI_START_WEIXIN_BRIDGE?.trim().toLowerCase();
   if (['0', 'false', 'no', 'off'].includes(explicit ?? '')) return false;
   if (['1', 'true', 'yes', 'on'].includes(explicit ?? '')) return true;
   return true;
@@ -105,24 +105,24 @@ const initialBuild = run(isWindows ? 'npx.cmd' : 'npx', ['tsc', '-b'], { allowEx
 initialBuild.on('exit', async (code) => {
   if (code) process.exit(code);
 
-  const webHost = process.env.NEXUS_WEB_HOST ?? '127.0.0.1';
-  const webPort = process.env.NEXUS_WEB_PORT ?? '5177';
-  const apiPort = process.env.NEXUS_API_PORT ?? '4127';
+  const webHost = process.env.SUANLIZI_WEB_HOST ?? '127.0.0.1';
+  const webPort = process.env.SUANLIZI_WEB_PORT ?? '5177';
+  const apiPort = process.env.SUANLIZI_API_PORT ?? '4127';
   if (!await isPortFreeAnyAddress(Number(apiPort))) {
-    console.error(`[api] Port ${apiPort} is already in use. Nexus may already be running at http://127.0.0.1:${webPort}/.`);
-    console.error(`[api] Stop the existing Nexus process first, or start with NEXUS_API_PORT=<free-port>.`);
+    console.error(`[api] Port ${apiPort} is already in use. Suanlizi may already be running at http://127.0.0.1:${webPort}/.`);
+    console.error(`[api] Stop the existing Suanlizi process first, or start with SUANLIZI_API_PORT=<free-port>.`);
     process.exit(1);
   }
-  const logDir = path.join(root, '.nexus', 'logs');
+  const logDir = path.join(root, '.suanlizi', 'logs');
   const startWeixinBridge = shouldStartWeixinBridge();
-  const weixinBridgePort = startWeixinBridge ? await chooseWeixinBridgePort() : Number(process.env.NEXUS_WEIXIN_BRIDGE_PORT || DEFAULT_WEIXIN_BRIDGE_PORT);
-  const weixinBridgeUrl = process.env.NEXUS_WEIXIN_BRIDGE_URL ?? `http://127.0.0.1:${weixinBridgePort}/api/v1/admin/rpc`;
+  const weixinBridgePort = startWeixinBridge ? await chooseWeixinBridgePort() : Number(process.env.SUANLIZI_WEIXIN_BRIDGE_PORT || DEFAULT_WEIXIN_BRIDGE_PORT);
+  const weixinBridgeUrl = process.env.SUANLIZI_WEIXIN_BRIDGE_URL ?? `http://127.0.0.1:${weixinBridgePort}/api/v1/admin/rpc`;
 
   const apiEnv = {
-    NEXUS_API_PORT: apiPort,
-    NEXUS_WEIXIN_BRIDGE_PORT: String(weixinBridgePort),
-    NEXUS_WEIXIN_BRIDGE_URL: weixinBridgeUrl,
-    NEXUS_LOG_DIR: process.env.NEXUS_LOG_DIR ?? logDir,
+    SUANLIZI_API_PORT: apiPort,
+    SUANLIZI_WEIXIN_BRIDGE_PORT: String(weixinBridgePort),
+    SUANLIZI_WEIXIN_BRIDGE_URL: weixinBridgeUrl,
+    SUANLIZI_LOG_DIR: process.env.SUANLIZI_LOG_DIR ?? logDir,
   };
 
   const api = run(isWindows ? 'npx.cmd' : 'npx', [
@@ -145,9 +145,9 @@ initialBuild.on('exit', async (code) => {
   const weixinBridge = startWeixinBridge
     ? run('node', ['apps/desktop/bridge/weixin-bridge.mjs'], {
         env: {
-          NEXUS_API_URL: `http://127.0.0.1:${process.env.NEXUS_API_PORT ?? '4127'}`,
-          NEXUS_WEIXIN_BRIDGE_PORT: String(weixinBridgePort),
-          NEXUS_LOG_DIR: process.env.NEXUS_LOG_DIR ?? logDir,
+          SUANLIZI_API_URL: `http://127.0.0.1:${process.env.SUANLIZI_API_PORT ?? '4127'}`,
+          SUANLIZI_WEIXIN_BRIDGE_PORT: String(weixinBridgePort),
+          SUANLIZI_LOG_DIR: process.env.SUANLIZI_LOG_DIR ?? logDir,
         },
       })
     : null;

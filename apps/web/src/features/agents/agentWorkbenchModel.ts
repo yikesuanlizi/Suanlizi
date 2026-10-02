@@ -1,6 +1,11 @@
-import type { RunTraceCategory, RunTraceEnvelope, RunTraceSummary } from '@nexus/protocol';
+import type { RunTraceEnvelope, RunTraceSummary } from '@suanlizi/protocol';
+import { formatSuanliziErrorMessage } from '@suanlizi/protocol';
 import type { ThreadChildInfo, ThreadItem } from '../../shared/types.js';
 import { traceSummary } from '../monitor/traceFormatters.js';
+import { deriveRecentEvents, type RecentTraceEvent } from './recentEvents.js';
+import { resourceUsageFromItem, type AgentResourceKind } from './agentResources.js';
+
+export type { RecentTraceEvent };
 
 export type AgentNodeStatus = 'idle' | 'queued' | 'running' | 'waiting' | 'completed' | 'failed' | 'interrupted';
 
@@ -25,26 +30,6 @@ export interface CurrentPhase {
   label: string;
   detail?: string;
   elapsedMs?: number;
-}
-
-export interface RecentTraceEvent {
-  itemId: string;
-  eventId?: string;
-  runId: string;
-  category: RunTraceCategory;
-  name: string;
-  level: 'debug' | 'info' | 'warning' | 'error';
-  summary: string;
-  occurredAt: string;
-  agent: {
-    threadId: string;
-    label: string;
-    depth: number;
-  };
-  resource?: {
-    kind: ResourceUsageEntry['kind'];
-    label: string;
-  };
 }
 
 export interface ResourceUsageEntry {
@@ -101,167 +86,6 @@ function formatItemLabel(item: ThreadItem): string {
     default:
       return item.type;
   }
-}
-
-function resourceUsageFromItem(item: ThreadItem): Omit<ResourceUsageEntry, 'count' | 'lastItemId'> | null {
-  if (item.type === 'mcp_tool_call') {
-    return {
-      kind: 'MCP',
-      label: [item.server || 'mcp', item.tool || item.toolName || 'tool'].join(' / '),
-    };
-  }
-  if (item.type === 'tool_call') {
-    if (item.toolName === 'read_document') {
-      return {
-        kind: 'Document',
-        label: documentResourceLabel(item) || item.toolName,
-      };
-    }
-    if (isSkillToolName(item.toolName)) {
-      return {
-        kind: 'Skill',
-        label: readSkillLabel(item) || item.toolName || 'skill',
-      };
-    }
-    return {
-      kind: 'Tool',
-      label: item.toolName || 'tool',
-    };
-  }
-  if (item.type === 'collab_tool_call') {
-    return {
-      kind: 'Agent',
-      label: item.tool || 'collab_tool',
-    };
-  }
-  if (item.type === 'command_execution') {
-    return {
-      kind: 'Shell',
-      label: truncateText(item.command, 54) || 'shell',
-    };
-  }
-  if (item.type === 'file_change') {
-    return {
-      kind: 'File',
-      label: formatItemLabel(item),
-    };
-  }
-  return null;
-}
-
-function resourceUsageFromTrace(trace: RunTraceEnvelope): Omit<ResourceUsageEntry, 'count' | 'lastItemId'> | null {
-  const payload = trace.payload as Record<string, unknown>;
-  if (trace.category === 'tool') {
-    const toolName = typeof payload.toolName === 'string' ? payload.toolName : '';
-    const resourceKind = typeof payload.resourceKind === 'string' ? payload.resourceKind : '';
-    const server = typeof payload.server === 'string' ? payload.server : '';
-    const tool = typeof payload.tool === 'string' ? payload.tool : '';
-    const skillName = typeof payload.skillName === 'string' ? payload.skillName : '';
-    if (resourceKind === 'mcp' || server || toolName === 'mcp_call_tool') {
-      return { kind: 'MCP', label: [server || 'mcp', tool || toolName || 'tool'].join(' / ') };
-    }
-    if (resourceKind === 'skill' || skillName || isSkillToolName(toolName)) {
-      return { kind: 'Skill', label: skillName || toolName || 'skill' };
-    }
-    if (resourceKind === 'shell' || toolName === 'shell_command' || toolName === 'command_execution' || toolName === 'exec_command') {
-      return { kind: 'Shell', label: toolName || 'shell' };
-    }
-    if (resourceKind === 'agent') {
-      return { kind: 'Agent', label: tool || toolName || 'agent' };
-    }
-    return { kind: 'Tool', label: toolName || trace.name };
-  }
-  if (trace.category === 'file') {
-    const path = typeof payload.sourcePath === 'string'
-      ? payload.sourcePath
-      : typeof payload.path === 'string'
-        ? payload.path
-        : '';
-    const label = baseFileName(path);
-    return {
-      kind: isDocumentPath(path) ? 'Document' : 'File',
-      label: label || trace.name,
-    };
-  }
-  if (trace.category === 'approval') {
-    const target = readAccessTarget(payload.target);
-    const toolName = typeof payload.toolName === 'string' ? payload.toolName : '';
-    if (target) {
-      return {
-        kind: isDocumentPath(target) ? 'Document' : 'File',
-        label: baseFileName(target) || target,
-      };
-    }
-    return { kind: 'Tool', label: toolName || trace.name };
-  }
-  if (trace.category === 'agent') {
-    const role = typeof payload.role === 'string' ? payload.role : '';
-    return { kind: 'Agent', label: role || trace.name };
-  }
-  return null;
-}
-
-function isDocumentPath(filePath: string): boolean {
-  return /\.(docx?|pdf|md|txt|xlsx?|pptx?)$/i.test(filePath);
-}
-
-function readAccessTarget(target: unknown): string {
-  if (!target || typeof target !== 'object' || Array.isArray(target)) return '';
-  const record = target as Record<string, unknown>;
-  return readStringDeep(record, ['path', 'url', 'command', 'kind']);
-}
-
-function isSkillToolName(toolName: string | undefined): boolean {
-  return Boolean(toolName && /^(skill|skills)(?:_|$)/i.test(toolName));
-}
-
-function readSkillLabel(item: ThreadItem): string {
-  const fromArgs = readStringDeep(item.arguments, ['skillName', 'skill', 'name']);
-  if (fromArgs) return fromArgs;
-  const fromResult = readStringDeep(item.result, ['skillName', 'skill', 'name']);
-  if (fromResult) return fromResult;
-  const installed = readFirstInstalledSkillName(item.result);
-  return installed;
-}
-
-function readFirstInstalledSkillName(value: unknown): string {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return '';
-  const installed = (value as { installed?: unknown }).installed;
-  if (!Array.isArray(installed)) return '';
-  for (const entry of installed) {
-    const name = readStringDeep(entry, ['name', 'skillName']);
-    if (name) return name;
-  }
-  return '';
-}
-
-function readStringDeep(value: unknown, keys: string[]): string {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return '';
-  const record = value as Record<string, unknown>;
-  for (const key of keys) {
-    const next = record[key];
-    if (typeof next === 'string' && next.trim()) return next.trim();
-  }
-  return '';
-}
-
-function documentResourceLabel(item: ThreadItem): string {
-  const result = readRecord(item.result);
-  const source = readRecord(result.source);
-  const args = readRecord(item.arguments);
-  const filePath = readStringDeep(source, ['path', 'relativePath'])
-    || readStringDeep(args, ['filePath', 'path']);
-  return baseFileName(filePath);
-}
-
-function readRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-}
-
-function baseFileName(filePath: string): string {
-  return filePath.split(/[/\\]/).pop() || filePath;
 }
 
 function resolveChildStatus(child: ThreadChildInfo, busy: boolean): AgentNodeStatus {
@@ -387,7 +211,7 @@ function deriveCurrentPhase(
       return {
         kind: 'error',
         label: zh ? '错误' : 'Error',
-        detail: traceSummary.lastError.message,
+        detail: formatSuanliziErrorMessage(undefined, `${traceSummary.lastError.code}: ${traceSummary.lastError.message}`, zh ? 'zh' : 'en'),
       };
     }
     return phaseFromLastCompletedItem(runtimeItems[runtimeItems.length - 1], zh);
@@ -396,7 +220,7 @@ function deriveCurrentPhase(
     return {
       kind: 'error',
       label: zh ? '错误' : 'Error',
-      detail: traceSummary.lastError.message,
+      detail: formatSuanliziErrorMessage(undefined, `${traceSummary.lastError.code}: ${traceSummary.lastError.message}`, zh ? 'zh' : 'en'),
     };
   }
 
@@ -538,175 +362,6 @@ function truncateText(text: string | undefined, limit: number): string | undefin
   return `${normalized.slice(0, limit)}…`;
 }
 
-function deriveRecentEvents(
-  mainThreadId: string,
-  threadChildren: ThreadChildInfo[],
-  runtimeItems: ThreadItem[],
-  recentTraces: RunTraceEnvelope[],
-  currentRunId: string | undefined,
-  zh: boolean,
-): RecentTraceEvent[] {
-  const events: RecentTraceEvent[] = [];
-  const excludedTypes = new Set(['user_message', 'agent_message', 'thinking']);
-  const mainAgent = {
-    threadId: mainThreadId,
-    label: zh ? 'Nexus 主控 Agent' : 'Nexus Primary Agent',
-    depth: 0,
-  };
-  const childAgents = new Map<string, RecentTraceEvent['agent']>();
-  for (const child of threadChildren) {
-    const parentId = child.edge.parentThreadId || child.thread.parentThreadId || '';
-    const parentDepth = parentId === mainThreadId ? 0 : (childAgents.get(parentId)?.depth ?? 0);
-    childAgents.set(child.thread.threadId, {
-      threadId: child.thread.threadId,
-      label: child.thread.agentRole || child.thread.title || (zh ? '子 Agent' : 'Subagent'),
-      depth: parentDepth + 1,
-    });
-  }
-
-  const agentForTrace = (trace: RunTraceEnvelope): RecentTraceEvent['agent'] => {
-    const payload = trace.payload as Record<string, unknown>;
-    const payloadThreadId = typeof payload.agentThreadId === 'string' ? payload.agentThreadId : '';
-    const payloadRole = typeof payload.agentRole === 'string'
-      ? payload.agentRole
-      : typeof payload.role === 'string'
-        ? payload.role
-        : '';
-    const threadId = payloadThreadId || trace.threadId || mainThreadId;
-    if (threadId === mainThreadId) {
-      return payloadRole ? { ...mainAgent, label: payloadRole } : mainAgent;
-    }
-    const child = childAgents.get(threadId);
-    if (child) return payloadRole ? { ...child, label: payloadRole } : child;
-    return {
-      threadId,
-      label: payloadRole || (zh ? '子 Agent' : 'Subagent'),
-      depth: 1,
-    };
-  };
-
-  const pushItemEvent = (item: ThreadItem, agent: RecentTraceEvent['agent']) => {
-    if (excludedTypes.has(item.type)) return;
-
-    let category: RunTraceCategory = 'item';
-    let level: 'debug' | 'info' | 'warning' | 'error' = 'info';
-
-    if (item.type === 'error' || itemHasError(item)) {
-      category = 'error';
-      level = 'error';
-    } else if (item.type === 'tool_call' || item.type === 'mcp_tool_call' || item.type === 'collab_tool_call') {
-      category = 'tool';
-    } else if (item.type === 'file_change') {
-      category = 'file';
-    } else if (item.type === 'project_checkpoint' || item.type === 'workflow_checkpoint') {
-      category = 'checkpoint';
-    } else if (item.type === 'command_execution') {
-      category = 'tool';
-    } else if (item.type === 'web_search') {
-      category = 'tool';
-    }
-    const resource = resourceUsageFromItem(item);
-
-    events.push({
-      itemId: item.id,
-      runId: (item as { runId?: string }).runId || currentRunId || '',
-      category,
-      name: formatRecentEventName(item),
-      level,
-      summary: formatItemLabel(item),
-      occurredAt: item.timestamp || new Date().toISOString(),
-      agent,
-      resource: resource ? { kind: resource.kind, label: resource.label } : undefined,
-    });
-  };
-
-  const pushTraceEvent = (trace: RunTraceEnvelope) => {
-    if (!shouldShowTraceInActivity(trace)) return;
-    const resource = resourceUsageFromTrace(trace);
-    events.push({
-      itemId: trace.itemId ?? trace.eventId,
-      eventId: trace.eventId,
-      runId: trace.runId || currentRunId || '',
-      category: trace.category,
-      name: formatRecentTraceName(trace, zh),
-      level: trace.level,
-      summary: traceSummary(trace, zh),
-      occurredAt: trace.occurredAt,
-      agent: agentForTrace(trace),
-      resource: resource ? { kind: resource.kind, label: resource.label } : undefined,
-    });
-  };
-
-  for (const item of runtimeItems) {
-    pushItemEvent(item, mainAgent);
-  }
-
-  const childDepths = new Map<string, number>();
-  for (const child of threadChildren) {
-    const parentId = child.edge.parentThreadId || child.thread.parentThreadId || '';
-    const parentDepth = parentId === mainThreadId ? 0 : (childDepths.get(parentId) ?? 0);
-    childDepths.set(child.thread.threadId, parentDepth + 1);
-    for (const item of child.items ?? []) {
-      pushItemEvent(item, {
-        threadId: child.thread.threadId,
-        label: child.thread.agentRole || child.thread.title || (zh ? '子 Agent' : 'Subagent'),
-        depth: parentDepth + 1,
-      });
-    }
-  }
-
-  for (const trace of recentTraces) {
-    pushTraceEvent(trace);
-  }
-
-  const deduped = new Map<string, RecentTraceEvent>();
-  for (const event of events) {
-    deduped.set(recentEventDedupeKey(event), event);
-  }
-
-  const sorted = [...deduped.values()]
-    .sort((a, b) => a.occurredAt.localeCompare(b.occurredAt))
-  const recent = sorted.slice(-10);
-  const childRecent = sorted.filter((event) => event.agent.depth > 0).slice(-3);
-  for (const event of childRecent) {
-    if (recent.some((candidate) => recentEventDedupeKey(candidate) === recentEventDedupeKey(event))) continue;
-    recent.shift();
-    recent.push(event);
-  }
-  return recent.sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
-}
-
-function formatRecentEventName(item: ThreadItem): string {
-  const resource = resourceUsageFromItem(item);
-  if (!resource) return formatItemLabel(item);
-  return `${resource.kind} · ${resource.label}`;
-}
-
-function shouldShowTraceInActivity(trace: RunTraceEnvelope): boolean {
-  if (trace.category === 'tool' && trace.name.startsWith('tool.batch.')) return false;
-  return trace.category === 'model'
-    || trace.category === 'tool'
-    || trace.category === 'file'
-    || trace.category === 'approval'
-    || trace.category === 'agent'
-    || trace.category === 'checkpoint'
-    || trace.category === 'evidence'
-    || trace.category === 'control'
-    || trace.category === 'error';
-}
-
-function formatRecentTraceName(trace: RunTraceEnvelope, zh: boolean): string {
-  const resource = resourceUsageFromTrace(trace);
-  if (resource) return `${resource.kind} · ${resource.label}`;
-  return traceSummary(trace, zh) || trace.name;
-}
-
-function recentEventDedupeKey(event: RecentTraceEvent): string {
-  if (event.eventId && event.itemId !== event.eventId) return `item:${event.itemId}`;
-  if (event.eventId) return `trace:${event.eventId}`;
-  return `item:${event.itemId}`;
-}
-
 function deriveResourceUsage(runtimeItems: ThreadItem[]): ResourceUsageEntry[] {
   const entries = new Map<string, ResourceUsageEntry>();
   for (const item of runtimeItems) {
@@ -779,7 +434,7 @@ export function buildAgentWorkbench(input: {
   const rootNode: AgentWorkbenchNode = {
     threadId: mainThreadId,
     depth: 0,
-    role: zh ? 'Nexus 主控 Agent' : 'Nexus Primary Agent',
+    role: zh ? 'Suanlizi 主控 Agent' : 'Suanlizi Primary Agent',
     status: mainStatus,
     currentItem: latestItem ? { type: latestItem.type, label: formatItemLabel(latestItem) } : undefined,
     startedAt: traceSummary?.startedAt ?? runtimeItems[0]?.timestamp,
@@ -787,7 +442,7 @@ export function buildAgentWorkbench(input: {
     elapsedMs: mainElapsed,
     toolCalls: traceSummary?.tools.calls ?? countToolCalls(runtimeItems),
     tokens: (traceSummary?.model.inputTokens ?? 0) + (traceSummary?.model.outputTokens ?? 0) || estimateTokens(runtimeItems),
-    error: traceSummary?.lastError?.message,
+    error: traceSummary?.lastError ? formatSuanliziErrorMessage(undefined, `${traceSummary.lastError.code}: ${traceSummary.lastError.message}`, zh ? 'zh' : 'en') : undefined,
     children: (childrenByParent.get(mainThreadId) ?? [])
       .filter(c => childIds.has(c.thread.threadId))
       .map(c => buildChildNode(c, 1, childrenByParent, threadItemsMap, now)),

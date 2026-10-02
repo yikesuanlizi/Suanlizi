@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import type { ThreadStore } from '@nexus/storage';
+import type { ThreadStore } from '@suanlizi/storage';
 import {
   actOnKnowledgeJob,
   getKnowledgeJob,
@@ -39,7 +39,7 @@ describe('knowledge compile jobs', () => {
   });
 
   it('compiles asynchronously and publishes a ready snapshot only at completion', async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), 'nexus-kb-job-'));
+    const root = await mkdtemp(path.join(os.tmpdir(), 'suanlizi-kb-job-'));
     roots.push(root);
     await writeFile(path.join(root, 'runbook.md'), '# Restart\nApproval is required.\n', 'utf8');
     const store = new FakeStore() as unknown as ThreadStore;
@@ -53,7 +53,7 @@ describe('knowledge compile jobs', () => {
   });
 
   it('supports queued pause and resume without persisting source text in pending cache', async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), 'nexus-kb-job-pause-'));
+    const root = await mkdtemp(path.join(os.tmpdir(), 'suanlizi-kb-job-pause-'));
     roots.push(root);
     await writeFile(path.join(root, 'manual.md'), '# Manual\nDo not persist this source text.\n', 'utf8');
     const store = new FakeStore() as unknown as ThreadStore;
@@ -71,7 +71,7 @@ describe('knowledge compile jobs', () => {
   });
 
   it('cancels before finalization and leaves the base without a ready snapshot', async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), 'nexus-kb-job-cancel-'));
+    const root = await mkdtemp(path.join(os.tmpdir(), 'suanlizi-kb-job-cancel-'));
     roots.push(root);
     await writeFile(path.join(root, 'manual.md'), '# Manual\nCancel this compile.\n', 'utf8');
     const store = new FakeStore() as unknown as ThreadStore;

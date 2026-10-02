@@ -19,8 +19,8 @@
 //   (single source of truth).
 // ============================================================================
 import { createInterface, type Interface } from 'node:readline';
-import { actionIntentSchema } from '@nexus/protocol';
-import type { ActionIntent, ClassifiedError } from '@nexus/protocol';
+import { actionIntentSchema } from '@suanlizi/protocol';
+import type { ActionIntent, ClassifiedError } from '@suanlizi/protocol';
 import type { ActionResult, BrowserRuntimePort, BrowserSessionHandle } from '../port.js';
 import { ipcCodec, isDuplicateFrame } from '../ipc/codec.js';
 import type { ProtocolFrame } from '../ipc/ipcTypes.js';

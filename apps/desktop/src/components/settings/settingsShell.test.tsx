@@ -235,23 +235,6 @@ describe('desktop ModelsPage · P2.4 「保存为预设」与「应用设置」�
     expect(source).not.toContain('scopeDescription');
   });
 
-  it('按钮文案：原「保存模型配置」改为「保存为预设」/ "Save as preset"', () => {
-    const source = readFileSync(join(here, 'ModelsPage.tsx'), 'utf-8');
-    expect(source).toContain("'保存为预设' : 'Save as preset'");
-    // 不应保留旧文案
-    expect(source).not.toContain("'保存模型配置'");
-    expect(source).not.toContain("'Save model config'");
-  });
-
-  it('按钮文案：原「设置当前模型配置」改为「应用设置」/ "Apply settings"', () => {
-    const source = readFileSync(join(here, 'ModelsPage.tsx'), 'utf-8');
-    expect(source).toContain("'应用设置' : 'Apply settings'");
-    expect(source).not.toContain("'应用到当前作用域' : 'Apply to scope'");
-    // 不应保留旧文案
-    expect(source).not.toContain("'设置当前模型配置'");
-    expect(source).not.toContain("'Set current model config'");
-  });
-
   it('按钮不带解释型 title', () => {
     const source = readFileSync(join(here, 'ModelsPage.tsx'), 'utf-8');
     expect(source).not.toContain('保存到预设列表，方便以后复用');

@@ -35,6 +35,31 @@ export interface TcpSidecarServer {
   port(): number;
 }
 
+function authLineSummary(line: string): string {
+  const trimmed = line.trim();
+  return `len=${trimmed.length} first=${JSON.stringify(trimmed.slice(0, 24))} startsObject=${trimmed.startsWith('{')}`;
+}
+
+function frameSummary(line: string): string {
+  try {
+    const frame = JSON.parse(line) as Record<string, unknown>;
+    const error = frame.error && typeof frame.error === 'object'
+      ? frame.error as Record<string, unknown>
+      : undefined;
+    const type = typeof frame.type === 'string' ? frame.type : '<missing>';
+    const id = typeof frame.id === 'string' ? frame.id : undefined;
+    const frameId = typeof frame.frameId === 'string' ? frame.frameId : undefined;
+    const action = typeof frame.action === 'string' ? frame.action : undefined;
+    const code = typeof error?.code === 'string' ? error.code : undefined;
+    const status = typeof frame.status === 'string' ? frame.status : undefined;
+    const payload = frame.payload;
+    const payloadSummary = payload === undefined ? '' : ` payload=${JSON.stringify(payload).slice(0, 360)}`;
+    return `type=${type}${action ? ` action=${action}` : ''}${id ? ` id=${id}` : ''}${frameId ? ` frameId=${frameId}` : ''}${status ? ` status=${status}` : ''}${code ? ` errorCode=${code}` : ''}${payloadSummary}`;
+  } catch {
+    return authLineSummary(line);
+  }
+}
+
 // 服务端一次连接 = 一个 sidecar 会话（single-session 语义与进程模式一致）。
 // — English: one connection = one sidecar session (same single-session
 //   semantics as the process mode).
@@ -96,12 +121,12 @@ export async function createTcpSidecarServer(options: TcpSidecarServerOptions): 
               socket.destroy();
             }
           } else {
-            log('[tcp-sidecar] auth rejected');
+            log(`[tcp-sidecar] auth rejected: type=${typeof frame.type === 'string' ? frame.type : '<missing>'} tokenLength=${typeof frame.token === 'string' ? frame.token.length : 0} expectedTokenLength=${options.authToken.length} hasTaskId=${typeof frame.taskId === 'string' && frame.taskId.trim() !== ''}`);
             transport.sendLine(JSON.stringify({ type: 'auth', ok: false }));
             socket.destroy();
           }
         } catch {
-          log('[tcp-sidecar] auth frame malformed');
+          log(`[tcp-sidecar] auth frame malformed: ${authLineSummary(line)}`);
           transport.sendLine(JSON.stringify({ type: 'auth', ok: false }));
           socket.destroy();
         }
@@ -183,11 +208,16 @@ export function createTcpSidecarTransport(options: { host?: string; port: number
 } {
   const socket = connect({ host: options.host ?? '127.0.0.1', port: options.port });
   socket.setEncoding('utf8');
+  const debug = process.env.SUANLIZI_BROWSER_DEBUG === '1';
+  const debugLog = (message: string): void => {
+    if (debug) console.log(`[tcp-sidecar-client] ${message}`);
+  };
   let buffer = '';
   let lineHandler: ((line: string) => void) | null = null;
   let authResolved = false;
 
   socket.on('data', (chunk: Buffer) => {
+    debugLog(`data chunk length=${chunk.length}`);
     buffer += chunk.toString('utf8');
     let newlineIndex: number;
     while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
@@ -214,6 +244,7 @@ export function createTcpSidecarTransport(options: { host?: string; port: number
         }
         continue;
       }
+      debugLog(`frame ${frameSummary(line)}`);
       if (lineHandler !== null) {
         lineHandler(line);
       }
@@ -230,11 +261,20 @@ export function createTcpSidecarTransport(options: { host?: string; port: number
   socket.once('connect', () => {
     // 首帧 = auth 握手。
     // — English: the first frame is the auth handshake.
-    socket.write(`${JSON.stringify({ type: 'auth', token: options.authToken, taskId: options.taskId })}\n`);
+    const line = `${JSON.stringify({ type: 'auth', token: options.authToken, taskId: options.taskId })}\n`;
+    debugLog(`connected port=${options.port} tokenLength=${options.authToken.length} taskId=${options.taskId}`);
+    socket.write(line, () => debugLog(`auth frame write callback length=${line.length}`));
   });
   socket.once('error', (err: Error) => {
+    debugLog(`socket error=${err.message}`);
     if (!authResolved) {
       authReadyReject(err);
+    }
+  });
+  socket.once('close', () => {
+    debugLog(`socket closed authResolved=${authResolved}`);
+    if (!authResolved) {
+      authReadyReject(new Error('browser auth connection closed before handshake'));
     }
   });
 

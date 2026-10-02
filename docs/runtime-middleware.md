@@ -1,6 +1,6 @@
 # Runtime Middleware 与第二批运行时边界
 
-Nexus runtime 的扩展点以 `RuntimeMiddleware` 为核心，阶段顺序固定为：
+Suanlizi runtime 的扩展点以 `RuntimeMiddleware` 为核心，阶段顺序固定为：
 
 ```text
 beforeTurn
@@ -60,7 +60,7 @@ afterTurn
 
 ## 轻记忆
 
-`@nexus/memory` 导出轻记忆 API：
+`@suanlizi/memory` 导出轻记忆 API：
 
 - `queueLightMemory`
 - `flushLightMemoryQueue`
@@ -72,7 +72,7 @@ afterTurn
 
 ## 动态工作流 Runtime
 
-`@nexus/runtime` 导出第一版动态工作流状态机：
+`@suanlizi/runtime` 导出第一版动态工作流状态机：
 
 - `createWorkflowRun`
 - `runnableWorkflowSteps`

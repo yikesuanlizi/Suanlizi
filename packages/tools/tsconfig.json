@@ -5,7 +5,7 @@
     "rootDir": "src",
     "tsBuildInfoFile": "dist/.tsbuildinfo",
     "paths": {
-      "@nexus/browser-runtime": ["node_modules/@nexus/browser-runtime/dist/index.d.ts"]
+      "@suanlizi/browser-runtime": ["node_modules/@suanlizi/browser-runtime/dist/index.d.ts"]
     }
   },
   "include": ["src"],

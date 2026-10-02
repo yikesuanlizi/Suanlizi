@@ -5,7 +5,7 @@
 //   and navigationEpoch increments on each navigation (architecture doc 8.1).
 // 本模块为纯函数实现，不含任何 DOM / 浏览器实现；即使首期以单活跃页面为主，
 // 也通过 pageId 标识页面，为 popup 与多标签页保留正确协议。
-import type { PageGraph, PageNode } from '@nexus/protocol';
+import type { PageGraph, PageNode } from '@suanlizi/protocol';
 
 // 一致性检查：返回问题列表（空数组 = 一致）
 // — English: consistency check — returns a list of issues (empty array = consistent).

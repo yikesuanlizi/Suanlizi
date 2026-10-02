@@ -6,7 +6,7 @@
 // 2. 连续阻塞检测: blockedTurnStreak 连续 blockedThreshold 次触发
 // 命中后生成 instruction: "You appear to be stuck repeating the same action..."
 
-import type { ThreadItem } from '@nexus/protocol';
+import type { ThreadItem } from '@suanlizi/protocol';
 import type { StormBreakerResult } from './types.js';
 
 // 签名键：toolName + errorMessage 组合

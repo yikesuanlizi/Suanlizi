@@ -5,32 +5,39 @@ export interface CorsOptions {
   origins: string[];
 }
 
-const ALLOW_HEADERS = [
+const DEFAULT_LOCAL_ORIGINS = [
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:5178',
+  'http://127.0.0.1:5178',
+  'app://bundle',
+];
+
+const BASE_ALLOW_HEADERS = [
   'Content-Type',
   'X-CSRF-Token',
-].join(', ');
+];
 
 export function resolveCorsOptions(
   env: Record<string, string | undefined> = process.env,
   authEnabled = false,
 ): CorsOptions {
-  const origins = (env.NEXUS_CORS_ORIGINS ?? '')
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean);
+  const configuredOrigins = env.SUANLIZI_CORS_ORIGINS;
+  const origins = configuredOrigins === undefined
+    ? DEFAULT_LOCAL_ORIGINS
+    : configuredOrigins.split(',').map((origin) => origin.trim()).filter(Boolean);
   return { authEnabled, origins };
 }
 
 export function corsHeadersForOrigin(origin: string | undefined, options: CorsOptions): Record<string, string> {
   const headers: Record<string, string> = {
-    'Access-Control-Allow-Headers': ALLOW_HEADERS,
+    'Access-Control-Allow-Headers': [
+      ...BASE_ALLOW_HEADERS,
+      ...(options.authEnabled ? ['Authorization'] : []),
+    ].join(', '),
     'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
     Vary: 'Origin',
   };
-  if (!options.authEnabled && options.origins.length === 0) {
-    headers['Access-Control-Allow-Origin'] = '*';
-    return headers;
-  }
   if (origin && options.origins.includes(origin)) {
     headers['Access-Control-Allow-Origin'] = origin;
   }
@@ -43,7 +50,7 @@ export function applyCorsHeaders(req: IncomingMessage, res: ServerResponse, opti
   for (const [key, value] of Object.entries(headers)) {
     res.setHeader(key, value);
   }
-  return !options.authEnabled || !origin || options.origins.includes(origin);
+  return !origin || options.origins.includes(origin);
 }
 
 function headerValue(value: string | string[] | undefined): string {

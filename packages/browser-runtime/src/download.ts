@@ -12,8 +12,8 @@
 //   same verdict, no I/O; cancellation/progress live on the host side and key
 //   off the downloadId.
 import { stripUrlUserInfo } from './urlSafe.js';
-// 注：@nexus/protocol 暂无下载规格类型，本模块类型均按架构文档 11.2 本地定义。
-// — English: note — @nexus/protocol has no download-spec type yet; all types
+// 注：@suanlizi/protocol 暂无下载规格类型，本模块类型均按架构文档 11.2 本地定义。
+// — English: note — @suanlizi/protocol has no download-spec type yet; all types
 //   below are defined locally per architecture §11.2.
 
 // 下载规格：URL 与服务器声明字段均视为不可信输入，仅作策略上下文。

@@ -1,24 +1,20 @@
 import type { Server } from 'node:http';
-import type { ThreadStore } from '@nexus/storage';
+import type { ThreadStore } from '@suanlizi/storage';
 import { shutdownAllDingtalkClients } from '../routes/botRoute.js';
 import { resetGitNexusService } from '../services/gitNexusService.js';
+import { reconcileThreadRuntimeOnStartup } from '../services/threadRuntimeReconcile.js';
 
 export async function markRunningTurnsInterrupted(store: ThreadStore, now = new Date().toISOString()): Promise<number> {
-  const threads = await store.listThreads();
-  let changed = 0;
-  for (const thread of threads) {
-    const turns = await store.getTurns(thread.threadId);
-    for (const turn of turns) {
-      if (turn.status !== 'running') continue;
-      await store.saveTurn({
-        ...turn,
-        status: 'interrupted',
-        completedAt: now,
-      });
-      changed += 1;
-    }
-  }
-  return changed;
+  // 与启动对账共用同一套收敛逻辑，避免“退出路径”和“崩溃恢复路径”各写一份。
+  // 退出时没有任何线程是本进程活跃的，isThreadLive 恒为 false。
+  const report = await reconcileThreadRuntimeOnStartup({
+    threadStore: store,
+    isThreadLive: () => false,
+    completedAt: now,
+    log: () => undefined,
+    warn: () => undefined,
+  });
+  return report.interrupted + report.turnsInterrupted;
 }
 
 export function installGracefulShutdown(options: {
@@ -41,7 +37,7 @@ export function installGracefulShutdown(options: {
   const shutdown = async (signal: NodeJS.Signals) => {
     if (shuttingDown) return;
     shuttingDown = true;
-    log(`[shutdown] ${signal} received, closing Nexus API`);
+    log(`[shutdown] ${signal} received, closing Suanlizi API`);
     const timer = setTimeout(() => onExit(1), timeoutMs);
     try {
       const interrupted = await markRunningTurnsInterrupted(options.store);

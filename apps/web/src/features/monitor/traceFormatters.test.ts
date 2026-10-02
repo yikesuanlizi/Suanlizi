@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { RunTraceEnvelope } from '@nexus/protocol';
+import type { RunTraceEnvelope } from '@suanlizi/protocol';
 import { traceSummary } from './traceFormatters.js';
 
 describe('traceSummary', () => {
@@ -52,7 +52,7 @@ describe('traceSummary', () => {
       payload: {
         action: 'extract',
         path: 'E:\\langchain\\dexin-agent\\brief.docx',
-        artifactPath: 'E:\\langchain\\dexin-agent\\.nexus\\documents\\brief.txt',
+        artifactPath: 'E:\\langchain\\dexin-agent\\.suanlizi\\documents\\brief.txt',
         extractor: 'docx-text',
       },
     } as unknown as RunTraceEnvelope, true)).toBe('提取 · brief.docx → brief.txt · docx-text');
@@ -90,10 +90,10 @@ describe('traceSummary', () => {
         access: 'read',
         target: { kind: 'path', path: 'E:\\langchain\\outside.txt' },
         toolName: 'read_file',
-        agentRole: 'Nexus 主控 Agent',
+        agentRole: 'Suanlizi 主控 Agent',
       },
     } as unknown as RunTraceEnvelope, true);
 
-    expect(summary).toBe('请求临时授权 · read · read_file · E:\\langchain\\outside.txt · Nexus 主控 Agent · approval_required');
+    expect(summary).toBe('请求临时授权 · read · read_file · E:\\langchain\\outside.txt · Suanlizi 主控 Agent · approval_required');
   });
 });

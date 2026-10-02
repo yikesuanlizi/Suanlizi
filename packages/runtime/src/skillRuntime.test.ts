@@ -4,8 +4,8 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { SkillExecutor } from './skillExecutor.js';
 import { createUseSkillTool, USE_SKILL_TOOL_NAME } from './skillTool.js';
-import type { LoadedSkill } from '@nexus/extensions';
-import { discoverSkills, loadAllSkillModules } from '@nexus/extensions';
+import type { LoadedSkill } from '@suanlizi/extensions';
+import { discoverSkills, loadAllSkillModules } from '@suanlizi/extensions';
 
 function makePromptSkill(name: string): LoadedSkill {
   return {
@@ -172,7 +172,7 @@ describe('skillLoader discovery and module loading', () => {
   let tmpDir: string;
 
   beforeAll(async () => {
-    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-skill-test-'));
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-skill-test-'));
     const greetDir = path.join(tmpDir, 'greet');
     await fs.mkdir(greetDir, { recursive: true });
     await fs.writeFile(path.join(greetDir, 'SKILL.md'), [

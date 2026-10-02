@@ -35,8 +35,8 @@
 // — English: behavior contract — numbered above (start, payloads, frame
 //   matching, cancellation, seq, idempotency, timeout).
 // ============================================================================
-import { observationSchema, pageGraphSchema } from '@nexus/protocol';
-import type { ActionIntent, ClassifiedError, Observation, PageGraph } from '@nexus/protocol';
+import { observationSchema, pageGraphSchema } from '@suanlizi/protocol';
+import type { ActionIntent, ClassifiedError, Observation, PageGraph } from '@suanlizi/protocol';
 import type { ActionEvidence, ActionResult, BrowserSessionHandle } from '../port.js';
 import { ipcCodec } from '../ipc/codec.js';
 import type { ProtocolFrame } from '../ipc/ipcTypes.js';

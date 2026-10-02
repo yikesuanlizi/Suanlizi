@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { OpsTaskSession, OpsTaskState } from '@nexus/protocol';
+import type { OpsTaskSession, OpsTaskState } from '@suanlizi/protocol';
 import type { Locale } from '../../config/config.js';
 import { Icon } from '../Icon.js';
 import { listKnowledgeBases, replayKnowledgeReceipt, type KnowledgeReceiptReplay } from '../../api/knowledgeClient.js';
@@ -234,6 +234,6 @@ function formatBytes(value: number): string {
 }
 
 function formatDuration(value: number): string {
-  if (value < 1000) return `${value} ms`;
+  if (value < 1000) return '<1s';
   return `${(value / 1000).toFixed(1)} s`;
 }

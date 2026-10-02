@@ -1,4 +1,4 @@
-// Node 标准库：用于读写 ~/.nexus/config.json
+// Node 标准库：用于读写 ~/.suanlizi/config.json
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -32,6 +32,9 @@ export interface ProviderEntry {
   /** Optional description. */
   // 描述（可选）
   description?: string;
+  /** Optional provider icon (data URL or https URL). */
+  // 可选厂商图标（data URL 或 https URL）
+  iconUrl?: string;
 }
 
 // ─── Known Provider Registry ────────────────────────────────────────────────
@@ -65,6 +68,15 @@ const KNOWN_PROVIDERS: ProviderEntry[] = [
     protocol: 'openai',
     isLocal: true,
     description: 'Local vLLM server',
+  },
+  {
+    id: 'llama_cpp',
+    name: 'llama.cpp',
+    baseUrl: 'http://localhost:8080/v1',
+    apiKeyEnvVar: '',
+    protocol: 'openai',
+    isLocal: true,
+    description: 'Local llama.cpp server',
   },
 
   // ── Remote: OpenAI-compatible ───────────────────────────────────────────
@@ -297,6 +309,9 @@ const PROVIDER_ALIASES: Record<string, string> = {
   'huggingface-inference': 'huggingface',
   nim: 'nvidia',
   'nvidia-nim': 'nvidia',
+  'llama.cpp': 'llama_cpp',
+  'llama-cpp': 'llama_cpp',
+  llamacpp: 'llama_cpp',
   gitee: 'giteeai',
   'gitee-ai': 'giteeai',
   'ai.gitee': 'giteeai',
@@ -402,21 +417,21 @@ export function detectAvailableProviders(): ProviderEntry[] {
 }
 
 // ─── Config File Persistence ────────────────────────────────────────────────
-// 配置文件位置：~/.nexus/config.json
-const CONFIG_DIR = path.join(os.homedir(), '.nexus');
-const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
+// 配置文件位置：~/.suanlizi/config.json
 
+const CONFIG_DIR = path.join(os.homedir(), '.suanlizi');
+const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 // 本地持久化的用户配置
 // 英文说明：Interface for the locally persisted user config
-interface NexusConfig {
+interface SuanliziConfig {
   /** Provider id → API key mapping. */
   // provider id 到 API key 的映射
   apiKeys?: Record<string, string>;
   /** Provider id → preferred API key env var name. */
   // provider id 到首选 API key 环境变量名的映射
   apiKeyEnvVars?: Record<string, string>;
-  /** Env vars managed by Nexus for the local runtime process. */
-  // Nexus 管理的本地运行时环境变量，重启后恢复到进程环境
+  /** Env vars managed by Suanlizi for the local runtime process. */
+  // Suanlizi 管理的本地运行时环境变量，重启后恢复到进程环境
   runtimeEnv?: Record<string, string>;
   /** Custom provider definitions. */
   // 用户自定义的 provider 定义列表
@@ -430,10 +445,10 @@ interface NexusConfig {
 }
 
 // 缓存：避免每次读盘
-let _cachedConfig: NexusConfig | null = null;
+let _cachedConfig: SuanliziConfig | null = null;
 
 // 加载配置：失败或不存在返回空对象
-export function loadConfig(): NexusConfig {
+export function loadConfig(): SuanliziConfig {
   if (_cachedConfig) return _cachedConfig;
   try {
     if (fs.existsSync(CONFIG_FILE)) {
@@ -446,10 +461,16 @@ export function loadConfig(): NexusConfig {
   return _cachedConfig ?? {};
 }
 
+function writeConfigFile(config: SuanliziConfig): void {
+  fs.mkdirSync(CONFIG_DIR, { recursive: true });
+  fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf-8');
+  _cachedConfig = config;
+}
+
 // 保存配置：深合并 patch 后写盘
-export function saveConfig(patch: Partial<NexusConfig>): void {
+export function saveConfig(patch: Partial<SuanliziConfig>): void {
   const current = loadConfig();
-  const merged: NexusConfig = {
+  const merged: SuanliziConfig = {
     ...current,
     ...patch,
     apiKeys: { ...current.apiKeys, ...patch.apiKeys },
@@ -457,13 +478,11 @@ export function saveConfig(patch: Partial<NexusConfig>): void {
     runtimeEnv: { ...current.runtimeEnv, ...patch.runtimeEnv },
     customProviders: patch.customProviders ?? current.customProviders,
   };
-  fs.mkdirSync(CONFIG_DIR, { recursive: true });
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify(merged, null, 2), 'utf-8');
-  _cachedConfig = merged;
+  writeConfigFile(merged);
 }
 
 /** Persist an API key to the config file. */
-// 把指定 provider 的 API key 持久化到配置文件；英文说明：Persist an API key to ~/.nexus/config.json
+// 把指定 provider 的 API key 持久化到配置文件；英文说明：Persist an API key to ~/.suanlizi/config.json
 export function saveApiKey(providerId: string, apiKey: string): void {
   saveConfig({ apiKeys: { [normalizeProviderId(providerId)]: apiKey } });
 }
@@ -490,8 +509,8 @@ export function saveProviderApiKeyEnvVar(providerId: string, envVar: string): vo
   saveConfig({ apiKeyEnvVars: { [normalizedProviderId]: cleaned } });
 }
 
-/** Persist env vars into Nexus config and expose them to the current process. */
-// 批量设置 Nexus 当前进程可见的环境变量，并持久化到本地配置
+/** Persist env vars into Suanlizi config and expose them to the current process. */
+// 批量设置 Suanlizi 当前进程可见的环境变量，并持久化到本地配置
 export function saveRuntimeEnvironmentVariables(vars: Record<string, string>): void {
   const cleaned: Record<string, string> = {};
   for (const [rawKey, rawValue] of Object.entries(vars)) {
@@ -505,8 +524,8 @@ export function saveRuntimeEnvironmentVariables(vars: Record<string, string>): v
   if (Object.keys(cleaned).length > 0) saveConfig({ runtimeEnv: cleaned });
 }
 
-/** Read an API key env var from the active process, Nexus runtime env, or Windows user/system env. */
-// 读取 API key 环境变量：当前进程 > Nexus runtimeEnv > Windows 用户/系统环境变量
+/** Read an API key env var from the active process, Suanlizi runtime env, or Windows user/system env. */
+// 读取 API key 环境变量：当前进程 > Suanlizi runtimeEnv > Windows 用户/系统环境变量
 export function readApiKeyEnvironmentValue(name: string): string | undefined {
   const normalizedName = name.trim();
   if (!normalizedName || !isValidEnvVarName(normalizedName)) return undefined;
@@ -556,6 +575,25 @@ export function addCustomProvider(provider: ProviderEntry): void {
   if (idx >= 0) existing[idx] = provider;
   else existing.push(provider);
   saveConfig({ customProviders: existing });
+}
+
+/** 删除自定义厂商及其保存的凭据；内置厂商不可删除。 */
+export function removeCustomProvider(providerId: string): boolean {
+  const current = loadConfig();
+  const custom = current.customProviders ?? [];
+  if (!providerId.startsWith('custom_') || !custom.some((provider) => provider.id === providerId)) return false;
+  const apiKeys = { ...current.apiKeys };
+  const apiKeyEnvVars = { ...current.apiKeyEnvVars };
+  delete apiKeys[providerId];
+  delete apiKeyEnvVars[providerId];
+  const next: SuanliziConfig = {
+    ...current,
+    customProviders: custom.filter((provider) => provider.id !== providerId),
+    apiKeys,
+    apiKeyEnvVars,
+  };
+  writeConfigFile(next);
+  return true;
 }
 
 /** Get all providers including custom ones. */
@@ -619,7 +657,7 @@ function readExternalEnvironmentSnapshot(): Record<string, string> {
       });
       Object.assign(values, parseWindowsRegistryEnvironmentOutput(output));
     } catch {
-      // Registry access is best-effort; process.env and Nexus runtimeEnv remain authoritative.
+      // Registry access is best-effort; process.env and Suanlizi runtimeEnv remain authoritative.
     }
   }
   externalEnvCache = { at: now, values };

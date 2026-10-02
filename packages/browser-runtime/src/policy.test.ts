@@ -9,8 +9,8 @@ import type {
   AccessRequest,
   ActionGrant,
   ActionIntent,
-} from '@nexus/protocol';
-import { normalizeAccessPolicyConfig } from '@nexus/protocol';
+} from '@suanlizi/protocol';
+import { normalizeAccessPolicyConfig } from '@suanlizi/protocol';
 import { BrowserPolicyEngine } from './policy.js';
 
 // 构造最小 AccessDecision（注入 stub 用）

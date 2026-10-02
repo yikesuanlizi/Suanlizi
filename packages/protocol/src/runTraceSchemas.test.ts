@@ -118,7 +118,7 @@ describe('RunTrace schema — payload strict 校验', () => {
       target: { kind: 'path', path: 'E:\\langchain\\outside.txt' },
       toolName: 'read_file',
       agentThreadId: 'thread-1',
-      agentRole: 'Nexus 主控 Agent',
+      agentRole: 'Suanlizi 主控 Agent',
     });
     const rejected = runTracePayloadSchemaMap.approval.safeParse({
       decision: 'prompt',
@@ -234,7 +234,7 @@ describe('RunTrace schema — payload strict 校验', () => {
         action: 'refresh',
         path: 'docs/a.docx',
         sourcePath: 'docs/a.docx',
-        artifactPath: '.nexus/artifacts/documents/abc.md',
+        artifactPath: '.suanlizi/artifacts/documents/abc.md',
         sha256: 'a'.repeat(64),
         artifactSha256: 'b'.repeat(64),
         staleReason: 'source_hash_changed',

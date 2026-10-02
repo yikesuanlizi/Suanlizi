@@ -3,7 +3,7 @@
 // — English: golden task framework types — layer one 'local pinned sites':
 //   deterministic site definitions + scripted steps that regression-verify the
 //   browser runtime's observe/act/assert loop (architecture doc §16.1 + Phase 0).
-import type { Postcondition } from '@nexus/protocol';
+import type { Postcondition } from '@suanlizi/protocol';
 import type { FakeSiteDefinition } from '../fakeRuntime.js';
 
 // 黄金断言：对 runner 缓存的最新观测（latestObservation）求值。

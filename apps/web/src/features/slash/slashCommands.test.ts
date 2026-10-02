@@ -30,6 +30,13 @@ describe('parseSlashCommand', () => {
     expect(parseSlashCommand(' /skills')).toEqual({ kind: 'none' });
   });
 
+  it('parses Goal and Dynamic Workflow commands with or without an objective', () => {
+    expect(parseSlashCommand('/goal')).toEqual({ kind: 'goal', args: '' });
+    expect(parseSlashCommand('/goal 迁移认证模块')).toEqual({ kind: 'goal', args: '迁移认证模块' });
+    expect(parseSlashCommand('/workflow')).toEqual({ kind: 'workflow', args: '' });
+    expect(parseSlashCommand('/workflow 并行审查代码库')).toEqual({ kind: 'workflow', args: '并行审查代码库' });
+  });
+
   it('parses one-shot task mode commands and compact', () => {
     expect(parseSlashCommand('/plan 重构侧栏')).toEqual({
       kind: 'task.mode',
@@ -61,6 +68,12 @@ describe('parseSlashCommand', () => {
     });
     expect(getSlashCommandOptions('zh').find((option) => option.id === 'plan')).toMatchObject({
       title: '计划',
+    });
+    expect(getSlashCommandOptions('zh').find((option) => option.id === 'goal')).toMatchObject({
+      title: 'Goal',
+    });
+    expect(getSlashCommandOptions('zh').find((option) => option.id === 'workflow')).toMatchObject({
+      title: 'Dynamic Workflow',
     });
     expect(getSlashCommandOptions('en').map((option) => option.detail).join('\n')).not.toContain('打开');
   });

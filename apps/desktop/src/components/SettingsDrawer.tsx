@@ -8,7 +8,7 @@ import { upsertById } from '../features/chat/threadItems.js';
 import { readDesktopCapabilities, type DesktopCapabilities } from '../api/desktopBridge.js';
 import type { RecommendedMcp, RecommendedSkill } from '../features/settings/pluginCatalog.js';
 import type { ApiKeyState, BotConfig, BotStatus, McpConfig, McpServerStatus, MemoryRecord, ModelPreset, ProviderEntry, SkillEntry, WebProviderPublicConfig } from '../shared/types.js';
-import type { AccessPolicyConfig, ModelPresetConfig } from '@nexus/protocol';
+import { formatSuanliziErrorMessage, type AccessPolicyConfig, type ModelPresetConfig } from '@suanlizi/protocol';
 import { SettingsShell } from './settings/SettingsShell.js';
 import { AppearancePage } from './settings/AppearancePage.js';
 import { ModelsPage } from './settings/ModelsPage.js';
@@ -119,6 +119,7 @@ export function SettingsDrawer({
   requestModelPresetName,
   saveModelPreset,
   deleteModelPreset,
+  deleteCustomProvider,
   saveSkillDraft,
   saveProviderKey,
   saveProviderEnvVar,
@@ -164,8 +165,9 @@ export function SettingsDrawer({
   refreshProviders: () => Promise<void>;
   refreshKeyStates: () => Promise<void>;
   requestModelPresetName: (defaultName: string) => Promise<string | null>;
-  saveModelPreset: (name: string, presetConfig: ModelPresetConfig, presetId?: string, status?: 'draft' | 'published') => Promise<void>;
+  saveModelPreset: (name: string, presetConfig: ModelPresetConfig, presetId?: string) => Promise<ModelPreset | string | void>;
   deleteModelPreset: (presetId: string) => Promise<void>;
+  deleteCustomProvider: (providerId: string) => Promise<void>;
   saveSkillDraft: (draft: import('../shared/types.js').SkillDraft) => Promise<void>;
   saveBotConfig: (config: BotConfig) => Promise<void>;
   logoutWeixin: () => Promise<void>;
@@ -386,7 +388,7 @@ export function SettingsDrawer({
       }
       setAccessPolicyNotice(locale === 'zh' ? '权限规则已保存。' : 'Access policy saved.');
     } catch (error) {
-      setAccessPolicyNotice(error instanceof Error ? error.message : String(error));
+      setAccessPolicyNotice(formatSuanliziErrorMessage(undefined, error instanceof Error ? error.message : String(error), locale));
     } finally {
       setAccessPolicySaving(false);
     }
@@ -504,7 +506,7 @@ export function SettingsDrawer({
       await refreshSkills({ forceReload: true });
       setPluginNotice(locale === 'zh' ? `已安装 ${item.name}` : `Installed ${item.name}`);
     } catch (error) {
-      setPluginNotice(error instanceof Error ? error.message : String(error));
+      setPluginNotice(formatSuanliziErrorMessage(undefined, error instanceof Error ? error.message : String(error), locale));
     }
   }
 
@@ -556,7 +558,7 @@ export function SettingsDrawer({
       setPluginNotice(locale === 'zh' ? 'Firecrawl 已开启。' : 'Firecrawl enabled.');
       closeFirecrawlDialog();
     } catch (error) {
-      setPluginNotice(error instanceof Error ? error.message : String(error));
+      setPluginNotice(formatSuanliziErrorMessage(undefined, error instanceof Error ? error.message : String(error), locale));
     }
   }
 
@@ -567,7 +569,7 @@ export function SettingsDrawer({
       setPluginNotice(locale === 'zh' ? '已清除 Firecrawl 密钥。' : 'Firecrawl key cleared.');
       closeFirecrawlDialog();
     } catch (error) {
-      setPluginNotice(error instanceof Error ? error.message : String(error));
+      setPluginNotice(formatSuanliziErrorMessage(undefined, error instanceof Error ? error.message : String(error), locale));
     }
   }
 
@@ -636,6 +638,9 @@ export function SettingsDrawer({
             keyStates={keyStates}
             modelPresets={modelPresets}
             deleteModelPreset={deleteModelPreset}
+            deleteCustomProvider={deleteCustomProvider}
+            listProviderIconTabs={settings.listProviderIconTabs}
+            saveProviderIcon={settings.saveProviderIcon}
             apiKeyDraft={settings.apiKeyDraft}
             setApiKeyDraft={settings.setApiKeyDraft}
             modelKeySource={settings.modelKeySource}
@@ -643,6 +648,7 @@ export function SettingsDrawer({
             showSavedModelKey={settings.showSavedModelKey}
             setShowSavedModelKey={settings.setShowSavedModelKey}
             modelKeyNotice={settings.modelKeyNotice}
+            setModelKeyNotice={settings.setModelKeyNotice}
             hasSavedModelKey={settings.hasSavedModelKey}
             hasConfiguredModelEnvVar={settings.hasConfiguredModelEnvVar}
             modelEnvVarDraft={settings.modelEnvVarDraft}
@@ -652,13 +658,16 @@ export function SettingsDrawer({
             setCustomProviderName={settings.setCustomProviderName}
             selectModelProviderDraft={settings.selectModelProviderDraft}
             loadModelPresetIntoDraft={settings.loadModelPresetIntoDraft}
+
+            selectPreset={settings.selectPreset}
+
+
+            startNewModelPreset={settings.startNewModelPreset}
             handleSaveModelConfig={settings.handleSaveModelConfig}
             resetModelDraft={settings.resetModelDraft}
             handleSetCurrentModelConfig={settings.handleSetCurrentModelConfig}
             markDirty={settings.markDirty}
             dirtyFields={settings.dirtyFields}
-            registerCloseGuard={(handler) => { modelCloseGuardRef.current = handler; }}
-            onForceClose={() => setOpen(false)}
           />
         );
       case 'appearance':
@@ -714,7 +723,7 @@ export function SettingsDrawer({
             setConfig={setConfig}
             markDirty={settings.markDirty}
             dirtyFields={settings.dirtyFields}
-            onSave={settings.handleSave}
+            onSave={settings.handleSaveMonitorSettings}
           />
         );
       case 'runtime':
@@ -724,7 +733,7 @@ export function SettingsDrawer({
             config={config}
             setConfig={setConfig}
             markDirty={settings.markDirty}
-            onSave={settings.handleSave}
+            onSave={() => void settings.handleSaveRuntimeSettings()}
           />
         );
       case 'ssh':

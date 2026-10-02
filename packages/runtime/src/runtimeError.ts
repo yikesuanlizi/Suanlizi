@@ -1,12 +1,12 @@
-import type { NexusErrorInfo } from '@nexus/protocol';
+import type { SuanliziErrorInfo } from '@suanlizi/protocol';
 
-// Nexus 运行时统一错误类型；info 字段携带语义化错误分类，便于上层决策
-export class NexusRuntimeError extends Error {
-  readonly info: NexusErrorInfo;
+// Suanlizi 运行时统一错误类型；info 字段携带语义化错误分类，便于上层决策
+export class SuanliziRuntimeError extends Error {
+  readonly info: SuanliziErrorInfo;
 
-  constructor(message: string, info: NexusErrorInfo, options?: { cause?: unknown }) {
+  constructor(message: string, info: SuanliziErrorInfo, options?: { cause?: unknown }) {
     super(message);
-    this.name = 'NexusRuntimeError';
+    this.name = 'SuanliziRuntimeError';
     this.info = info;
     if (options && 'cause' in options) {
       (this as Error & { cause?: unknown }).cause = options.cause;
@@ -14,12 +14,26 @@ export class NexusRuntimeError extends Error {
   }
 }
 
-// 将任意错误对象转换成标准化的 NexusErrorInfo；基于错误消息和状态码推断错误分类（上下文超限、限流、未授权、服务端错误、沙箱错误、回滚失败等
-export function toNexusErrorInfo(error: unknown): NexusErrorInfo {
-  if (error instanceof NexusRuntimeError) return error.info;
+// 将任意错误对象转换成标准化的 SuanliziErrorInfo；基于错误消息和状态码推断错误分类（上下文超限、限流、未授权、服务端错误、沙箱错误、回滚失败等
+export function toSuanliziErrorInfo(error: unknown): SuanliziErrorInfo {
+  if (error instanceof SuanliziRuntimeError) return error.info;
   const message = error instanceof Error ? error.message : String(error);
   const lower = message.toLowerCase();
+  const code = error && typeof error === 'object' ? (error as { code?: unknown }).code : undefined;
+  let timeoutMs = error && typeof error === 'object' ? (error as { timeoutMs?: unknown }).timeoutMs : undefined;
   const status = httpStatusFromError(error) ?? httpStatusFromMessage(message);
+  if (code === 'MODEL_REQUEST_TIMEOUT') {
+    return {
+      kind: 'ResponseStreamDisconnected',
+      reason: 'timeout',
+      timeoutMs: Number.isFinite(timeoutMs) && Number(timeoutMs) > 0 ? Number(timeoutMs) : parseTimeoutMs(message),
+      httpStatusCode: status,
+    };
+  }
+  if (typeof timeoutMs !== 'number' && /^(?:model request|model response)/i.test(message)) {
+    const parsed = parseTimeoutMs(message);
+    if (parsed) timeoutMs = parsed;
+  }
   if (lower.includes('context') && lower.includes('window')) return { kind: 'ContextWindowExceeded' };
   if (lower.includes('usage limit') || lower.includes('rate limit') || status === 429) return { kind: 'UsageLimitExceeded' };
   if (status === 401 || status === 403) return { kind: 'Unauthorized', httpStatusCode: status };
@@ -28,9 +42,16 @@ export function toNexusErrorInfo(error: unknown): NexusErrorInfo {
     return status === 503 ? { kind: 'ServerOverloaded', httpStatusCode: status } : { kind: 'InternalServerError', httpStatusCode: status };
   }
   if (lower.includes('timeout') || lower.includes('aborted due to timeout') || lower.includes('stream disconnected')) {
-    return { kind: 'ResponseStreamDisconnected', httpStatusCode: status };
+    return {
+      kind: 'ResponseStreamDisconnected',
+      ...(lower.includes('timeout') || lower.includes('aborted due to timeout') ? { reason: 'timeout' as const } : {}),
+      httpStatusCode: status,
+    };
   }
-  if (lower.includes('connection') || lower.includes('network')) return { kind: 'HttpConnectionFailed', httpStatusCode: status };
+  if (lower.includes('abort') && (error as Error | undefined)?.name === 'AbortError') {
+    return { kind: 'ResponseStreamDisconnected', reason: 'cancelled', httpStatusCode: status };
+  }
+  if (lower.includes('connection') || lower.includes('network')) return { kind: 'HttpConnectionFailed', reason: 'network', httpStatusCode: status };
   if (lower.includes('sandbox')) return { kind: 'SandboxError' };
   if (lower.includes('rollback')) return { kind: 'ThreadRollbackFailed' };
   if (lower.includes('too many failed attempts')) return { kind: 'ResponseTooManyFailedAttempts', httpStatusCode: status };
@@ -38,17 +59,24 @@ export function toNexusErrorInfo(error: unknown): NexusErrorInfo {
 }
 
 // 判断错误是否会影响当前 turn 状态；ThreadRollbackFailed / ActiveTurnNotSteerable 仅影响控制流程，不中断常规 turn
-export function affectsTurnStatus(info: NexusErrorInfo): boolean {
+export function affectsTurnStatus(info: SuanliziErrorInfo): boolean {
   return info.kind !== 'ThreadRollbackFailed' && info.kind !== 'ActiveTurnNotSteerable';
 }
 
 // 判断是否可恢复的流式错误；响应流断开或服务端过载通常可重试
 export function isRecoverableStreamError(error: unknown): boolean {
-  const info = toNexusErrorInfo(error);
-  return info.kind === 'ResponseStreamDisconnected' || info.kind === 'ServerOverloaded';
+  const info = toSuanliziErrorInfo(error);
+  return (info.kind === 'ResponseStreamDisconnected' && info.reason !== 'cancelled') || info.kind === 'ServerOverloaded';
 }
 
 // 从错误对象自身提取 status/statusCode/httpStatusCode 字段；未找到则返回 undefined
+function parseTimeoutMs(message: string): number | undefined {
+  const match = /after\s+(\d+)\s*ms\b/i.exec(message);
+  if (!match) return undefined;
+  const value = Number(match[1]);
+  return Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
 function httpStatusFromError(error: unknown): number | undefined {
   if (!error || typeof error !== 'object') return undefined;
   const value = (error as { status?: unknown; statusCode?: unknown; httpStatusCode?: unknown }).status

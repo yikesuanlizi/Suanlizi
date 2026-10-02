@@ -210,6 +210,7 @@ export function WorkspaceThreadList({
             onCreateInWorkspace={onCreateInWorkspace}
             onDeleteThread={onDeleteThread}
             onForgetWorkspace={onForgetWorkspace}
+            pinned={group.pinned === true}
             onRenameThread={(thread) => setRenaming(thread)}
             onSelectThread={selectThreadPreservingScroll}
             onToggleCollapsed={() => setCollapsed((current) => ({ ...current, [group.workspaceRoot]: !current[group.workspaceRoot] }))}
@@ -456,6 +457,7 @@ function WorkspaceGroupView({
   onCreateInWorkspace,
   onDeleteThread,
   onForgetWorkspace,
+  pinned,
   onRenameThread,
   onSelectThread,
   onToggleCollapsed,
@@ -473,6 +475,7 @@ function WorkspaceGroupView({
   onCreateInWorkspace(workspaceRoot: string): void;
   onDeleteThread(threadId: string): void;
   onForgetWorkspace(workspaceRoot: string): void;
+  pinned?: boolean;
   onRenameThread(thread: ThreadMeta): void;
   onSelectThread(threadId: string): void;
   onToggleCollapsed(): void;

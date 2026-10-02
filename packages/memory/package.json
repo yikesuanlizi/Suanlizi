@@ -1,6 +1,6 @@
 {
-  "name": "@nexus/memory",
-  "version": "1.7.0",
+  "name": "@suanlizi/memory",
+  "version": "1.8.0",
   "private": true,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -12,9 +12,9 @@
     }
   },
   "dependencies": {
-    "@nexus/protocol": "1.7.0",
-    "@nexus/storage": "1.7.0",
-    "@nexus/model-gateway": "1.7.0",
+    "@suanlizi/protocol": "1.8.0",
+    "@suanlizi/storage": "1.8.0",
+    "@suanlizi/model-gateway": "1.8.0",
     "zod": "^3.24.0"
   }
 }

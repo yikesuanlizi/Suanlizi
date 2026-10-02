@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ThreadStore } from '@nexus/storage';
+import type { ThreadStore } from '@suanlizi/storage';
 import {
   deleteLightMemory,
   flushLightMemoryQueue,

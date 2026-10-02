@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { ThreadId, ThreadMeta, ThreadMode, ThreadTaskPreset } from '@nexus/protocol';
-import type { ThreadStore } from '@nexus/storage';
+import type { ThreadId, ThreadMeta, ThreadMode, ThreadTaskPreset } from '@suanlizi/protocol';
+import type { ThreadStore } from '@suanlizi/storage';
 import { readJson, sendError, sendJson } from '../shared/http.js';
 
 // 规范化线程标题（空字符串、非字符串或空内容返回 null）
@@ -36,15 +36,16 @@ export async function updateThreadTitle(store: ThreadStore, threadId: ThreadId, 
 // 处理 PATCH /api/threads/:id — 更新线程标题和/或标签
 // — Chinese: handle PATCH /api/threads/:id — update thread title and/or tags
 export async function handlePatchThread(req: IncomingMessage, res: ServerResponse, store: ThreadStore, threadId: ThreadId): Promise<void> {
-  const body = await readJson<{ title?: unknown; tags?: unknown; mode?: unknown; taskPreset?: unknown }>(req);
+  const body = await readJson<{ title?: unknown; workspaceRoot?: unknown; tags?: unknown; mode?: unknown; taskPreset?: unknown }>(req);
   const title = normalizeThreadTitlePatch(body);
+  const workspaceRoot = typeof body.workspaceRoot === 'string' ? body.workspaceRoot.trim() : undefined;
   const tags = normalizeThreadTagsPatch(body);
   const mode = body.mode === 'chat' || body.mode === 'ops' ? body.mode as ThreadMode : undefined;
   const taskPreset = body.taskPreset === null || body.taskPreset === 'ops' || body.taskPreset === 'diagnose' || body.taskPreset === 'log_analysis'
     ? (body.taskPreset === null ? null : 'ops') as ThreadTaskPreset | null
     : undefined;
-  if (!title && !tags && !mode && body.taskPreset === undefined) {
-    sendError(res, 400, 'Thread title, tags, mode, or taskPreset are required');
+  if (!title && workspaceRoot === undefined && !tags && !mode && body.taskPreset === undefined) {
+    sendError(res, 400, 'Thread title, workspaceRoot, tags, mode, or taskPreset are required');
     return;
   }
   if (body.mode !== undefined && !mode) {
@@ -62,6 +63,7 @@ export async function handlePatchThread(req: IncomingMessage, res: ServerRespons
   }
   await store.updateThreadMetadata(threadId, {
     ...(title ? { title } : {}),
+    ...(workspaceRoot !== undefined ? { workspaceRoot } : {}),
     ...(tags ? { tags: { ...(current.tags ?? {}), ...tags } } : {}),
     ...(mode ? { mode } : {}),
     ...(body.taskPreset !== undefined ? { taskPreset } : {}),

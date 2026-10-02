@@ -1,4 +1,4 @@
-import type { KnowledgeSqlitePort } from '@nexus/storage';
+import type { KnowledgeSqlitePort } from '@suanlizi/storage';
 
 const SCHEMA_VERSION = 2;
 
@@ -25,7 +25,7 @@ type IndexWriteOptions = {
   removeSnapshotIds?: string[];
 };
 
-/** Create the Wiki catalog and FTS5 index inside Nexus' existing SQLite file. */
+/** Create the Wiki catalog and FTS5 index inside Suanlizi' existing SQLite file. */
 export function ensureKnowledgeSqliteSchema(db: KnowledgeSqlitePort): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS knowledge_catalogs (

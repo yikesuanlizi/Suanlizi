@@ -15,17 +15,17 @@ import type {
   TurnMeta,
   EpisodeRecord,
   ThreadWorkingSetSnapshot,
-} from '@nexus/protocol';
-import { RUN_TRACE_VERSION } from '@nexus/protocol';
+} from '@suanlizi/protocol';
+import { RUN_TRACE_VERSION } from '@suanlizi/protocol';
 import { AgentLoop } from './agent.js';
 import { compactionOptionsForRunProfile } from './runProfile.js';
 import { ThreadStateManager } from './state.js';
-import type { RunEvent, RunFeedback, RunRecord, ThreadStore } from '@nexus/storage';
-import { LocalHookRegistry, LocalSkillRegistry } from '@nexus/extensions';
-import { ToolRegistry, type ToolDefinition } from '@nexus/tools';
+import type { RunEvent, RunFeedback, RunRecord, ThreadStore } from '@suanlizi/storage';
+import { LocalHookRegistry, LocalSkillRegistry } from '@suanlizi/extensions';
+import { ToolRegistry, type ToolDefinition } from '@suanlizi/tools';
 import type { RuntimeMiddleware } from './middleware.js';
-import { AutoApproveHandler, getPreset } from '@nexus/sandbox';
-import { LIGHT_MEMORY_KEY, type LightMemoryState } from '@nexus/memory';
+import { AutoApproveHandler, getPreset } from '@suanlizi/sandbox';
+import { LIGHT_MEMORY_KEY, type LightMemoryState } from '@suanlizi/memory';
 
 function deferred<T>(): { promise: Promise<T>; resolve: (value: T | PromiseLike<T>) => void; reject: (reason?: unknown) => void } {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -345,6 +345,16 @@ class CapturingModel {
   }
 }
 
+class BudgetCapturingModel {
+  request: { messages: Array<{ role: string; content: unknown }>; tools?: unknown[]; max_tokens?: number } | null = null;
+
+  async *chatStream(req: { messages: Array<{ role: string; content: unknown }>; tools?: unknown[]; max_tokens?: number }) {
+    this.request = req;
+    yield { type: 'delta' as const, content: 'ok' };
+    yield { type: 'done' as const };
+  }
+}
+
 class FailingModel {
   async *chatStream() {
     throw new Error('model stream broke');
@@ -355,6 +365,20 @@ class TimeoutAfterDeltaModel {
   async *chatStream() {
     yield { type: 'delta' as const, content: '已经生成的部分内容' };
     throw new Error('The operation was aborted due to timeout');
+  }
+}
+
+class ProviderErrorAfterDeltaModel {
+  async *chatStream() {
+    yield { type: 'delta' as const, content: '已收到请求，正在处理。' };
+    throw new Error('llama.cpp gateway error (500): provider failed');
+  }
+}
+
+class ProviderErrorAfterReasoningModel {
+  async *chatStream() {
+    yield { type: 'reasoning_delta' as const, content: '先检查请求。' };
+    throw new Error('provider failed after reasoning');
   }
 }
 
@@ -377,6 +401,31 @@ class PlaceholderToolTextModel {
       return;
     }
     yield { type: 'delta' as const, content: '这是完整最终回答。' };
+    yield { type: 'done' as const };
+  }
+}
+
+class SuccessfulToolThenPlaceholderModel {
+  calls = 0;
+
+  async *chatStream() {
+    this.calls += 1;
+    if (this.calls === 1) {
+      yield {
+        type: 'tool_call_end' as const,
+        id: 'call_success_then_replay',
+        name: 'current_time',
+        arguments: '{}',
+      };
+      yield { type: 'done' as const };
+      return;
+    }
+    if (this.calls === 2) {
+      yield { type: 'delta' as const, content: '[工具调用]\n名称: current_time\n参数: {}' };
+      yield { type: 'done' as const };
+      return;
+    }
+    yield { type: 'delta' as const, content: '工具已成功执行，下面是最终结果。' };
     yield { type: 'done' as const };
   }
 }
@@ -513,6 +562,45 @@ class DeepSeekReasoningToolModel {
   }
 }
 
+class LlamaResponsesToolCallingModel {
+  calls: Array<Array<{ role: string; content?: unknown; providerFrame?: unknown; tool_calls?: unknown; tool_call_id?: string }>> = [];
+
+  getModelId(): string {
+    return 'Qwen3-8B-GGUF';
+  }
+
+  getProfile() {
+    return {
+      id: 'llama_cpp',
+      displayName: 'llama.cpp',
+      baseUrl: 'http://127.0.0.1:8080/v1',
+      apiKeyEnvVars: [],
+      endpointFormat: 'responses',
+      transport: 'openai_responses',
+      toolHistoryMode: 'openai_responses',
+      reasoningMode: 'openai_responses_items',
+      cacheMode: 'openai_prompt_details',
+    };
+  }
+
+  async *chatStream(req: { messages: Array<{ role: string; content?: unknown; providerFrame?: unknown; tool_calls?: unknown; tool_call_id?: string }> }) {
+    this.calls.push(req.messages);
+    if (this.calls.length === 1) {
+      yield { type: 'reasoning_delta' as const, content: '先检查当前时间。' };
+      yield {
+        type: 'tool_call_end' as const,
+        id: 'call_current_time_responses',
+        name: 'current_time',
+        arguments: '',
+      };
+      yield { type: 'done' as const };
+      return;
+    }
+    yield { type: 'delta' as const, content: '已完成。' };
+    yield { type: 'done' as const };
+  }
+}
+
 class SingleToolModel {
   calls: Array<Array<{ role: string; tool_calls?: unknown; tool_call_id?: string }>> = [];
 
@@ -626,6 +714,35 @@ class FailingToolRetryModel {
       return;
     }
     yield { type: 'delta' as const, content: 'done after failures' };
+    yield { type: 'done' as const };
+  }
+}
+
+class IgnoresDisabledToolsModel {
+  calls = 0;
+  requests: Array<{ tools?: unknown[]; tool_choice?: unknown }> = [];
+
+  async *chatStream(req: { tools?: Array<{ function: { name: string } }>; tool_choice?: unknown }) {
+    this.calls += 1;
+    this.requests.push({ tools: req.tools, tool_choice: req.tool_choice });
+    // Deliberately emit the same call even when the runtime sends
+    // tools: []/tool_choice: none, matching misbehaving llama.cpp templates.
+    yield {
+      type: 'tool_call_end' as const,
+      id: `call_ignores_disabled_${this.calls}`,
+      name: 'current_time',
+      arguments: '{}',
+    };
+    yield { type: 'done' as const };
+  }
+}
+
+class RepeatingPlaceholderToolTextModel {
+  calls = 0;
+
+  async *chatStream() {
+    this.calls += 1;
+    yield { type: 'delta' as const, content: '[Tool read_file]' };
     yield { type: 'done' as const };
   }
 }
@@ -847,9 +964,28 @@ class UsageModel {
       usage: {
         prompt_tokens: 11,
         cached_tokens: 5,
+        cache_reported: true,
         completion_tokens: 7,
         total_tokens: 18,
         cache_strategy: 'deepseek-native',
+      },
+    };
+  }
+}
+
+class TriStateUsageModel {
+  private callCount = 0;
+
+  async *chatStream() {
+    const cacheReported = [undefined, true, false][this.callCount++];
+    yield { type: 'delta' as const, content: 'ok' };
+    yield {
+      type: 'done' as const,
+      usage: {
+        prompt_tokens: 10,
+        completion_tokens: 2,
+        ...(cacheReported === undefined ? {} : { cache_reported: cacheReported }),
+        ...(cacheReported === true ? { cached_tokens: 4 } : {}),
       },
     };
   }
@@ -1222,8 +1358,8 @@ describe('AgentLoop runTurn failure handling', () => {
     const store = new FakeStore(threadId, 'previous-turn');
     store.thread.turnCount = 0;
     store.turns = [];
-    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-runtime-access-workspace-'));
-    const externalRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-runtime-access-external-'));
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-runtime-access-workspace-'));
+    const externalRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-runtime-access-external-'));
     const externalFile = path.join(externalRoot, 'note.txt');
     await fs.writeFile(externalFile, 'external note\n', 'utf-8');
     const approvals: unknown[] = [];
@@ -1362,7 +1498,7 @@ describe('AgentLoop runTurn failure handling', () => {
     const store = new FakeStore(threadId, 'previous-turn');
     store.thread.turnCount = 0;
     store.turns = [];
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-runtime-document-trace-'));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-runtime-document-trace-'));
     await writeRuntimeMinimalDocx(path.join(root, 'brief.docx'), 'trace 内容');
     const model = new SequenceToolModel([{ name: 'read_document', args: { filePath: 'brief.docx' } }]);
     const agent = new AgentLoop({
@@ -1383,7 +1519,7 @@ describe('AgentLoop runTurn failure handling', () => {
         payload: expect.objectContaining({
           action: 'extract',
           path: expect.stringContaining('brief.docx'),
-          artifactPath: expect.stringContaining('.nexus'),
+          artifactPath: expect.stringContaining('.suanlizi'),
         }),
       }),
     ]));
@@ -1391,7 +1527,7 @@ describe('AgentLoop runTurn failure handling', () => {
 
   it('injects a freshness warning before the next model call when a document artifact is stale', async () => {
     const threadId = 'thread-preflight-stale';
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-agent-preflight-'));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-agent-preflight-'));
     await writeRuntimeMinimalDocx(path.join(root, 'brief.docx'), '版本一');
 
     const store = new FakeStore(threadId, 'previous-turn');
@@ -1428,7 +1564,7 @@ describe('AgentLoop runTurn failure handling', () => {
 
   it('injects a document verification notice for follow-up questions before relying on previous document context', async () => {
     const threadId = 'thread-preflight-followup-document';
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-agent-followup-document-'));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-agent-followup-document-'));
     await writeRuntimeMinimalDocx(path.join(root, 'brief.docx'), '版本一');
 
     const store = new FakeStore(threadId, 'previous-turn');
@@ -1473,7 +1609,7 @@ describe('AgentLoop runTurn failure handling', () => {
 
   it('auto refreshes a recently discussed document before a follow-up answer even when the model does not call tools', async () => {
     const threadId = 'thread-preflight-auto-document';
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-agent-auto-document-'));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-agent-auto-document-'));
     await writeRuntimeMinimalDocx(path.join(root, 'brief.docx'), '旧版本内容');
 
     const store = new FakeStore(threadId, 'previous-turn');
@@ -1516,7 +1652,7 @@ describe('AgentLoop runTurn failure handling', () => {
 
   it('records observed document knowledge on project checkpoints', async () => {
     const threadId = 'thread-checkpoint-knowledge';
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-checkpoint-knowledge-'));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-checkpoint-knowledge-'));
     await writeRuntimeMinimalDocx(path.join(root, 'brief.docx'), '检查点知识');
     const model = new SequenceToolModel([
       { name: 'read_document', args: { filePath: 'brief.docx' } },
@@ -1546,13 +1682,21 @@ describe('AgentLoop runTurn failure handling', () => {
         documentArtifacts: [
           expect.objectContaining({
             sourcePath: expect.stringContaining('brief.docx'),
-            artifactPath: expect.stringContaining('.nexus'),
+            artifactPath: expect.stringContaining('.suanlizi'),
             sourceHash: expect.any(String),
             artifactHash: expect.any(String),
           }),
         ],
       },
     });
+    const writeEvent = store.runTraceEvents.find((event) =>
+      event.category === 'file'
+      && event.payload.action === 'write'
+      && event.payload.path.endsWith('notes.md')
+    );
+    expect(writeEvent).toBeDefined();
+    expect(store.runRecords.at(-1)?.traceSummary?.files.changed).toBe(1);
+    expect(store.runRecords.at(-1)?.traceSummary?.files.addedLines).toBeGreaterThan(0);
   });
 
   it('does not treat plain text tool placeholders as the final answer', async () => {
@@ -1577,7 +1721,32 @@ describe('AgentLoop runTurn failure handling', () => {
     });
     expect(events).toEqual(expect.arrayContaining([
       expect.objectContaining({ type: 'item.discarded' }),
+      expect.objectContaining({ type: 'model.output.rejected', message: expect.stringContaining('普通文本') }),
     ]));
+  });
+
+  it('does not block after a successful tool when the provider replays flattened tool text', async () => {
+    const threadId = 'thread-successful-tool-replay';
+    const store = new FakeStore(threadId, 'previous-turn');
+    const model = new SuccessfulToolThenPlaceholderModel();
+    const events: ThreadEvent[] = [];
+    const agent = new AgentLoop({
+      workspaceRoot: process.cwd(),
+      sandbox: { level: 'workspace_write', workspaceRoot: process.cwd() },
+      model: model as never,
+      store,
+      locale: 'zh',
+    });
+    agent.onEvent((event) => events.push(event));
+
+    const result = await agent.runTurn(threadId, { type: 'text', text: '查一下当前时间' });
+
+    expect(model.calls).toBe(3);
+    expect(result.items.filter((item) => item.type === 'tool_call')).toHaveLength(2);
+    expect([...result.items].reverse().find((item) => item.type === 'agent_message')).toMatchObject({
+      text: '工具已成功执行，下面是最终结果。',
+    });
+    expect(events.filter((event) => event.type === 'model.output.rejected')).toHaveLength(1);
   });
 
   it('does not display DSML-style text tool calls as assistant replies', async () => {
@@ -1805,6 +1974,103 @@ describe('AgentLoop runTurn failure handling', () => {
       }),
       expect.objectContaining({ type: 'turn.completed', status: 'interrupted' }),
     ]));
+  });
+
+  it('closes and persists partial assistant output when a provider fails after deltas', async () => {
+    const threadId = 'thread-provider-error-partial';
+    const store = new FakeStore(threadId, 'previous-turn');
+    const events: ThreadEvent[] = [];
+    const agent = new AgentLoop({
+      workspaceRoot: process.cwd(),
+      sandbox: { level: 'workspace_write', workspaceRoot: process.cwd() },
+      model: new ProviderErrorAfterDeltaModel() as never,
+      store,
+      locale: 'zh',
+    });
+    agent.onEvent((event) => events.push(event));
+
+    await expect(agent.runTurn(threadId, { type: 'text', text: '触发错误' })).rejects.toThrow('provider failed');
+
+    expect(store.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'agent_message', text: '已收到请求，正在处理。' }),
+      expect.objectContaining({ type: 'error', message: expect.stringContaining('provider failed') }),
+    ]));
+    expect(events.filter((event) => event.type === 'item.completed' && event.item.type === 'agent_message')).toHaveLength(1);
+    expect(store.savedTurns.at(-1)).toMatchObject({ status: 'failed' });
+  });
+
+  it('closes a reasoning item exactly once when a provider fails after reasoning deltas', async () => {
+    const threadId = 'thread-provider-error-reasoning';
+    const store = new FakeStore(threadId, 'previous-turn');
+    const events: ThreadEvent[] = [];
+    const agent = new AgentLoop({
+      workspaceRoot: process.cwd(),
+      sandbox: { level: 'workspace_write', workspaceRoot: process.cwd() },
+      model: new ProviderErrorAfterReasoningModel() as never,
+      store,
+      locale: 'zh',
+    });
+    agent.onEvent((event) => events.push(event));
+
+    await expect(agent.runTurn(threadId, { type: 'text', text: '触发推理错误' }))
+      .rejects.toThrow('provider failed after reasoning');
+
+    expect(store.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'reasoning', text: '先检查请求。', completedAt: expect.any(String) }),
+      expect.objectContaining({ type: 'error', message: expect.stringContaining('provider failed after reasoning') }),
+    ]));
+    expect(events.filter((event) => event.type === 'item.completed' && event.item.type === 'reasoning')).toHaveLength(1);
+    expect(events.filter((event) => event.type === 'item.discarded')).toHaveLength(0);
+  });
+});
+
+describe('AgentLoop model request context budget', () => {
+  it('accounts for tool schemas after middleware and keeps a 16K request below the input budget', async () => {
+    const threadId = 'thread-model-request-budget';
+    const tools = new ToolRegistry();
+    const largeDescription = 'tool capability '.repeat(420);
+    for (let index = 0; index < 12; index += 1) {
+      tools.register({
+        name: `large_tool_${index}`,
+        description: largeDescription,
+        parameters: {
+          type: 'object',
+          properties: {
+            input: { type: 'string', description: 'input '.repeat(200) },
+          },
+          required: ['input'],
+          additionalProperties: false,
+        },
+        requiredPolicy: 'readonly',
+        async execute() {
+          return { status: 'completed', output: 'ok' };
+        },
+      });
+    }
+    const model = new BudgetCapturingModel();
+    const events: ThreadEvent[] = [];
+    const agent = new AgentLoop({
+      workspaceRoot: process.cwd(),
+      sandbox: { level: 'readonly', workspaceRoot: process.cwd() },
+      model: model as never,
+      modelContextTokens: 16_384,
+      modelMaxOutputTokens: 8_192,
+      store: new FakeStore(threadId, 'previous-turn'),
+      tools,
+    });
+    agent.onEvent((event) => events.push(event));
+
+    await agent.runTurn(threadId, { type: 'text', text: 'keep this request within the local model context' });
+
+    const estimate = events.find((event) => event.type === 'context.token_estimate.updated');
+    expect(estimate).toMatchObject({
+      type: 'context.token_estimate.updated',
+      estimate: { inputTokens: expect.any(Number) },
+    });
+    expect((estimate as Extract<ThreadEvent, { type: 'context.token_estimate.updated' }>).estimate.inputTokens)
+      .toBeLessThanOrEqual(16_384 - 8_192 - 256);
+    expect(model.request).not.toBeNull();
+    expect(model.request?.max_tokens).toBe(8_192);
   });
 });
 
@@ -2077,6 +2343,46 @@ describe('AgentLoop runtime middleware', () => {
     ]));
   });
 
+  it('settles a started tool item when tool middleware throws', async () => {
+    const threadId = 'thread-runtime-tool-throw';
+    const tools = new ToolRegistry();
+    tools.register({
+      name: 'throwing_tool',
+      description: 'Throws to exercise tool failure finalization.',
+      requiredPolicy: 'readonly',
+      parameters: { type: 'object', properties: {}, additionalProperties: false },
+      execute: async () => ({ output: 'should not execute', status: 'completed' }),
+    });
+    const store = new FakeStore(threadId, 'previous-turn');
+    const agent = new AgentLoop({
+      workspaceRoot: process.cwd(),
+      sandbox: { level: 'workspace_write', workspaceRoot: process.cwd() },
+      model: new SingleToolModel('throwing_tool') as never,
+      store,
+      tools,
+      runtimeMiddleware: [{
+        wrapTool: async () => {
+          throw Object.assign(new Error('upstream tool failure'), { code: 'UPSTREAM_TOOL_FAILED' });
+        },
+      }],
+    });
+
+    await expect(agent.runTurn(threadId, { type: 'text', text: 'run the tool' })).rejects.toThrow('upstream tool failure');
+
+    expect(store.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'tool_call',
+        toolName: 'throwing_tool',
+        status: 'failed',
+        error: { message: 'upstream tool failure', code: 'UPSTREAM_TOOL_FAILED' },
+        result: { error: 'upstream tool failure', code: 'UPSTREAM_TOOL_FAILED' },
+        completedAt: expect.any(String),
+      }),
+      expect.objectContaining({ type: 'error', message: 'upstream tool failure' }),
+    ]));
+    expect(store.items.some((item) => item.type === 'tool_call' && item.status === 'in_progress')).toBe(false);
+  });
+
   it('runs explicitly parallel-safe readonly tool calls concurrently while preserving tool result order', async () => {
     const threadId = 'thread-runtime-parallel-tools';
     const tools = new ToolRegistry();
@@ -2329,6 +2635,118 @@ describe('AgentLoop runtime middleware', () => {
     });
   });
 
+  it('hard-stops when the model emits tools after governance disables them', async () => {
+    const threadId = 'thread-runtime-governance-ignores-tools';
+    const model = new IgnoresDisabledToolsModel();
+    const store = new FakeStore(threadId, 'previous-turn');
+    const agent = new AgentLoop({
+      workspaceRoot: process.cwd(),
+      sandbox: { level: 'workspace_write', workspaceRoot: process.cwd() },
+      model: model as never,
+      store,
+      maxRepeatedToolCalls: 1,
+    });
+
+    await expect(agent.runTurn(threadId, { type: 'text', text: 'do not loop' }))
+      .rejects.toThrow('TOOL_GOVERNANCE_FINAL_RESPONSE_REJECTED');
+
+    // First call executes, second is the middleware guard, third is the one
+    // forced no-tool attempt. No fourth iteration or tool execution is allowed.
+    expect(model.calls).toBe(3);
+    expect(model.requests.at(-1)).toEqual({ tools: [], tool_choice: 'none' });
+    expect(store.items.filter((item) => item.type === 'tool_call')).toHaveLength(2);
+    expect(store.items.at(-1)).toMatchObject({
+      type: 'error',
+      message: expect.stringContaining('TOOL_GOVERNANCE_FINAL_RESPONSE_REJECTED'),
+    });
+  });
+
+  it('re-applies no-tool finalization after a model wrapper tries to re-enable tools', async () => {
+    const threadId = 'thread-runtime-governance-wrapper-reenable';
+    const model = new IgnoresDisabledToolsModel();
+    const store = new FakeStore(threadId, 'previous-turn');
+    const agent = new AgentLoop({
+      workspaceRoot: process.cwd(),
+      sandbox: { level: 'workspace_write', workspaceRoot: process.cwd() },
+      model: model as never,
+      store,
+      maxRepeatedToolCalls: 1,
+      runtimeMiddleware: [{
+        wrapModel: async (_ctx, request, next) => request.tool_choice === 'none'
+          ? next({
+              ...request,
+              tools: [{
+                type: 'function',
+                function: { name: 'current_time', description: 'unexpected', parameters: {} },
+              }],
+              tool_choice: 'auto',
+            })
+          : next(request),
+      }],
+    });
+
+    await expect(agent.runTurn(threadId, { type: 'text', text: 'protect wrapped finalization' }))
+      .rejects.toThrow('TOOL_GOVERNANCE_FINAL_RESPONSE_REJECTED');
+
+    expect(model.calls).toBe(3);
+    expect(model.requests.at(-1)).toEqual({ tools: [], tool_choice: 'none' });
+    expect(store.items.at(-1)).toMatchObject({
+      type: 'error',
+      message: expect.stringContaining('TOOL_GOVERNANCE_FINAL_RESPONSE_REJECTED'),
+    });
+  });
+
+  it('treats a fractional or non-positive maxIterations as a bounded positive integer', async () => {
+    const cases: Array<{ value: number; expectedMax: number; expectedCalls?: number }> = [
+      { value: 1.9, expectedMax: 1, expectedCalls: 1 },
+      { value: 0, expectedMax: 1, expectedCalls: 1 },
+      { value: Number.NaN, expectedMax: 100 },
+    ];
+    for (const { value, expectedMax, expectedCalls } of cases) {
+      const threadId = `thread-runtime-max-iterations-${String(value)}`;
+      const model = new RepeatingToolModel();
+      const store = new FakeStore(threadId, 'previous-turn');
+      const agent = new AgentLoop({
+        workspaceRoot: process.cwd(),
+        sandbox: { level: 'workspace_write', workspaceRoot: process.cwd() },
+        model: model as never,
+        store,
+        locale: 'en',
+        maxIterations: value,
+        maxRepeatedToolCalls: 10,
+      });
+      expect((agent as unknown as { config: { maxIterations: number } }).config.maxIterations).toBe(expectedMax);
+      if (expectedCalls === undefined) continue;
+
+      await expect(agent.runTurn(threadId, { type: 'text', text: 'respect iteration bound' }))
+        .rejects.toThrow(/Agent loop exceeded max iterations/);
+      expect(model.calls).toBe(expectedCalls);
+      expect(store.savedTurns.at(-1)).toMatchObject({ status: 'failed' });
+      expect(store.items.at(-1)).toMatchObject({ type: 'error' });
+    }
+  });
+
+  it('stops after one retry when plain-text tool placeholders repeat', async () => {
+    const threadId = 'thread-runtime-repeated-placeholder';
+    const model = new RepeatingPlaceholderToolTextModel();
+    const store = new FakeStore(threadId, 'previous-turn');
+    const agent = new AgentLoop({
+      workspaceRoot: process.cwd(),
+      sandbox: { level: 'workspace_write', workspaceRoot: process.cwd() },
+      model: model as never,
+      store,
+    });
+
+    await expect(agent.runTurn(threadId, { type: 'text', text: 'do not repeat placeholder' }))
+      .rejects.toThrow('PLAIN_TEXT_TOOL_CALL_REPEATED');
+
+    expect(model.calls).toBe(2);
+    expect(store.items.at(-1)).toMatchObject({
+      type: 'error',
+      message: expect.stringContaining('PLAIN_TEXT_TOOL_CALL_REPEATED'),
+    });
+  });
+
   it('injects dynamic runtime context before each model call', async () => {
     const threadId = 'thread-runtime-dynamic-context';
     const model = new MessageCapturingModel();
@@ -2366,7 +2784,8 @@ describe('AgentLoop runtime middleware', () => {
     expect(serialized).toContain('tenantId=tenant-runtime-context');
     expect(serialized).toContain('工作区路径');
     expect(serialized).toContain('运行状态');
-    expect(serialized).toContain('runProfile=cache_first');
+    // 运行档位已收敛为统一策略，不再注入提示词噪音。
+    expect(serialized).not.toContain('runProfile=');
     expect(serialized).toContain('webSearchMode=on');
     expect(serialized).toContain('权限 preset=workspace');
     expect(serialized).toContain('最近上传/图片数量=1');
@@ -3015,17 +3434,17 @@ describe('AgentLoop message history', () => {
       memory: { memoryEnabled: true, useColdMemories: false, autoExtractMemories: true, memoryInjectLimit: 4, memoryTokenBudget: 800 },
     });
 
-    await agent.runTurn(threadId, { type: 'text', text: '以后默认用中文回答，并记住 Nexus 只改 Nexus/ 目录。' });
+    await agent.runTurn(threadId, { type: 'text', text: '以后默认用中文回答，并记住 Suanlizi 只改 Suanlizi/ 目录。' });
 
     await waitForCondition(() => store.memoryRecords.length >= 2, 500);
     expect(store.memoryRecords).toEqual(expect.arrayContaining([
       expect.objectContaining({ type: 'preference', text: expect.stringContaining('中文') }),
-      expect.objectContaining({ type: 'project_fact', text: expect.stringContaining('Nexus/') }),
+      expect.objectContaining({ type: 'project_fact', text: expect.stringContaining('Suanlizi/') }),
     ]));
   });
 
   it('normalizes common hallucinated tool names before execution', async () => {
-    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-tool-alias-'));
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-tool-alias-'));
     await fs.writeFile(path.join(workspaceRoot, 'README.md'), '# test\n', 'utf-8');
     const threadId = 'thread-tool-alias';
     const store = new FakeStore(threadId, 'previous-turn');
@@ -3214,6 +3633,63 @@ describe('AgentLoop message history', () => {
         tool_call_id: 'call_current_time',
       }),
     ]));
+  });
+
+  it('persists llama Responses outputItems and replays reasoning and tools on the next turn', async () => {
+    const threadId = 'thread-llama-responses-history';
+    const store = new FakeStore(threadId, 'previous-turn');
+    const model = new LlamaResponsesToolCallingModel();
+    const agent = new AgentLoop({
+      workspaceRoot: process.cwd(),
+      sandbox: { level: 'workspace_write', workspaceRoot: process.cwd() },
+      model: model as never,
+      store,
+      locale: 'zh',
+    });
+
+    await agent.runTurn(threadId, { type: 'text', text: '现在几点' });
+    await agent.runTurn(threadId, { type: 'text', text: '继续' });
+
+    const assistantFrame = store.items.find((item) => item.type === 'agent_message' && item.providerFrame?.format === 'openai_responses');
+    expect(assistantFrame).toMatchObject({
+      type: 'agent_message',
+      providerFrame: {
+        format: 'openai_responses',
+        outputItems: expect.arrayContaining([
+          {
+            type: 'reasoning',
+            summary: [{ type: 'summary_text', text: '先检查当前时间。' }],
+            content: [{ type: 'input_text', text: '先检查当前时间。' }],
+          },
+          {
+            type: 'function_call',
+            call_id: 'call_current_time_responses',
+            name: 'current_time',
+            arguments: '{}',
+          },
+        ]),
+      },
+    });
+    const replayedAssistant = model.calls[2]?.find((message) => (
+      message.role === 'assistant'
+      && (message.providerFrame as { format?: string } | undefined)?.format === 'openai_responses'
+    ));
+    expect(replayedAssistant).toBeDefined();
+    expect(replayedAssistant?.providerFrame).toEqual(expect.objectContaining({
+      format: 'openai_responses',
+      outputItems: expect.arrayContaining([
+        expect.objectContaining({ type: 'reasoning', content: [{ type: 'input_text', text: '先检查当前时间。' }] }),
+        expect.objectContaining({ type: 'function_call', call_id: 'call_current_time_responses' }),
+      ]),
+    }));
+    expect(replayedAssistant?.tool_calls).toEqual(expect.arrayContaining([expect.objectContaining({
+      id: 'call_current_time_responses',
+      function: expect.objectContaining({ arguments: '{}' }),
+    })]));
+    const replayedTool = model.calls[2]?.find((message) => (
+      message.role === 'tool' && message.tool_call_id === 'call_current_time_responses'
+    ));
+    expect(replayedTool).toBeDefined();
   });
 
   it('replays completed tools structurally on the next turn', async () => {
@@ -3596,7 +4072,13 @@ describe('AgentLoop message history', () => {
       runProfile: 'runtime_os',
     });
 
+    const events: ThreadEvent[] = [];
+    agent.onEvent((event) => events.push(event));
     await agent.runTurn(threadId, { type: 'text', text: 'continue' });
+    const userIndex = events.findIndex((event) => event.type === 'item.completed' && event.item?.type === 'user_message');
+    const compactIndex = events.findIndex((event) => event.type === 'thread.compacted.v2' && event.phase === 'started');
+    expect(userIndex).toBeGreaterThan(-1);
+    expect(compactIndex).toBeGreaterThan(userIndex);
 
     const serialized = JSON.stringify(model.messages[0]);
     expect(serialized).toContain('旧上下文已压缩');
@@ -3643,6 +4125,15 @@ describe('AgentLoop message history', () => {
       expect.objectContaining({ type: 'thread.compacted.v2', phase: 'started', trigger: 'auto' }),
       expect.objectContaining({ type: 'thread.compacted.v2', phase: 'completed', trigger: 'auto' }),
     ]));
+    const userEventIndex = events.findIndex((event) => event.type === 'item.started' && event.item?.type === 'user_message');
+    const compactionEventIndex = events.findIndex((event) => event.type === 'thread.compacted.v2' && event.phase === 'started');
+    expect(userEventIndex).toBeGreaterThanOrEqual(0);
+    expect(compactionEventIndex).toBeGreaterThan(userEventIndex);
+    const compactionEvent = events[compactionEventIndex];
+    const userEvent = events[userEventIndex];
+    if (compactionEvent?.type === 'thread.compacted.v2' && userEvent?.type === 'item.started') {
+      expect(compactionEvent.turnId).toBe(userEvent.turnId);
+    }
     const compactionEventIds = events.flatMap((event) => (
       event.type === 'thread.compacted.v2' && event.item ? [event.item.id] : []
     ));
@@ -3694,6 +4185,32 @@ describe('AgentLoop usage accounting', () => {
         cacheStrategy: 'deepseek-native',
       },
     });
+  });
+
+  it('aggregates cache reporting as true, false, or unknown without inventing zero hits', async () => {
+    const threadId = 'thread-usage-cache-tristate';
+    const store = new FakeStore(threadId, 'previous-turn');
+    const agent = new AgentLoop({
+      workspaceRoot: process.cwd(),
+      sandbox: { level: 'workspace_write', workspaceRoot: process.cwd() },
+      model: new TriStateUsageModel() as never,
+      store,
+    });
+
+    await agent.runTurn(threadId, { type: 'text', text: 'unknown cache report' });
+    let usage = JSON.parse(store.thread.tags.threadUsage) as { total: { cacheReported?: boolean; cachedInputTokens: number } };
+    expect(usage.total.cacheReported).toBeUndefined();
+    expect(usage.total.cachedInputTokens).toBe(0);
+
+    await agent.runTurn(threadId, { type: 'text', text: 'mixed cache report' });
+    usage = JSON.parse(store.thread.tags.threadUsage) as { total: { cacheReported?: boolean; cachedInputTokens: number } };
+    expect(usage.total.cacheReported).toBeUndefined();
+    expect(usage.total.cachedInputTokens).toBe(4);
+
+    await agent.runTurn(threadId, { type: 'text', text: 'unreported cache report' });
+    usage = JSON.parse(store.thread.tags.threadUsage) as { total: { cacheReported?: boolean; cachedInputTokens: number } };
+    expect(usage.total.cacheReported).toBe(false);
+    expect(usage.total.cachedInputTokens).toBe(4);
   });
 
   it('emits soft compaction pressure before automatic compaction is triggered', async () => {
@@ -3783,10 +4300,50 @@ describe('AgentLoop usage accounting', () => {
       expect.objectContaining({ type: 'thread.compacted.v2', phase: 'started', trigger: 'auto' }),
       expect.objectContaining({ type: 'thread.compacted.v2', phase: 'completed', trigger: 'auto' }),
     ]));
+    const userEvent = events.findIndex((event) => event.type === 'item.started' && event.item?.type === 'user_message');
+    const compactEvent = events.findIndex((event) => event.type === 'thread.compacted.v2' && event.phase === 'started');
+    expect(userEvent).toBeGreaterThanOrEqual(0);
+    expect(compactEvent).toBeGreaterThan(userEvent);
+
     const runId = String(store.runRecords[0]?.runId);
     await expect(store.listRunEvents(runId)).resolves.toEqual(expect.arrayContaining([
       expect.objectContaining({ type: 'compaction.started', category: 'compaction' }),
       expect.objectContaining({ type: 'compaction.completed', category: 'compaction' }),
+    ]));
+  });
+
+  it('terminates the same turn with a visible error if pre-turn compaction fails', async () => {
+    const threadId = 'thread-compaction-failure';
+    const store = new FakeStore(threadId, 'previous-turn');
+    store.turns = Array.from({ length: 4 }, (_, index) => ({
+      turnId: `old-turn-${index}`, threadId, index,
+      userInput: { type: 'text', text: `old request ${index}` },
+      status: 'completed', startedAt: '2026-06-10T00:00:00.000Z', completedAt: '2026-06-10T00:00:01.000Z',
+    }));
+    store.items = store.turns.flatMap((turn) => [
+      { id: `${turn.turnId}-user`, type: 'user_message' as const, turnId: turn.turnId, text: 'old request' },
+      { id: `${turn.turnId}-agent`, type: 'agent_message' as const, turnId: turn.turnId, text: 'x'.repeat(60_000) },
+    ]);
+    const hooks = new LocalHookRegistry();
+    hooks.on('pre_compact', () => { throw new Error('compaction interrupted'); });
+    const agent = new AgentLoop({
+      workspaceRoot: process.cwd(), sandbox: { level: 'workspace_write', workspaceRoot: process.cwd() },
+      model: new SummaryAndMessageCapturingModel() as never, store, hooks, runProfile: 'runtime_os',
+    });
+    const events: ThreadEvent[] = [];
+    agent.onEvent((event) => events.push(event));
+
+    await expect(agent.runTurn(threadId, { type: 'text', text: '继续' })).rejects.toThrow('compaction interrupted');
+    const currentTurn = store.savedTurns.at(-1);
+    expect(currentTurn?.status).toBe('failed');
+    expect(store.checkpoint?.status).toBe('failed');
+    expect(store.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'user_message', turnId: currentTurn?.turnId }),
+      expect.objectContaining({ type: 'error', turnId: currentTurn?.turnId, message: 'compaction interrupted' }),
+    ]));
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'thread.compacted.v2', phase: 'failed', turnId: currentTurn?.turnId }),
+      expect.objectContaining({ type: 'turn.failed', turnId: currentTurn?.turnId }),
     ]));
   });
 
@@ -3897,17 +4454,16 @@ describe('AgentLoop rollbackThread', () => {
 });
 
 describe('AgentLoop run profiles', () => {
-  it('uses a later hard compaction threshold for cache-first mode', () => {
+  it('uses one unified compaction policy instead of two run profiles', () => {
+    // 多运行状态已舍弃：两档 profile 现在产出同一套压缩策略。
     expect(compactionOptionsForRunProfile('runtime_os')).toMatchObject({
       softCompactRatio: 0.5,
       hardCompactRatio: 0.8,
       strategy: 'llm',
     });
-    expect(compactionOptionsForRunProfile('cache_first')).toMatchObject({
-      softCompactRatio: 0.72,
-      hardCompactRatio: 0.92,
-      strategy: 'local',
-    });
+    expect(compactionOptionsForRunProfile('cache_first')).toEqual(
+      compactionOptionsForRunProfile('runtime_os'),
+    );
   });
 });
 

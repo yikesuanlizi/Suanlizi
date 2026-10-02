@@ -3,8 +3,8 @@ import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import * as XLSX from 'xlsx';
-import type { ThreadStore } from '@nexus/storage';
-import { createStore } from '@nexus/storage';
+import type { ThreadStore } from '@suanlizi/storage';
+import { createStore } from '@suanlizi/storage';
 import { authorizeKnowledgeDirectory, createKnowledgeBase, ensureOpsKnowledgeBase, ensureWorkspaceKnowledgeBase, getKnowledgePage, listKnowledgeBases, queryKnowledge, replayKnowledgeReceipt } from './knowledgeBase.js';
 
 class FakeStore implements Partial<ThreadStore> {
@@ -27,7 +27,7 @@ describe('workspace knowledge base', () => {
   });
 
   it('creates an immutable workspace snapshot and queries lexical hits', async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), 'nexus-kb-'));
+    const root = await mkdtemp(path.join(os.tmpdir(), 'suanlizi-kb-'));
     roots.push(root);
     await writeFile(path.join(root, 'runbook.md'), '---\ntitle: Restart\n---\nRestart the service only after approval.\n', 'utf8');
     const store = new FakeStore() as unknown as ThreadStore;
@@ -62,8 +62,8 @@ describe('workspace knowledge base', () => {
   });
 
   it('persists the wiki catalog and FTS index in the shared SQLite store', async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), 'nexus-kb-workspace-'));
-    const dataDir = await mkdtemp(path.join(os.tmpdir(), 'nexus-kb-data-'));
+    const root = await mkdtemp(path.join(os.tmpdir(), 'suanlizi-kb-workspace-'));
+    const dataDir = await mkdtemp(path.join(os.tmpdir(), 'suanlizi-kb-data-'));
     roots.push(root, dataDir);
     await writeFile(path.join(root, 'runbook.md'), '# Restart\nRestart the service only after approval.\n', 'utf8');
 
@@ -97,7 +97,7 @@ describe('workspace knowledge base', () => {
   });
 
   it('uses the pulled Wiki title-priority AND semantics before writing a receipt', async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), 'nexus-kb-ranking-'));
+    const root = await mkdtemp(path.join(os.tmpdir(), 'suanlizi-kb-ranking-'));
     roots.push(root);
     await writeFile(
       path.join(root, 'body-runbook.md'),
@@ -124,7 +124,7 @@ describe('workspace knowledge base', () => {
   });
 
   it('matches query terms across chunks at page level without duplicating page ranking', async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), 'nexus-kb-cross-chunk-'));
+    const root = await mkdtemp(path.join(os.tmpdir(), 'suanlizi-kb-cross-chunk-'));
     roots.push(root);
     await writeFile(
       path.join(root, 'cross.md'),
@@ -146,7 +146,7 @@ describe('workspace knowledge base', () => {
 
 describe('personal knowledge bases', () => {
   it('requires explicit creation and never derives a default from cwd or tenant', async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), 'nexus-personal-kb-'));
+    const root = await mkdtemp(path.join(os.tmpdir(), 'suanlizi-personal-kb-'));
     await writeFile(path.join(root, 'runbook.md'), '# Personal\nUse the approved runbook.\n', 'utf8');
     const store = new FakeStore() as unknown as ThreadStore;
     const grant = await authorizeKnowledgeDirectory(store, 'tenant-a', root);
@@ -162,7 +162,7 @@ describe('personal knowledge bases', () => {
   });
 
   it('rejects direct paths and records skipped files even when nothing is indexed', async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), 'nexus-personal-kb-skipped-'));
+    const root = await mkdtemp(path.join(os.tmpdir(), 'suanlizi-personal-kb-skipped-'));
     try {
       await writeFile(path.join(root, 'secret.bin'), 'not indexable', 'utf8');
       const store = new FakeStore() as unknown as ThreadStore;
@@ -176,7 +176,7 @@ describe('personal knowledge bases', () => {
   });
 
   it('extracts supported binary documents before redaction and indexing', async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), 'nexus-personal-kb-binary-'));
+    const root = await mkdtemp(path.join(os.tmpdir(), 'suanlizi-personal-kb-binary-'));
     try {
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(

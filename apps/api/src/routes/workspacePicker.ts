@@ -19,13 +19,13 @@ export async function pickWorkspaceDirectory(options: { description?: string } =
     throw new Error('Native workspace directory picker is only available on Windows in this build.');
   }
 
-  // PowerShell 脚本：使用 System.Windows.Forms.FolderBrowserDialog 选择 Nexus 工作区，并启用新建目录
+  // PowerShell 脚本：使用 System.Windows.Forms.FolderBrowserDialog 选择 Suanlizi 工作区，并启用新建目录
   // — Chinese: PowerShell script — use System.Windows.Forms.FolderBrowserDialog
   const script = `
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 Add-Type -AssemblyName System.Windows.Forms
 $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
-$dialog.Description = '${(options.description ?? 'Select Nexus workspace').replaceAll("'", "''")}'
+$dialog.Description = '${(options.description ?? 'Select Suanlizi workspace').replaceAll("'", "''")}'
 $dialog.ShowNewFolderButton = $true
 $result = $dialog.ShowDialog()
 if ($result -eq [System.Windows.Forms.DialogResult]::OK) {

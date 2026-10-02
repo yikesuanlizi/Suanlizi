@@ -8,18 +8,23 @@
 //   - Gap 1: 调用方预生成 harnessRunId → API 立即返回 202 Accepted
 //   - runHarness 在后台进行（通过 HarnessRuntimeRegistry 注册）
 //   - status: 优先从 registry 读运行时状态，回退到 GoalTracker.load 读持久化状态
-//   - cancel: 调用 abortController.abort()，runHarness 会 reject 并被 registry 标记为 cancelled
+//   - cancel: 先 agent.interrupt(threadId) 再 abortController.abort()（盘点 §4.1 P2 双写），
+//     runHarness 会退出循环并落 cancelled 终态，registry 标记为 cancelled
 // — Chinese: harness route — start/status/cancel for cross-turn autonomous loops
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { URL } from 'node:url';
-import type { ThreadStore } from '@nexus/storage';
-import type { ThreadEvent, ThreadId, UserInput } from '@nexus/protocol';
-import type { AgentLoop, HarnessResult } from '@nexus/runtime';
-import { GoalTracker } from '@nexus/runtime';
+import type { ThreadStore } from '@suanlizi/storage';
+import type { ThreadEvent, ThreadId, TaskStorePort, UserInput } from '@suanlizi/protocol';
+import type { AgentLoop, HarnessResult } from '@suanlizi/runtime';
+import { GoalTracker } from '@suanlizi/runtime';
 import { readJson, sendError, sendJson } from '../shared/http.js';
 import type { AgentRunConfig } from '../config/config.js';
 import type { TenantContext } from '../shared/tenant.js';
+import {
+  attachShadowTaskTracking,
+  shadowTaskForHarnessStart,
+} from '../services/taskShadowWriter.js';
 import {
   harnessRuntimeRegistry,
   type HarnessRunEntry,
@@ -97,11 +102,13 @@ export async function handleHarnessRoute(options: {
   segments: string[];
   store: ThreadStore;
   tenantContext: TenantContext;
+  /** 目标任务影子写端口（计划 §14.6）；缺省时不写 task 表。 */
+  taskStore?: TaskStorePort;
   createAgent: (config?: Partial<AgentRunConfig>) => Promise<AgentLoop>;
   publishEvent: (event: ThreadEvent) => void;
   getThreadRunConfig: (threadId: string) => Promise<AgentRunConfig>;
 }): Promise<boolean> {
-  const { req, res, url, segments, store, tenantContext, createAgent, publishEvent, getThreadRunConfig } = options;
+  const { req, res, url, segments, store, tenantContext, taskStore, createAgent, publishEvent, getThreadRunConfig } = options;
 
   // 匹配 /api/threads/:id/harness/...
   const isHarnessPath =
@@ -122,7 +129,7 @@ export async function handleHarnessRoute(options: {
   }
 
   if (action === 'start' && req.method === 'POST') {
-    await handleHarnessStart({ req, res, threadId, store, tenantContext, createAgent, publishEvent, getThreadRunConfig });
+    await handleHarnessStart({ req, res, threadId, store, tenantContext, taskStore, createAgent, publishEvent, getThreadRunConfig });
     return true;
   }
 
@@ -147,11 +154,12 @@ async function handleHarnessStart(options: {
   threadId: ThreadId;
   store: ThreadStore;
   tenantContext: TenantContext;
+  taskStore?: TaskStorePort;
   createAgent: (config?: Partial<AgentRunConfig>) => Promise<AgentLoop>;
   publishEvent: (event: ThreadEvent) => void;
   getThreadRunConfig: (threadId: string) => Promise<AgentRunConfig>;
 }): Promise<void> {
-  const { req, res, threadId, store, tenantContext, createAgent, publishEvent, getThreadRunConfig } = options;
+  const { req, res, threadId, store, tenantContext, taskStore, createAgent, publishEvent, getThreadRunConfig } = options;
   const body = await readJson<HarnessStartRequest>(req);
 
   // 校验输入
@@ -193,11 +201,18 @@ async function handleHarnessStart(options: {
 
   // 在 registry 中注册并启动后台 run
   // — English: register and start background run via registry
+  let entry: HarnessRunEntry;
   try {
-    harnessRuntimeRegistry.start({
+    entry = harnessRuntimeRegistry.start({
       harnessRunId,
       threadId,
       tenantId: tenantContext.tenantId,
+      // P2 取消链双写（计划 §9.2）：cancel 时先 interrupt AgentLoop（落 stopping
+      // checkpoint / pendingInterrupts / thread.runtime.updated），再 abort signal。
+      // — English: cancel = interrupt + abort; registry invokes this before aborting.
+      interrupt: () => {
+        agent.interrupt(threadId);
+      },
       run: async (signal) => {
         const result = await agent.runHarness(threadId, userInput, {
           goal: body.goal,
@@ -218,6 +233,21 @@ async function handleHarnessStart(options: {
     const message = error instanceof Error ? error.message : String(error);
     sendError(res, 500, `Failed to start harness: ${message}`);
     return;
+  }
+
+  // 影子写：自动创建 Task + goal TaskRun，并镜像终态（计划 §14.6；best-effort，失败不影响 run）。
+  if (taskStore) {
+    const shadow = await shadowTaskForHarnessStart({
+      taskStore,
+      threadId,
+      harnessRunId,
+      goal: body.goal,
+      input: inputText,
+      acceptanceCriteria: body.acceptanceCriteria,
+    });
+    if (shadow) {
+      attachShadowTaskTracking({ taskStore, handle: shadow, entry });
+    }
   }
 
   // 立即返回 202 Accepted + harnessRunId

@@ -13,7 +13,7 @@ const MAX_FILES_PER_DIR = 30;
 const SKIP_DIRS = new Set([
   'node_modules', '.git', 'dist', 'build', '.next', 'coverage',
   '.cache', 'out', 'target', 'bin', 'obj', '__pycache__', '.venv',
-  'venv', '.tox', '.idea', '.vscode', '.nexus',
+  'venv', '.tox', '.idea', '.vscode', '.suanlizi',
 ]);
 
 const BUILD_INDICATORS: Record<string, { buildSystem: string; language: string; framework?: string }> = {

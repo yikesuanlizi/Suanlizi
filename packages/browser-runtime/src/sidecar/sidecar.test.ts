@@ -10,7 +10,7 @@
 //   frameIds, expired deadlines, observe-after-close, not-started operations
 //   and seq injection.
 import { describe, expect, it } from 'vitest';
-import type { ActionIntent } from '@nexus/protocol';
+import type { ActionIntent } from '@suanlizi/protocol';
 import type { FakeSiteDefinition } from '../fakeRuntime.js';
 import { FakeBrowserRuntime } from '../fakeRuntime.js';
 import { createSidecar } from './sidecar.js';

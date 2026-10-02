@@ -44,7 +44,7 @@ afterAll(async () => {
 });
 
 function launchPhase0() {
-  return electron.launch({ args: [MAIN_JS], env: { ...process.env, NEXUS_ELECTRON_LOAD: 'phase0', NEXUS_DISABLE_SINGLE_INSTANCE: '1' }, log: true });
+  return electron.launch({ args: [MAIN_JS], env: { ...process.env, SUANLIZI_ELECTRON_LOAD: 'phase0', SUANLIZI_DISABLE_SINGLE_INSTANCE: '1' }, log: true });
 }
 
 type ElectronApp = Awaited<ReturnType<typeof electron.launch>>;
@@ -52,7 +52,7 @@ type ElectronApp = Awaited<ReturnType<typeof electron.launch>>;
 async function browserApi<T>(win: ElectronApp, call: string, arg?: unknown): Promise<T> {
   return win.evaluate(
     ([callExpr, argValue]) => {
-      const api = (window as unknown as { nexusDesktop: { browser: Record<string, (a: unknown) => Promise<unknown>> } }).nexusDesktop.browser;
+      const api = (window as unknown as { suanliziDesktop: { browser: Record<string, (a: unknown) => Promise<unknown>> } }).suanliziDesktop.browser;
       return api[callExpr](argValue) as Promise<unknown>;
     },
     [call, arg],
@@ -62,7 +62,7 @@ async function browserApi<T>(win: ElectronApp, call: string, arg?: unknown): Pro
 async function taskApi<T>(win: ElectronApp, call: string, arg?: unknown): Promise<T> {
   return win.evaluate(
     ([callExpr, argValue]) => {
-      const api = (window as unknown as { nexusDesktop: { task: Record<string, (a: unknown) => Promise<unknown>> } }).nexusDesktop.task;
+      const api = (window as unknown as { suanliziDesktop: { task: Record<string, (a: unknown) => Promise<unknown>> } }).suanliziDesktop.task;
       return api[callExpr](argValue) as Promise<unknown>;
     },
     [call, arg],

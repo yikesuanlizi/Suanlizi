@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 const RIGHT_PANE_MAIN_MIN = 220;
 const STANDARD_RIGHT_PANE_MIN = 220;
@@ -17,10 +17,16 @@ export interface ToastNotice {
 export function useToastNotice(timeoutMs = 1800) {
   const [toast, setToast] = useState<ToastNotice | null>(null);
   const [timerId, setTimerId] = useState<number | null>(null);
+  const lastToastRef = useRef<{ text: string; at: number }>({ text: '', at: 0 });
 
   const showToast = useCallback((text: string) => {
+    const normalized = text.trim();
+    if (!normalized) return;
+    const now = Date.now();
+    if (lastToastRef.current.text === normalized && now - lastToastRef.current.at < timeoutMs) return;
+    lastToastRef.current = { text: normalized, at: now };
     if (timerId) window.clearTimeout(timerId);
-    setToast({ id: Date.now(), text });
+    setToast({ id: now, text: normalized });
     setTimerId(window.setTimeout(() => setToast(null), timeoutMs));
   }, [timerId, timeoutMs]);
 
@@ -75,7 +81,10 @@ export function useRightPaneSizing(visible: boolean, mode: RightPaneSizingMode =
     const startX = event.clientX;
     const startWidth = width;
     const resizeMin = rightPaneMinForMode(mode);
-    const max = Math.max(resizeMin, rightPaneAvailableMax());
+    const max = Math.max(
+      resizeMin,
+      window.innerWidth - 240 - RIGHT_PANE_MAIN_MIN - 7,
+    );
     function move(moveEvent: PointerEvent) {
       const next = startWidth - (moveEvent.clientX - startX);
       const nextWidth = Math.min(max, Math.max(resizeMin, next));
@@ -98,14 +107,10 @@ export function useRightPaneSizing(visible: boolean, mode: RightPaneSizingMode =
   return {
     rightPaneWidth: width,
     rightPaneGridTemplateColumns: visible
-      ? `minmax(${RIGHT_PANE_MAIN_MIN}px, 1fr) 7px minmax(${rightPaneMin}px, min(${width}px, calc(100vw - 240px)))`
+      ? `minmax(${RIGHT_PANE_MAIN_MIN}px, 1fr) 7px minmax(${rightPaneMin}px, ${width}px)`
       : 'minmax(0, 1fr)',
     startRightPaneResize: startResize,
   };
-}
-
-function rightPaneAvailableMax(): number {
-  return Math.max(STANDARD_RIGHT_PANE_MIN, window.innerWidth - 240);
 }
 
 function defaultWorkflowPaneWidth(): number {
@@ -132,5 +137,5 @@ function rightPaneMinForMode(mode: RightPaneSizingMode): number {
 }
 
 function clampRightPaneWidth(width: number, min: number): number {
-  return Math.min(Math.max(min, rightPaneAvailableMax()), Math.max(min, width));
+  return Math.min(Math.max(min, window.innerWidth - 240 - RIGHT_PANE_MAIN_MIN - 7), Math.max(min, width));
 }

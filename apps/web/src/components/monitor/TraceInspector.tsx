@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import type { RunTraceEnvelope } from '@nexus/protocol';
+import { presentSuanliziError } from '@suanlizi/protocol';
+import type { RunTraceEnvelope } from '@suanlizi/protocol';
 import type { RunRecord } from '../../shared/types.js';
 import {
   formatDuration,
@@ -223,8 +224,12 @@ function TypedFields({ trace, zh }: { trace: RunTraceEnvelope; zh: boolean }) {
         <div className="inspectorGrid">
           <Field label="code" value={str('code')} mono badge={str('code')} badgeTone="danger" />
           <div className="inspectorField inspectorField--full">
+            <span className="inspectorField__label">{zh ? '说明' : 'Summary'}</span>
+            <span className="inspectorField__value" style={{ color: '#ef4444' }}>{presentSuanliziError(p as never, str('message'), zh ? 'zh' : 'en').summary}</span>
+          </div>
+          <div className="inspectorField inspectorField--full">
             <span className="inspectorField__label">message</span>
-            <span className="inspectorField__value" style={{ color: '#ef4444' }}>{str('message')}</span>
+            <span className="inspectorField__value inspectorField__value--prewrap" style={{ color: '#ef4444' }}>{str('message')}</span>
           </div>
           <Field label="retryable" value="" badge={bool('retryable') ? (zh ? '可重试' : 'retryable') : (zh ? '不可重试' : 'not retryable')} badgeTone={bool('retryable') ? 'warning' : 'danger'} />
           {has('source') ? <Field label="source" value={str('source')} /> : null}

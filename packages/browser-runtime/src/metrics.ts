@@ -15,7 +15,7 @@
 //   over events plus an optional caller-provided error list, no IO; failure
 //   details absent from events (e.g. element-ref failure codes) can be
 //   supplied precisely via errors.
-import type { BrowserTaskEvent, ClassifiedError } from '@nexus/protocol';
+import type { BrowserTaskEvent, ClassifiedError } from '@suanlizi/protocol';
 
 // 任务级聚合指标（架构文档 16.2 首期指标清单）。
 // — English: task-level aggregated metrics (architecture §16.2 Phase-1 list).

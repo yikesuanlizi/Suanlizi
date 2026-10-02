@@ -13,14 +13,14 @@ describe('file freshness preflight', () => {
   });
 
   it('warns when a managed artifact source changed', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-preflight-'));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-preflight-'));
     const notice = await buildFreshnessPreflightNotice({
       workspaceRoot: root,
       locale: 'zh',
       userText: '继续分析 a.docx',
       recentItems: [],
       staleArtifacts: [{
-        artifactPath: path.join(root, '.nexus', 'artifacts', 'documents', 'a.md'),
+        artifactPath: path.join(root, '.suanlizi', 'artifacts', 'documents', 'a.md'),
         sourcePath: path.join(root, 'a.docx'),
         reason: 'source_hash_changed',
       }],
@@ -31,7 +31,7 @@ describe('file freshness preflight', () => {
   });
 
   it('requires read_document for follow-up questions about a recently read document even when not stale', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-preflight-followup-'));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-preflight-followup-'));
     const notice = await buildFreshnessPreflightNotice({
       workspaceRoot: root,
       locale: 'zh',
@@ -55,7 +55,7 @@ describe('file freshness preflight', () => {
   });
 
   it('requires read_document for follow-up questions when old command output mentioned a document', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-preflight-command-'));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-preflight-command-'));
     const notice = await buildFreshnessPreflightNotice({
       workspaceRoot: root,
       locale: 'zh',
@@ -76,7 +76,7 @@ describe('file freshness preflight', () => {
   });
 
   it('uses command-derived text artifact lineage to route follow-up questions back to the source document', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-preflight-derived-'));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-preflight-derived-'));
     const sourcePath = path.join(root, 'brief.docx');
     const artifactPath = path.join(root, '_brief_decoded.txt');
     await fs.writeFile(sourcePath, 'source v1', 'utf-8');
@@ -102,7 +102,7 @@ describe('file freshness preflight', () => {
   });
 
   it('warns that command-derived text artifacts are stale when the source document changed', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-preflight-derived-stale-'));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-preflight-derived-stale-'));
     const sourcePath = path.join(root, 'brief.docx');
     const artifactPath = path.join(root, '_brief_decoded.txt');
     await fs.writeFile(sourcePath, 'source v1', 'utf-8');

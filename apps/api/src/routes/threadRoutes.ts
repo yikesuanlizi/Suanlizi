@@ -4,11 +4,11 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { URL } from 'node:url';
-import type { ThreadStore } from '@nexus/storage';
-import type { AgentLoop } from '@nexus/runtime';
-import type { ModelGateway } from '@nexus/model-gateway';
-import { agentDecisionResponseSchema, type ThreadEvent, type ThreadId } from '@nexus/protocol';
-import { redactAccessPolicyForPublicConfig, type AccessPolicyConfig } from '@nexus/protocol';
+import type { ThreadStore } from '@suanlizi/storage';
+import type { AgentLoop } from '@suanlizi/runtime';
+import type { ModelGateway } from '@suanlizi/model-gateway';
+import { agentDecisionResponseSchema, type ThreadEvent, type ThreadId, type TaskStorePort } from '@suanlizi/protocol';
+import { redactAccessPolicyForPublicConfig, type AccessPolicyConfig } from '@suanlizi/protocol';
 import type { AgentRunConfig, ThreadConfigOverrides } from '../config/config.js';
 import { readJson, sendError, sendJson } from '../shared/http.js';
 import type { TenantContext } from '../shared/tenant.js';
@@ -37,7 +37,12 @@ export interface ThreadRouteContext {
   publicThreadRunConfig: (config: AgentRunConfig, thread: { tags?: Record<string, string> } | null) => AgentRunConfig;
   closeThreadEventClients: (threadId: ThreadId, tenantId: string) => void;
   activeRunRegistry?: ActiveRunRegistry;
+  /** 目标任务影子写端口（计划 §14.6 影子写期）；缺省时 harness 不写 task 表。 */
+  taskStore?: TaskStorePort;
 }
+
+const THREAD_DELETE_WAIT_MS = 5_000;
+const deletingThreads = new Set<string>();
 
 /**
  * 处理 /api/threads/:id/* 的所有子路由。
@@ -63,6 +68,7 @@ export async function handleThreadRoutes(
   // harness 子路由：start/status/cancel
   if (await handleHarnessRoute({
     req, res, url, segments, store, tenantContext,
+    taskStore: ctx.taskStore,
     createAgent: async (config) => (await createTenantAgent(config)).agent,
     publishEvent: publishTenantEvent,
     getThreadRunConfig: ctx.getThreadRunConfig,
@@ -109,14 +115,35 @@ export async function handleThreadRoutes(
 
   // DELETE /api/threads/:id
   if (req.method === 'DELETE' && segments.length === 3) {
+    const deleteKey = `${tenantContext.tenantId}:${threadId}`;
+    if (deletingThreads.has(deleteKey)) {
+      sendError(res, 409, 'THREAD_DELETE_IN_PROGRESS');
+      return true;
+    }
     const thread = await store.getThread(threadId);
     if (!thread) { sendError(res, 404, 'Thread not found'); return true; }
-    const agent = await getTenantDefaultAgent();
-    agent.interrupt(threadId);
-    ctx.closeThreadEventClients(threadId, tenantContext.tenantId);
-    await store.deleteThread(threadId);
-    await clearRemoteBotBindingsForDeletedThread(store, threadId);
-    sendJson(res, 200, { ok: true });
+    deletingThreads.add(deleteKey);
+    try {
+      const agent = await getTenantDefaultAgent();
+      const active = ctx.activeRunRegistry?.getByThreadId(threadId);
+      if (active) await active.interrupt();
+      else agent.interrupt(threadId);
+      const idle = ctx.activeRunRegistry
+        ? await ctx.activeRunRegistry.waitForThreadIdle(threadId, THREAD_DELETE_WAIT_MS)
+        : true;
+      if (!idle) {
+        sendError(res, 409, 'THREAD_DELETE_TIMEOUT');
+        return true;
+      }
+      agent.releaseLlamaSlot(threadId);
+      ctx.closeThreadEventClients(threadId, tenantContext.tenantId);
+      await store.deleteThreadWorkingSet?.(threadId);
+      await store.deleteThread(threadId);
+      await clearRemoteBotBindingsForDeletedThread(store, threadId);
+      sendJson(res, 200, { ok: true, status: 'deleted' });
+    } finally {
+      deletingThreads.delete(deleteKey);
+    }
     return true;
   }
 
@@ -156,7 +183,37 @@ export async function handleThreadRoutes(
   if (req.method === 'GET' && segments[3] === 'state') {
     const agent = await getTenantDefaultAgent();
     const thread = await store.getThread(threadId);
-    sendJson(res, 200, { state: await agent.getRuntimeState(threadId), usage: usageFromThread(thread) });
+    const state = await agent.getRuntimeState(threadId);
+    // 第二道防线：checkpoint 声称在跑/停止，但本进程没有对应运行句柄，且运行时已判定过期，
+    // 说明是上次进程遗留的僵尸运行态（强杀/崩溃），按终止态返回并顺手收敛。
+    // 不能把 waiting_user_input 当作僵尸：那是合法的可恢复等待点，冷启动后仍要经
+    // POST /api/threads/:id/decision 续跑（见 AgentLoop.resolveUserDecision 的 persistedWaiting 分支）。
+    const live = ctx.activeRunRegistry?.getByThreadId(threadId) ?? null;
+    const claimedZombie = state.status === 'running' || state.status === 'stopping' || state.stale;
+    if (!live && claimedZombie) {
+      const checkpoint = await store.getLastCheckpoint(threadId).catch(() => null);
+      if (checkpoint) {
+        await store.appendCheckpoint(threadId, {
+          ...checkpoint,
+          status: 'interrupted',
+          executionStatus: 'terminal',
+          expiresAt: undefined,
+        }).catch(() => undefined);
+      }
+      sendJson(res, 200, {
+        state: {
+          ...state,
+          status: 'terminal',
+          executionStatus: 'terminal',
+          resumable: false,
+          stale: true,
+          checkpoint: state.checkpoint ? { ...state.checkpoint, status: 'interrupted', executionStatus: 'terminal' } : null,
+        },
+        usage: usageFromThread(thread),
+      });
+      return true;
+    }
+    sendJson(res, 200, { state, usage: usageFromThread(thread) });
     return true;
   }
 
@@ -200,7 +257,13 @@ export async function handleThreadRoutes(
   if (req.method === 'GET' && segments[3] === 'context-pressure') {
     const thread = await store.getThread(threadId);
     if (!thread) { sendError(res, 404, 'Thread not found'); return true; }
-    const agent = await getTenantDefaultAgent();
+    // Context pressure is thread-scoped. The default agent carries global
+    // settings and can report a stale window (for example 24K) when this
+    // thread explicitly uses 64K. Build the lightweight thread-configured
+    // agent so the pressure calculation and compaction thresholds agree with
+    // the turn that will actually run.
+    const threadConfig = await ctx.getThreadRunConfig(threadId);
+    const agent = (await createTenantAgent(threadConfig)).agent;
     const pressure = await agent.getContextPressure(threadId);
     sendJson(res, 200, { pressure });
     return true;

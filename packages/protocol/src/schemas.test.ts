@@ -6,6 +6,8 @@ import {
   taskContextUpdatedEventSchema,
   taskLoopUpdatedEventSchema,
 } from './schemas.js';
+import { taskEventNameSchema, taskTransitionEventSchema } from './task.js';
+import type { ThreadEvent } from './types.js';
 
 describe('Task Runtime 事件 schema（第 2 步骨架）', () => {
   it('task.runtime.updated 通过 threadEventSchema 解析', () => {
@@ -90,5 +92,55 @@ describe('Task Runtime 事件 schema（第 2 步骨架）', () => {
   it('拒绝缺少必填字段的事件', () => {
     expect(() => taskRuntimeUpdatedEventSchema.parse({ type: 'task.runtime.updated' })).toThrow();
     expect(() => taskCognitionUpdatedEventSchema.parse({ type: 'task.cognition.updated', threadId: 't' })).toThrow();
+  });
+});
+
+// P2 生命周期端点向所属 thread 发 task.run.updated / task.run.terminal 事件（计划 §9.3）。
+// 事件名逐字取自 TASK_EVENT_NAMES（不发明新名），payload（taskId/runId/status/reason）过
+// task.ts 冻结的 taskTransitionEventSchema 校验；两个接口已并入 ThreadEvent union，可直接作为
+// publishEvent 的实参类型。此处不重复定义 zod schema（§9.3「复用现有 ThreadEvent 通道」），
+// 仅锁定事件名与 payload 契约，防止路由侧与协议漂移。
+// — Chinese: P2 lifecycle events reuse the frozen TASK_EVENT_NAMES + transition payload contract.
+describe('Task run 生命周期事件兼容（计划 §9.3）', () => {
+  it('task.run.updated / task.run.terminal 是合法 TASK_EVENT_NAMES', () => {
+    expect(taskEventNameSchema.parse('task.run.updated')).toBe('task.run.updated');
+    expect(taskEventNameSchema.parse('task.run.terminal')).toBe('task.run.terminal');
+    // 未知事件名必须被拒，确保端点不会发明新事件名。
+    expect(() => taskEventNameSchema.parse('task.run.pausing')).toThrow();
+  });
+
+  it('生命周期事件 payload 过 taskTransitionEventSchema 兼容校验', () => {
+    const payload = {
+      event: 'task.run.terminal' as const,
+      taskId: 'task_1',
+      threadId: 'thread-1',
+      runId: 'run_1',
+      reason: 'user cancel',
+      occurredAt: new Date().toISOString(),
+    };
+    expect(taskTransitionEventSchema.parse(payload)).toEqual(payload);
+  });
+
+  it('两个新事件接口已并入 ThreadEvent union（类型级兼容）', () => {
+    const timestamp = new Date().toISOString();
+    const updated: ThreadEvent = {
+      type: 'task.run.updated',
+      threadId: 'thread-1',
+      taskId: 'task_1',
+      runId: 'run_1',
+      status: 'running',
+      timestamp,
+    };
+    const terminal: ThreadEvent = {
+      type: 'task.run.terminal',
+      threadId: 'thread-1',
+      taskId: 'task_1',
+      runId: 'run_1',
+      status: 'cancelled',
+      reason: 'redirect',
+      timestamp,
+    };
+    expect(updated.type).toBe('task.run.updated');
+    expect(terminal.type).toBe('task.run.terminal');
   });
 });

@@ -4,7 +4,7 @@
 // 原则：能证明已执行 → reconciled；能证明未执行且仍安全 → 允许重试；
 // 无法判断 → 挂起请求用户处理；绝不盲目重试。
 // 本模块只做纯函数决策，不含任何 DOM / 网络实现。
-import type { ActionRecord, Postcondition } from '@nexus/protocol';
+import type { ActionRecord, Postcondition } from '@suanlizi/protocol';
 
 // 对账裁决：已执行 / 未执行（可安全重试）/ 仍无法判断
 // — English: reconciliation verdict — executed / not executed (safe to retry) / still uncertain.

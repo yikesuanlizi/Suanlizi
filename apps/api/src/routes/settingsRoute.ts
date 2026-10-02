@@ -1,8 +1,8 @@
 import { DEFAULT_RUN_CONFIG_KEY, WEB_PROVIDER_SECRETS_KEY, A2A_CONFIG_KEY, DEFAULT_A2A_CONFIG, normalizeA2AConfig, publicA2AConfig, publicRunConfig, publicWebProviderConfig, type A2AConfig, type AgentRunConfig, type WebProviderSecrets } from '../config/config.js';
 import { readJson, sendJson } from '../shared/http.js';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { redactAccessPolicyForPublicConfig, type AccessPolicyConfig } from '@nexus/protocol';
-import type { ThreadStore } from '@nexus/storage';
+import { redactAccessPolicyForPublicConfig, type AccessPolicyConfig } from '@suanlizi/protocol';
+import type { ThreadStore } from '@suanlizi/storage';
 
 // 设置路由选项 — Chinese: settings route options
 export interface SettingsRouteOptions {

@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import type { AgentDecisionRequest } from '@nexus/protocol';
+import type { AgentDecisionRequest } from '@suanlizi/protocol';
 import { AgentDecisionCard } from './AgentDecisionCard.js';
 
 const request: AgentDecisionRequest = {

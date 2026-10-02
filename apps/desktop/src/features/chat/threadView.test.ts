@@ -82,6 +82,22 @@ describe('threadView', () => {
     ]);
   });
 
+  it('deduplicates the same terminal error from SSE and a later snapshot', () => {
+    const message = 'Gitee AI gateway error (422): invalid tool_calls';
+    const merged = mergeThreadItems(
+      [{ id: 'turn-error:thread:turn-1', type: 'error', turnId: 'turn-1', message }],
+      [{ id: 'persisted-error-1', type: 'error', turnId: 'turn-1', message, status: 'failed' }],
+    );
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({ id: 'persisted-error-1', message, status: 'failed' });
+  });
+
+  it('marks error item events as failures', () => {
+    const event = describeEvent({ type: 'item.completed', item: { id: 'error-item', type: 'error', turnId: 'turn-1', message: 'timeout' } }, 'zh');
+    expect(event?.tone).toBe('danger');
+  });
+
   it('applies agent message deltas directly to the current transcript item', () => {
     expect(
       applyAgentMessageDelta(
@@ -110,6 +126,86 @@ describe('threadView', () => {
     ]);
   });
 
+  it('creates a temporary agent item when a delta arrives before item.started', () => {
+    const current = applyAgentMessageDelta([], {
+      itemId: 'agent-late',
+      turnId: 'turn-1',
+      delta: '流式片段',
+    });
+    expect(current).toHaveLength(1);
+    expect(current[0]).toMatchObject({
+      id: 'agent-late',
+      type: 'agent_message',
+      turnId: 'turn-1',
+      status: 'in_progress',
+      text: '流式片段',
+    });
+
+    const merged = mergeThreadItems(current, [{
+      id: 'agent-late',
+      type: 'agent_message',
+      turnId: 'turn-1',
+      status: 'in_progress',
+      text: '',
+    }]);
+    expect(merged[0].text).toBe('流式片段');
+  });
+
+  it('renders an omitted cache report with a stable zero cache-hit value', () => {
+    expect(describeEvent({
+      type: 'turn.completed',
+      usage: { inputTokens: 100, cachedInputTokens: 0, outputTokens: 20 },
+    }, 'zh')).toMatchObject({ detail: 'Token：输入 100，缓存命中 0，输出 20。' });
+  });
+
+  it('keeps timestamped tool calls before the final assistant output', () => {
+    const groups = groupTranscriptItems([
+      { id: 'answer', type: 'agent_message', turnId: 'turn-1', text: '完成', timestamp: '2026-08-27T10:00:03.000Z' },
+      { id: 'tool', type: 'tool_call', turnId: 'turn-1', toolName: 'list_files', status: 'completed', timestamp: '2026-08-27T10:00:01.000Z' },
+      { id: 'user', type: 'user_message', turnId: 'turn-1', text: '检查', timestamp: '2026-08-27T10:00:00.000Z' },
+    ]);
+    expect(groups[0]).toMatchObject({ kind: 'user', item: { id: 'user' } });
+    expect(groups[1]).toMatchObject({
+      kind: 'assistant',
+      items: [{ id: 'tool' }, { id: 'answer' }],
+    });
+  });
+
+  it('keeps the original creation timestamp when a terminal lifecycle update arrives', () => {
+    const merged = mergeThreadItems(
+      [{ id: 'tool', type: 'tool_call', turnId: 'turn-1', status: 'in_progress', timestamp: '2026-08-27T10:00:01.000Z' }],
+      [{ id: 'tool', type: 'tool_call', turnId: 'turn-1', status: 'completed', timestamp: '2026-08-27T10:00:04.000Z', completedAt: '2026-08-27T10:00:04.000Z' }],
+    );
+    expect(merged[0]).toMatchObject({
+      status: 'completed',
+      timestamp: '2026-08-27T10:00:01.000Z',
+      completedAt: '2026-08-27T10:00:04.000Z',
+    });
+  });
+
+  it('does not let a partial stale snapshot erase live item fields', () => {
+    const merged = mergeThreadItems(
+      [{
+        id: 'agent-live',
+        type: 'agent_message',
+        turnId: 'turn-1',
+        status: 'completed',
+        text: '完整的流式回复',
+        timestamp: '2026-08-27T10:00:01.000Z',
+        completedAt: '2026-08-27T10:00:05.000Z',
+      }],
+      [{ id: 'agent-live', type: 'agent_message', status: 'in_progress', text: '完整的', timestamp: undefined, completedAt: null } as never],
+    );
+
+    expect(merged[0]).toMatchObject({
+      turnId: 'turn-1',
+      status: 'completed',
+      text: '完整的流式回复',
+      timestamp: '2026-08-27T10:00:01.000Z',
+      completedAt: '2026-08-27T10:00:05.000Z',
+    });
+  });
+
   it('removes a transient transcript item by id', () => {
     expect(
       removeThreadItem(
@@ -122,6 +218,16 @@ describe('threadView', () => {
     ).toEqual([
       { id: 'agent-2', type: 'agent_message', turnId: 'turn-1', text: '最终回答' },
     ]);
+  });
+
+  it('never removes a persisted error item when a late discard event arrives', () => {
+    const error = { id: 'error-1', type: 'error' as const, turnId: 'turn-1', message: 'model failed' };
+    expect(removeThreadItem([error], error.id)).toEqual([error]);
+  });
+
+  it('does not let a late same-id lifecycle update overwrite an error item', () => {
+    const error = { id: 'error-1', type: 'error' as const, turnId: 'turn-1', message: 'model failed' };
+    expect(mergeThreadItems([error], [{ id: error.id, type: 'agent_message' as const, turnId: error.turnId, text: 'late output' } as never])).toEqual([error]);
   });
 
   it('turns raw lifecycle events into readable Chinese timeline entries', () => {
@@ -184,6 +290,23 @@ describe('threadView', () => {
     ).toMatchObject({
       title: '模型重试',
       detail: expect.stringContaining('1/3'),
+      tone: 'warning',
+    });
+  });
+
+  it('describes rejected model protocol output distinctly', () => {
+    expect(
+      describeEvent(
+        {
+          type: 'model.output.rejected',
+          turnId: 'turn-1',
+          message: 'Model output leaked tool-call protocol text into assistant content',
+        },
+        'zh',
+      ),
+    ).toMatchObject({
+      title: '模型输出格式错误',
+      detail: 'Model output leaked tool-call protocol text into assistant content',
       tone: 'warning',
     });
   });

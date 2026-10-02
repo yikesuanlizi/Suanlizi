@@ -8,7 +8,7 @@
 //   browser.action_status forwarding, act cancellation (cancel frame), command
 //   timeout, invalid response payloads (BAD_RESPONSE) and post-close errors.
 import { describe, expect, it } from 'vitest';
-import type { ActionIntent } from '@nexus/protocol';
+import type { ActionIntent } from '@suanlizi/protocol';
 import type { FakeSiteDefinition } from '../fakeRuntime.js';
 import { FakeBrowserRuntime } from '../fakeRuntime.js';
 import { createSidecar } from './sidecar.js';

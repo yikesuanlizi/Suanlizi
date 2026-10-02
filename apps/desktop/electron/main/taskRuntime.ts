@@ -12,13 +12,13 @@ import type { BrowserViewManager } from '../browser/BrowserViewManager.js';
 import type { BrowserEngineAdapter } from '../browser/BrowserEngineAdapter.js';
 import { validateTabId } from '../ipc/validateIpc.js';
 
-type BrowserRuntimeModule = typeof import('@nexus/browser-runtime');
+type BrowserRuntimeModule = typeof import('@suanlizi/browser-runtime');
 
 let cachedModule: BrowserRuntimeModule | null = null;
 
 async function loadBrowserRuntime(): Promise<BrowserRuntimeModule> {
   if (cachedModule === null) {
-    cachedModule = await import('@nexus/browser-runtime');
+    cachedModule = await import('@suanlizi/browser-runtime');
   }
   return cachedModule;
 }

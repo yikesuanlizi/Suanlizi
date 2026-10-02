@@ -154,7 +154,7 @@ describe('buildSubagentStatusRows', () => {
       title: row.title,
       label: row.statusLabel,
     }))).toEqual([
-      { id: 'parent', kind: 'main', title: 'Nexus 主控 Agent', label: '运行中' },
+      { id: 'parent', kind: 'main', title: 'Suanlizi 主控 Agent', label: '运行中' },
       { id: 'child', kind: 'child', title: 'reviewer', label: '运行中' },
     ]);
   });
@@ -169,7 +169,7 @@ describe('buildSubagentStatusRows', () => {
     });
 
     expect(main).toMatchObject({
-      title: 'Nexus 主控 Agent',
+      title: 'Suanlizi 主控 Agent',
       statusLabel: '待机中',
       latestAction: '等待指令',
     });

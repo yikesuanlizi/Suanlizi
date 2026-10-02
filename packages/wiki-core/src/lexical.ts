@@ -7,7 +7,7 @@
  *
  * Only the viewer's pure title/body search was extracted. The compiler's
  * embeddings, vector stores, semantic retrieval and provider integrations are
- * intentionally excluded from Nexus.
+ * intentionally excluded from Suanlizi.
  */
 
 const MAX_QUERY_LENGTH = 200;

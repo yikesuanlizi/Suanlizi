@@ -27,7 +27,7 @@ export function AboutPage({ locale }: { locale: Locale }) {
     <section className="settingsSection" id="settings-about">
       <SettingsPageHeader
         eyebrow={text(locale, '关于', 'About')}
-        title={text(locale, '关于 Nexus', 'About Nexus')}
+        title={text(locale, '关于 Suanlizi', 'About Suanlizi')}
       />
       <div className="settingsCard settingsCardCompact">
         <div className="aboutRow">

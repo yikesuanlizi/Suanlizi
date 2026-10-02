@@ -1,12 +1,12 @@
-import { DingtalkClient, type DingtalkMessageAttachment, dwsExec, dwsSchema, dwsAuthStatus, isDwsAvailable } from '@nexus/bot';
-import type { ToolContext, ToolDefinition, ToolResult } from '@nexus/tools';
+import { DingtalkClient, type DingtalkMessageAttachment, dwsExec, dwsSchema, dwsAuthStatus, isDwsAvailable } from '@suanlizi/bot';
+import type { ToolContext, ToolDefinition, ToolResult } from '@suanlizi/tools';
 import {
   BOT_CONFIG_KEY,
   normalizeBotConfig,
   type BotConfig,
   type DwsCliConfig,
 } from '../config/botConfig.js';
-import type { ThreadStore } from '@nexus/storage';
+import type { ThreadStore } from '@suanlizi/storage';
 
 export const DINGTALK_TOOL_NAME = 'dingtalk';
 
@@ -16,7 +16,7 @@ export interface DingtalkForwardToolOptions {
   currentUserText?: string;
   mentionUsers?: Array<{ staffId: string; name?: string }>;
   currentAttachments?: DingtalkMessageAttachment[];
-  defaultSource?: 'dingtalk_dm' | 'dingtalk_group_mention' | 'nexus_chat';
+  defaultSource?: 'dingtalk_dm' | 'dingtalk_group_mention' | 'suanlizi_chat';
 }
 
 export function createDingtalkForwardTools(options: DingtalkForwardToolOptions): ToolDefinition[] {
@@ -57,7 +57,7 @@ export function createDingtalkForwardTools(options: DingtalkForwardToolOptions):
           },
           source: {
             type: 'string',
-            enum: ['dingtalk_dm', 'dingtalk_group_mention', 'nexus_chat'],
+            enum: ['dingtalk_dm', 'dingtalk_group_mention', 'suanlizi_chat'],
             description: '[send_message] Where the request came from.',
           },
           intent: {
@@ -108,7 +108,7 @@ export function createDingtalkForwardTools(options: DingtalkForwardToolOptions):
 export function createDingtalkForwardToolsForStore(store: ThreadStore): ToolDefinition[] {
   return createDingtalkForwardTools({
     getConfig: async () => normalizeBotConfig(await store.getSetting(BOT_CONFIG_KEY)),
-    defaultSource: 'nexus_chat',
+    defaultSource: 'suanlizi_chat',
   });
 }
 
@@ -120,9 +120,9 @@ export function dingtalkForwardingSystemPrompt(locale: string): string {
       '',
       '### Send / Forward Messages',
       `Use action=send_message when the user asks to send, forward, announce, coordinate, mention someone, or deliver a task result in the configured DingTalk group.`,
-      `This includes short requests like "bubble in the group", "mention Alex in the group", "say hi in the group", "send the result to the group after finishing", DingTalk DM requests to forward the current DM attachment/image to the group, follow-ups that refer to the previous DingTalk group delivery, and Nexus chat commands that ask DingTalk to post a message.`,
+      `This includes short requests like "bubble in the group", "mention Alex in the group", "say hi in the group", "send the result to the group after finishing", DingTalk DM requests to forward the current DM attachment/image to the group, follow-ups that refer to the previous DingTalk group delivery, and Suanlizi chat commands that ask DingTalk to post a message.`,
       'For mentions, put human-readable names in mentions. If message starts with visible @name text, the tool will strip that prefix before sending the webhook Text message so DingTalk can render the real highlighted mention once. Do not invent DingTalk staff IDs.',
-      'For attachment forwarding, use fileMode=current_message_files only when the request comes from DingTalk DM and refers to the attached/recent DM file or image. If the user asks for a caption/note or @ mention with that attachment, put the caption in message and human-readable names in mentions. Do not use it for Nexus local files, paths, URLs, or group mention contexts.',
+      'For attachment forwarding, use fileMode=current_message_files only when the request comes from DingTalk DM and refers to the attached/recent DM file or image. If the user asks for a caption/note or @ mention with that attachment, put the caption in message and human-readable names in mentions. Do not use it for Suanlizi local files, paths, URLs, or group mention contexts.',
       '',
       '### Enterprise Data via dws CLI',
       `Use action=dws_exec to operate DingTalk enterprise data: search contacts, manage calendar events, todos/AI tables, documents, attendance, DING messages, etc.`,
@@ -145,7 +145,7 @@ export function dingtalkForwardingSystemPrompt(locale: string): string {
     `当用户要求把内容发送、转发、发布、通知、喊话、冒泡、艾特某人、协调群内事项，或把任务结果交付到已配置的钉钉群时，使用 action=send_message。`,
     '这包括"在群里冒个泡""去群里艾特一下某人""帮我往钉钉群发 xxx""把这段转到群里""做完后把结果同步到群里"、钉钉单聊里要求把当前/最近附件或图片转到群里、以及引用上一条钉钉群投递任务的连续对话。',
     '需要 @ 人时，把可读姓名放入 mentions；message 可以包含开头的 @姓名，工具会在 webhook Text 发送前去掉这个普通文本前缀，只保留钉钉真正高亮 @。不要编造钉钉 staff/user ID。',
-    '附件转发只用于钉钉单聊附件：用户要求把当前/最近单聊文件或图片发到群里时，使用 fileMode=current_message_files；如果用户同时要求备注/说明/@某人，把备注文本放入 message，把姓名放入 mentions。不要用于 Nexus 本地文件、路径、URL 或群 @ 上下文。',
+    '附件转发只用于钉钉单聊附件：用户要求把当前/最近单聊文件或图片发到群里时，使用 fileMode=current_message_files；如果用户同时要求备注/说明/@某人，把备注文本放入 message，把姓名放入 mentions。不要用于 Suanlizi 本地文件、路径、URL 或群 @ 上下文。',
     '',
     '### 企业数据操作（dws CLI）',
     `使用 action=dws_exec 操作钉钉企业数据：搜索联系人、管理日程、待办、AI表格、文档、考勤、DING消息等。`,

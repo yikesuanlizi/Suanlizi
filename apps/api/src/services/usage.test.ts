@@ -41,4 +41,22 @@ describe('usage aggregation', () => {
       includedThreadIds: ['parent', 'child'],
     });
   });
+
+  it('aggregates cache reporting as a three-state value', () => {
+    const make = (threadId: string, cacheReported?: boolean) => usageFromThread({
+      threadId,
+      tags: {
+        threadUsage: JSON.stringify({
+          threadId,
+          total: { inputTokens: 10, cachedInputTokens: cacheReported === true ? 5 : 0, outputTokens: 1, reasoningOutputTokens: 0, ...(cacheReported === undefined ? {} : { cacheReported }) },
+          turns: [],
+          updatedAt: '2026-06-10T00:00:00.000Z',
+        }),
+      },
+    });
+
+    expect(aggregateThreadUsage('parent', [make('a', true), make('b', true)]).total.cacheReported).toBe(true);
+    expect(aggregateThreadUsage('parent', [make('a', true), make('b', false)]).total.cacheReported).toBe(false);
+    expect(aggregateThreadUsage('parent', [make('a'), make('b')]).total.cacheReported).toBeUndefined();
+  });
 });

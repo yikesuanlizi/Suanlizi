@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make GitNexus a first-class code-intelligence subsystem in Nexus: the UI should query a stable service layer, the Agent should use MCP tools for structured analysis, and CLI/npx should remain the indexing and maintenance path.
+**Goal:** Make GitNexus a first-class code-intelligence subsystem in Suanlizi: the UI should query a stable service layer, the Agent should use MCP tools for structured analysis, and CLI/npx should remain the indexing and maintenance path.
 
-**Architecture:** Split responsibilities into three layers. `gitnexus serve` becomes the primary query/runtime layer for Nexus UI and backend APIs. MCP remains the Agent-facing structured tool layer. CLI/npx remains the maintenance and indexing layer, invoked through Nexus-managed jobs rather than directly by the model.
+**Architecture:** Split responsibilities into three layers. `gitnexus serve` becomes the primary query/runtime layer for Suanlizi UI and backend APIs. MCP remains the Agent-facing structured tool layer. CLI/npx remains the maintenance and indexing layer, invoked through Suanlizi-managed jobs rather than directly by the model.
 
-**Tech Stack:** TypeScript, Node.js, existing Nexus API routes, existing MCP runtime manager, existing React/Web/Desktop UI, vitest, Vite.
+**Tech Stack:** TypeScript, Node.js, existing Suanlizi API routes, existing MCP runtime manager, existing React/Web/Desktop UI, vitest, Vite.
 
 ---
 
@@ -66,7 +66,7 @@ git add apps/api/src/routes/gitnexusRoute.ts apps/api/src/runtime/tenantRuntime.
 git commit -m "feat: define GitNexus runtime fallback contract"
 ```
 
-### Task 2: Add a Nexus-managed GitNexus serve service
+### Task 2: Add a Suanlizi-managed GitNexus serve service
 
 **Files:**
 - Create: `apps/api/src/services/gitNexusService.ts`
@@ -161,7 +161,7 @@ git add apps/api/src/routes/gitnexusRoute.ts apps/api/src/routes/gitnexusRoute.t
 git commit -m "feat: make GitNexus routes service-backed"
 ```
 
-### Task 4: Add a Nexus tool for indexing and maintenance jobs
+### Task 4: Add a Suanlizi tool for indexing and maintenance jobs
 
 **Files:**
 - Modify: `packages/tools/src/builtin.ts`
@@ -351,14 +351,14 @@ Expected: all pass.
 Run:
 ```bash
 npm run build
-npm --workspace @nexus/web run build
-npm --workspace @nexus/desktop run build:ui
+npm --workspace @suanlizi/web run build
+npm --workspace @suanlizi/desktop run build:ui
 ```
 Expected: all pass.
 
 - [ ] **Step 3: Perform a real UI check**
 
-Open Nexus, run a GitNexus context query, click the new preview button, and confirm:
+Open Suanlizi, run a GitNexus context query, click the new preview button, and confirm:
 - the preview shows the same graph in a larger overlay
 - node click still opens the detail panel
 - context graphs do not collapse to a single node when structured subgraph data exists

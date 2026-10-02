@@ -8,7 +8,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 describe('agent stage dark theme', () => {
   it('keeps status-specific child agent cards on dark surfaces', () => {
     const styles = readFileSync(join(here, 'styles.css'), 'utf-8');
-    const darkStart = styles.indexOf('/* ── Nexus desktop workspace skin');
+    const darkStart = styles.indexOf('/* ── Suanlizi desktop workspace skin');
     const darkStyles = styles.slice(darkStart);
 
     for (const tone of ['running', 'success', 'warning', 'danger']) {
@@ -25,7 +25,7 @@ describe('agent stage dark theme', () => {
   it('uses semantic workbench surfaces while retaining the original animated robot', () => {
     const styles = readFileSync(join(here, 'styles.css'), 'utf-8');
     const stageSource = readFileSync(join(here, 'components', 'AgentStagePanel.tsx'), 'utf-8');
-    const finalContract = styles.slice(styles.lastIndexOf('/* Nexus workbench surface contract */'));
+    const finalContract = styles.slice(styles.lastIndexOf('/* Suanlizi workbench surface contract */'));
 
     expect(stageSource).toContain('RobotMoodIcon');
     expect(stageSource).toContain('InteractiveMainRobot');

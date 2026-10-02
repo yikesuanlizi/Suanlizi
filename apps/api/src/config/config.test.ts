@@ -1,9 +1,9 @@
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type { ThreadId, ThreadMeta } from '@nexus/protocol';
-import type { ThreadStore } from '@nexus/storage';
+import type { ThreadId, ThreadMeta } from '@suanlizi/protocol';
+import type { ThreadStore } from '@suanlizi/storage';
 import { describe, expect, it } from 'vitest';
-import { createConfigRepository, defaultConfig, publicRunConfig, publicWebProviderConfig, resolveConfig, resolveWebProviderRuntimeConfig } from './config.js';
+import { createConfigRepository, defaultConfig, publicRunConfig, publicWebProviderConfig, resolveConfig, resolveWebProviderRuntimeConfig, THREAD_CONFIG_OVERRIDES_KEY_PREFIX, THREAD_CONFIG_OVERRIDES_META_KEY_PREFIX } from './config.js';
 
 class FakeThreadStore {
   settings = new Map<string, unknown>();
@@ -46,12 +46,12 @@ function fakeThread(threadId: ThreadId, patch: Partial<ThreadMeta> = {}): Thread
 
 describe('AgentRunConfig skillsRoot', () => {
   it('defaults skillsRoot to the current user home directory', () => {
-    expect(defaultConfig.skillsRoot).toBe(path.join(os.homedir(), '.nexus', 'skills'));
+    expect(defaultConfig.skillsRoot).toBe(path.join(os.homedir(), '.suanlizi', 'skills'));
   });
 
   it('resolves configured skillsRoot to an absolute path', () => {
-    expect(resolveConfig({ skillsRoot: '.nexus/skills' }).skillsRoot).toBe(
-      path.resolve('.nexus/skills'),
+    expect(resolveConfig({ skillsRoot: '.suanlizi/skills' }).skillsRoot).toBe(
+      path.resolve('.suanlizi/skills'),
     );
   });
 
@@ -73,6 +73,24 @@ describe('AgentRunConfig runProfile', () => {
   it('legacy harness profile auto-downgrades to runtime_os', () => {
     // harness 不再是 RunProfile，已降级为 runtime 底座能力
     expect(resolveConfig({ runProfile: 'harness' as never }).runProfile).toBe('runtime_os');
+  });
+});
+
+
+describe('AgentRunConfig compactionThreshold', () => {
+  it('defaults to 0.8 and normalizes persisted values', () => {
+    expect(defaultConfig.compactionThreshold).toBe(0.8);
+    expect(resolveConfig({ compactionThreshold: 0.6 }).compactionThreshold).toBe(0.6);
+  });
+
+  it('clamps out-of-range thresholds instead of accepting them', () => {
+    expect(resolveConfig({ compactionThreshold: 0.1 }).compactionThreshold).toBe(0.3);
+    expect(resolveConfig({ compactionThreshold: 5 }).compactionThreshold).toBe(0.95);
+  });
+
+  it('round-trips through the public config used for persistence', () => {
+    const resolved = resolveConfig({ compactionThreshold: 0.55 });
+    expect(publicRunConfig(resolved).compactionThreshold).toBe(0.55);
   });
 });
 
@@ -118,6 +136,12 @@ describe('AgentRunConfig runtime limits and monitor migration', () => {
       maxParallelReadonlyTools: 16,
       maxSubagentDepth: 2,
     });
+  });
+
+  it('normalizes the model response timeout independently from tool timeout', () => {
+    expect(defaultConfig.modelTimeoutSeconds).toBe(120);
+    expect(resolveConfig({ modelTimeoutSeconds: 2 } as never).modelTimeoutSeconds).toBe(10);
+    expect(resolveConfig({ modelTimeoutSeconds: 9_999 } as never).modelTimeoutSeconds).toBe(3600);
   });
 
   it('migrates the legacy monitor switch without enabling data collection by default', () => {
@@ -184,12 +208,12 @@ describe('AgentRunConfig web provider', () => {
 describe('AgentRunConfig access policy', () => {
   it('normalizes access policy from workspace defaults', () => {
     const config = resolveConfig({
-      workspaceRoot: 'E:\\langchain\\Nexus',
+      workspaceRoot: 'E:\\langchain\\Suanlizi',
     });
 
     expect(config.accessPolicy).toMatchObject({
       mode: 'workspace',
-      workspaceRoot: path.resolve('E:\\langchain\\Nexus'),
+      workspaceRoot: path.resolve('E:\\langchain\\Suanlizi'),
       persistentRules: [],
       temporaryGrants: [],
     });
@@ -198,7 +222,7 @@ describe('AgentRunConfig access policy', () => {
   it('maps legacy read_only permissions to chat-like read policy without writing legacy permissions as source of truth', () => {
     const config = resolveConfig({
       permissions: 'read_only',
-      workspaceRoot: 'E:\\langchain\\Nexus',
+      workspaceRoot: 'E:\\langchain\\Suanlizi',
     });
 
     expect(config.accessPolicy.mode).toBe('chat');
@@ -209,7 +233,7 @@ describe('AgentRunConfig access policy', () => {
     const config = resolveConfig({
       accessPolicy: {
         mode: 'workspace',
-        workspaceRoot: 'E:\\langchain\\Nexus',
+        workspaceRoot: 'E:\\langchain\\Suanlizi',
         persistentRules: [],
         temporaryGrants: [
           {
@@ -270,10 +294,33 @@ describe('thread appearance persistence', () => {
     expect(parsed).not.toHaveProperty('userAvatarId');
     expect(parsed).not.toHaveProperty('customUserAvatarDataUrl');
   });
+
+  it('ignores a legacy full thread snapshot so it cannot override the global context window', async () => {
+    const store = new FakeThreadStore();
+    const repo = createConfigRepository(store as unknown as ThreadStore);
+    const threadId = 'thread-legacy-context' as ThreadId;
+
+    store.threads.set(threadId, fakeThread(threadId, {
+      tags: {
+        runConfig: JSON.stringify({
+          workspaceRoot: 'D:\\legacy',
+          provider: 'llama_cpp',
+          model: 'local-model',
+          modelContextTokens: 24_576,
+          permissions: 'workspace',
+        }),
+      },
+    }));
+    await repo.saveDefaultRunConfig({ modelContextTokens: 65_536 });
+
+    await expect(repo.getThreadRunConfig(threadId)).resolves.toMatchObject({
+      modelContextTokens: 65_536,
+    });
+  });
 });
 
 describe('model preset persistence', () => {
-  it('stores only provider, model, and baseUrl', async () => {
+  it('stores model capability overrides with the preset', async () => {
     const store = new FakeThreadStore();
     const repo = createConfigRepository(store as unknown as ThreadStore);
 
@@ -283,6 +330,8 @@ describe('model preset persistence', () => {
         provider: 'openai',
         model: 'gpt-5',
         baseUrl: 'https://example.test/v1',
+        modelContextTokens: 128_000,
+        modelMaxOutputTokens: 16_000,
         permissions: 'danger_full_access',
         workspaceRoot: 'E:/secret',
         memoryEnabled: false,
@@ -293,6 +342,8 @@ describe('model preset persistence', () => {
       provider: 'openai',
       model: 'gpt-5',
       baseUrl: 'https://example.test/v1',
+      modelContextTokens: 128_000,
+      modelMaxOutputTokens: 16_000,
     });
   });
 
@@ -372,15 +423,44 @@ describe('thread config overrides', () => {
 
     const [permissions, reasoning] = await Promise.all([
       repo.updateThreadConfigOverrides(threadId, { permissions: 'read_only' }),
-      repo.updateThreadConfigOverrides(threadId, { reasoningEffort: 'low' }),
+      repo.updateThreadConfigOverrides(threadId, { reasoningEffort: 'no' }),
     ]);
 
     expect(permissions).toMatchObject({ permissions: 'read_only' });
-    expect(reasoning).toMatchObject({ permissions: 'read_only', reasoningEffort: 'low' });
+    expect(reasoning).toMatchObject({ permissions: 'read_only', reasoningEffort: 'no' });
     await expect(repo.getThreadConfigOverrides(threadId)).resolves.toEqual({
       permissions: 'read_only',
-      reasoningEffort: 'low',
+      reasoningEffort: 'no',
     });
+  });
+
+  it('uses the thread workspace as the runtime root for non-chat threads', async () => {
+    const store = new FakeThreadStore();
+    const repo = createConfigRepository(store as unknown as ThreadStore);
+    const threadId = 'thread-workspace-root' as ThreadId;
+    store.threads.set(threadId, fakeThread(threadId, {
+      mode: 'ops',
+      workspaceRoot: 'E:/thread-workspace',
+      tags: {},
+    }));
+    await repo.saveDefaultRunConfig({ workspaceRoot: 'E:/global-workspace' });
+
+    const config = await repo.getThreadRunConfig(threadId);
+
+    expect(config.workspaceRoot).toBe(path.resolve('E:/thread-workspace'));
+    expect(config.accessPolicy.workspaceRoot).toBe(path.resolve('E:/thread-workspace'));
+  });
+
+  it('normalizes legacy reasoning effort presets', async () => {
+    const store = new FakeThreadStore();
+    const repo = createConfigRepository(store as unknown as ThreadStore);
+    const threadId = 'thread-overrides-effort-normalized' as ThreadId;
+
+    await repo.updateThreadConfigOverrides(threadId, { reasoningEffort: 'low' });
+    await expect(repo.getThreadRunConfig(threadId)).resolves.toMatchObject({ reasoningEffort: 'no' });
+
+    await repo.updateThreadConfigOverrides(threadId, { reasoningEffort: 'ultra' });
+    await expect(repo.getThreadRunConfig(threadId)).resolves.toMatchObject({ reasoningEffort: 'max' });
   });
 
   it('merges overrides into thread run config', async () => {
@@ -405,5 +485,39 @@ describe('thread config overrides', () => {
     expect(config.permissions).toBe('danger_full_access');
     expect(config.reasoningEffort).toBe('high');
     expect(config.runProfile).toBe('runtime_os');
+  });
+
+  it('drops legacy model limits that were written without an explicit marker', async () => {
+    const store = new FakeThreadStore();
+    const repo = createConfigRepository(store as unknown as ThreadStore);
+    const threadId = 'thread-overrides-legacy-window' as ThreadId;
+    store.settings.set(`${THREAD_CONFIG_OVERRIDES_KEY_PREFIX}${threadId}`, {
+      provider: 'llama_cpp',
+      model: 'local-model',
+      modelContextTokens: 24_576,
+    });
+
+    await expect(repo.getThreadConfigOverrides(threadId)).resolves.toEqual({
+      provider: 'llama_cpp',
+      model: 'local-model',
+    });
+    expect(store.settings.get(`${THREAD_CONFIG_OVERRIDES_KEY_PREFIX}${threadId}`)).toEqual({
+      provider: 'llama_cpp',
+      model: 'local-model',
+    });
+  });
+
+  it('keeps a model window only after an explicit thread setting and clears its marker on unset', async () => {
+    const store = new FakeThreadStore();
+    const repo = createConfigRepository(store as unknown as ThreadStore);
+    const threadId = 'thread-overrides-explicit-window' as ThreadId;
+
+    await repo.updateThreadConfigOverrides(threadId, { modelContextTokens: 65_536 });
+    await expect(repo.getThreadConfigOverrides(threadId)).resolves.toMatchObject({ modelContextTokens: 65_536 });
+    expect(store.settings.get(`${THREAD_CONFIG_OVERRIDES_META_KEY_PREFIX}${threadId}`)).toEqual({ modelContextTokens: true });
+
+    await repo.updateThreadConfigOverrides(threadId, { modelContextTokens: null });
+    await expect(repo.getThreadConfigOverrides(threadId)).resolves.not.toHaveProperty('modelContextTokens');
+    expect(store.settings.get(`${THREAD_CONFIG_OVERRIDES_META_KEY_PREFIX}${threadId}`)).toEqual({});
   });
 });

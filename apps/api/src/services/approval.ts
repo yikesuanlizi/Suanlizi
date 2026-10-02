@@ -1,5 +1,5 @@
-import type { ApprovalHandler } from '@nexus/sandbox';
-import type { ApprovalLogEntry, ApprovalRequest, PersistentAccessScope, TemporaryAccessScope } from '@nexus/protocol';
+import type { ApprovalHandler } from '@suanlizi/sandbox';
+import type { ApprovalLogEntry, ApprovalRequest, PersistentAccessScope, TemporaryAccessScope } from '@suanlizi/protocol';
 
 interface PendingApproval {
   request: ApprovalRequest;

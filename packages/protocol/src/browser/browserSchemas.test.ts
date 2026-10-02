@@ -14,7 +14,7 @@ import {
   type BrowserTaskState,
   type HumanRequest,
   type Observation,
-} from '@nexus/protocol';
+} from '@suanlizi/protocol';
 
 function makeObservation(overrides: Partial<Observation> = {}): Observation {
   return {

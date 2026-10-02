@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { mkdtemp, rm, appendFile, access } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { browserTaskEventSchema, type BrowserTaskEvent } from '@nexus/protocol';
+import { browserTaskEventSchema, type BrowserTaskEvent } from '@suanlizi/protocol';
 import { TaskEventStore, taskCheckpointPath } from './checkpointStore.js';
 
 // 根临时目录：每个用例在其下 mkdtemp 独立子目录，互不依赖执行顺序。

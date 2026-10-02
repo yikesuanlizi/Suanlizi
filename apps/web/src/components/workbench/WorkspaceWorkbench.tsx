@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Locale } from '../../config/config.js';
 import type { ThreadChildInfo, ThreadItem, ThreadMeta } from '../../shared/types.js';
-import type { RunControlCapabilities, RunTraceEnvelope, RunTraceSummary } from '@nexus/protocol';
+import type { RunControlCapabilities, RunTraceEnvelope, RunTraceSummary } from '@suanlizi/protocol';
 import type { ExternalPreviewRequest } from '../WorkspaceFilesPanel.js';
 import { WorkspaceFilesPanel } from '../WorkspaceFilesPanel.js';
 import { Icon } from '../Icon.js';
@@ -12,6 +12,8 @@ import { LiveActivityHud } from './LiveActivityHud.js';
 import { AgentInspector } from './AgentInspector.js';
 import { AgentStagePanel } from '../AgentStagePanel.js';
 import { TerminalPanel } from './TerminalPanel.js';
+import type { OpsTaskSession } from '@suanlizi/protocol';
+import { OpsTaskAnchorCard, type OpsAnchorAction } from '../OpsTaskAnchorCard.js';
 
 export function WorkspaceWorkbench({
   activeThread,
@@ -37,6 +39,10 @@ export function WorkspaceWorkbench({
   onAddFileToConversation,
   responsiveMode,
   onCloseRequest,
+  showOps = false,
+  opsTask = null,
+  opsTaskBusy = false,
+  onOpsTaskAction,
 }: {
   activeThread?: ThreadMeta | null;
   activeThreadId: string;
@@ -61,6 +67,10 @@ export function WorkspaceWorkbench({
   onAddFileToConversation?(path: string): void;
   responsiveMode?: 'side' | 'overlay' | 'sheet';
   onCloseRequest?(): void;
+  showOps?: boolean;
+  opsTask?: OpsTaskSession | null;
+  opsTaskBusy?: boolean;
+  onOpsTaskAction?(action: OpsAnchorAction): void | Promise<void>;
 }) {
   const zh = locale === 'zh';
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
@@ -68,7 +78,13 @@ export function WorkspaceWorkbench({
   const [filesPanelMounted, setFilesPanelMounted] = useState(false);
   const handledPreviewRequestKeyRef = useRef('');
   const hasActiveThread = Boolean(activeThreadId && activeThread);
+  const opsVisible = hasActiveThread && showOps && Boolean(opsTask);
   const mainAgentThreadId = activeThreadId || 'main';
+
+  useEffect(() => {
+    if (opsVisible || activeTab !== 'ops') return;
+    onTabChange('activity');
+  }, [activeTab, onTabChange, opsVisible]);
 
   useEffect(() => {
     setSelectedAgentId(null);
@@ -174,6 +190,7 @@ export function WorkspaceWorkbench({
         activeTab={activeTab}
         onTabChange={handleTabChange}
         runningAgentCount={runningAgentCount}
+        showOps={opsVisible}
         locale={locale}
       />
 
@@ -208,6 +225,17 @@ export function WorkspaceWorkbench({
             locale={locale}
           /> : null}
         </div>
+
+        {opsVisible ? (
+          <div
+            className={workbenchPanelClassName('ops', activeTab)}
+            data-state={activeTab === 'ops' ? 'active' : 'inactive'}
+            aria-hidden={activeTab !== 'ops'}
+            inert={activeTab !== 'ops'}
+          >
+            {opsTask ? <OpsTaskAnchorCard locale={locale} task={opsTask} busy={opsTaskBusy} onAction={(action) => onOpsTaskAction?.(action)} /> : null}
+          </div>
+        ) : null}
 
         <div
           className={workbenchPanelClassName('agents', activeTab)}
@@ -257,7 +285,7 @@ export function WorkspaceWorkbench({
           aria-hidden={activeTab !== 'terminal'}
           inert={activeTab !== 'terminal'}
         >
-          <TerminalPanel active={activeTab === 'terminal'} locale={locale} workspaceRoot={terminalRoot} />
+          <TerminalPanel active={activeTab === 'terminal'} locale={locale} workspaceRoot={terminalRoot} threadId={activeThreadId} />
         </div>
       </div>
 
@@ -291,6 +319,6 @@ export function WorkspaceWorkbench({
 }
 
 function workbenchPanelClassName(tab: WorkbenchTab, activeTab: WorkbenchTab): string {
-  const base = tab === 'activity' ? 'workbenchActivity' : tab === 'agents' ? 'workbenchAgents' : tab === 'terminal' ? 'workbenchTerminal' : 'workbenchFiles';
+  const base = tab === 'activity' ? 'workbenchActivity' : tab === 'agents' ? 'workbenchAgents' : tab === 'ops' ? 'workbenchOps' : tab === 'terminal' ? 'workbenchTerminal' : 'workbenchFiles';
   return `${base} workbenchPanel${tab === activeTab ? ' active' : ' inactive'}`;
 }

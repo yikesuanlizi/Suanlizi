@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { RuntimeTurnContext } from '@nexus/runtime';
-import type { ThreadStore } from '@nexus/storage';
+import type { RuntimeTurnContext } from '@suanlizi/runtime';
+import type { ThreadStore } from '@suanlizi/storage';
 import { BOT_CONFIG_KEY, DEFAULT_BOT_CONFIG } from '../config/botConfig.js';
 import { createDynamicContextProvider } from './dynamicContext.js';
 

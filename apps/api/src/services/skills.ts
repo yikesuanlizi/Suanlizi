@@ -3,8 +3,8 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { promisify } from 'node:util';
-import type { Locale } from '@nexus/i18n';
-import type { ThreadItem, TurnId } from '@nexus/protocol';
+import type { Locale } from '@suanlizi/i18n';
+import type { ThreadItem, TurnId } from '@suanlizi/protocol';
 
 const execFileAsync = promisify(execFile);
 
@@ -53,7 +53,7 @@ export function formatSkillMarkdown(input: SkillMarkdownInput): string {
   return [
     '---',
     `name: ${sanitizeSkillName(input.name)}`,
-    `description: ${input.description.trim() || 'Nexus skill'}`,
+    `description: ${input.description.trim() || 'Suanlizi skill'}`,
     '---',
     '',
     '# Instructions',
@@ -68,7 +68,7 @@ export function buildSkillDraftSystemPrompt(locale: Locale = 'zh'): string {
     ? '使用中文编写 description 和 instructions；只有 name 保持短 kebab-case id。'
     : 'Write description and instructions in English; only name stays a short kebab-case id.';
   return [
-    'Generate a Nexus SKILL.md draft from the user request.',
+    'Generate a Suanlizi SKILL.md draft from the user request.',
     'Return only JSON with keys: name, description, instructions.',
     'name must be a short kebab-case id. description must be one sentence.',
     'If fetched source content is provided, extract concrete reusable guidance from that content.',
@@ -366,7 +366,7 @@ async function installSkillsFromGitHubZip(
   skillsRoot: string,
   source: GitHubSkillSource,
 ): Promise<InstallSkillsResult> {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-skill-install-'));
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-skill-install-'));
   try {
     const zipPath = path.join(tmpDir, 'repo.zip');
     const extractDir = path.join(tmpDir, 'repo');
@@ -374,7 +374,7 @@ async function installSkillsFromGitHubZip(
 
     const response = await fetchWithRetry(
       `https://codeload.github.com/${source.owner}/${source.repo}/zip/${encodeURIComponent(source.ref)}`,
-      { headers: { 'user-agent': 'Nexus/0.1' } },
+      { headers: { 'user-agent': 'Suanlizi/0.1' } },
     );
     if (!response.ok) {
       throw new Error(`GitHub zip download failed: HTTP ${response.status}`);
@@ -488,7 +488,7 @@ async function fetchGitHubTree(source: GitHubSkillSource): Promise<GitHubTreeEnt
   const response = await fetchWithRetry(apiUrl, {
     headers: {
       accept: 'application/vnd.github+json',
-      'user-agent': 'Nexus/0.1',
+      'user-agent': 'Suanlizi/0.1',
     },
   });
   if (!response.ok) {
@@ -573,7 +573,7 @@ async function fetchGitHubFile(source: GitHubSkillSource, file: GitHubTreeEntry)
     const response = await fetchWithRetry(blobUrl, {
       headers: {
         accept: 'application/vnd.github+json',
-        'user-agent': 'Nexus/0.1',
+        'user-agent': 'Suanlizi/0.1',
       },
     });
     if (response.ok) {
@@ -590,7 +590,7 @@ async function fetchGitHubFile(source: GitHubSkillSource, file: GitHubTreeEntry)
 async function fetchGitHubRawFile(source: GitHubSkillSource, filePath: string): Promise<Buffer> {
   const rawUrl = `https://raw.githubusercontent.com/${source.owner}/${source.repo}/${encodeURIComponent(source.ref)}/${filePath.split('/').map(encodeURIComponent).join('/')}`;
   const response = await fetchWithRetry(rawUrl, {
-    headers: { 'user-agent': 'Nexus/0.1' },
+    headers: { 'user-agent': 'Suanlizi/0.1' },
   });
   if (!response.ok) {
     throw new Error(`GitHub file fetch failed for ${filePath}: HTTP ${response.status}`);
@@ -731,7 +731,7 @@ async function fetchSkillSourceContent(url: string): Promise<string> {
       const response = await fetch(candidate, {
         headers: {
           accept: 'text/plain,text/markdown,text/html,application/json',
-          'user-agent': 'Nexus/0.1',
+          'user-agent': 'Suanlizi/0.1',
         },
       });
       if (!response.ok) {

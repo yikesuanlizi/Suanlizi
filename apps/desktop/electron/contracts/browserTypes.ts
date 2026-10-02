@@ -13,6 +13,8 @@ export interface CreateBrowserTabInput {
   url: string;
   bounds: BrowserViewBounds;
   openedBy?: 'user' | 'agent';
+  /** Thread scope for user-visible tabs; prevents cross-thread page reuse. */
+  threadId?: string;
 }
 
 export interface BrowserTabState {
@@ -22,33 +24,37 @@ export interface BrowserTabState {
   visible: boolean;
   loading: boolean;
   openedBy?: 'user' | 'agent';
+  threadId?: string;
   favicon?: string;
 }
 
 export interface BrowserNavigateInput {
   tabId: string;
   url: string;
+  threadId?: string;
 }
 
 export interface BrowserEvaluateInput {
   tabId: string;
   expression: string;
+  threadId?: string;
 }
 
 export interface BrowserClickInput {
   tabId: string;
   x: number;
   y: number;
+  threadId?: string;
 }
 
 export type BrowserDesktopEvent =
   | { type: 'agent-browser-requested'; taskId: string }
-  | { type: 'tab-created'; tabId: string; url: string; openedBy?: 'user' | 'agent' }
+  | { type: 'tab-created'; tabId: string; url: string; openedBy?: 'user' | 'agent'; threadId?: string }
   | { type: 'tab-closed'; tabId: string }
-  | { type: 'tab-visible'; tabId: string; visible: boolean }
-  | { type: 'did-navigate'; tabId: string; url: string }
-  | { type: 'page-title'; tabId: string; title: string }
-  | { type: 'loading'; tabId: string; loading: boolean }
+  | { type: 'tab-visible'; tabId: string; visible: boolean; threadId?: string }
+  | { type: 'did-navigate'; tabId: string; url: string; threadId?: string }
+  | { type: 'page-title'; tabId: string; title: string; threadId?: string }
+  | { type: 'loading'; tabId: string; loading: boolean; threadId?: string }
   | { type: 'favicon'; tabId: string; favicon?: string }
   | { type: 'page-crashed'; tabId: string }
   | { type: 'download-started'; tabId: string; filename: string }

@@ -1,6 +1,16 @@
 // Ops 任务协议：状态机、作用域契约、乐观锁和重试关系。
 // Ops task protocol: state machine, scoped task contract, optimistic locking, and retries.
+// 状态迁移/乐观锁/重试 id 的通用逻辑复用自 taskStateMachine.ts；本文件的公共 API 保持不变。
+// The generic transition / optimistic-lock / retry-id logic is reused from taskStateMachine.ts;
+// this module's public API is unchanged.
 import { z } from 'zod';
+import {
+  createTransitionHelpers,
+  deriveRetrySpec,
+  isVersionMatch,
+  validateVersion,
+  type TransitionErrorContext,
+} from './taskStateMachine.js';
 
 /** Ops 任务的完整生命周期状态。 */
 export const OPS_TASK_STATES = [
@@ -55,15 +65,15 @@ export const OPS_TASK_TERMINAL_STATES: ReadonlySet<OpsTaskState> = new Set([
 ]);
 
 export function isOpsTaskState(value: string): value is OpsTaskState {
-  return (OPS_TASK_STATES as readonly string[]).includes(value);
+  return opsTaskTransitionHelpers.isState(value);
 }
 
 export function isOpsTaskTerminalState(state: OpsTaskState): boolean {
-  return OPS_TASK_TERMINAL_STATES.has(state);
+  return opsTaskTransitionHelpers.isTerminalState(state);
 }
 
 export function canTransitionOpsTaskState(from: OpsTaskState, to: OpsTaskState): boolean {
-  return OPS_TASK_TRANSITIONS[from].includes(to);
+  return opsTaskTransitionHelpers.canTransition(from, to);
 }
 
 // Alias kept for callers that describe a transition as a generic state-machine check.
@@ -122,48 +132,47 @@ export class OpsTaskError extends Error {
   }
 }
 
+// 基于通用状态机原语构建的 Ops 迁移 helper；errorFactory 产出与历史完全一致的错误码与文案。
+// Ops transition helpers built on the generic primitives; errorFactory reproduces the exact
+// historical error codes and messages.
+const opsTaskTransitionHelpers = createTransitionHelpers<OpsTaskState>({
+  states: OPS_TASK_STATES,
+  transitions: OPS_TASK_TRANSITIONS,
+  terminalStates: OPS_TASK_TERMINAL_STATES,
+  errorFactory: ({ kind, from, to }: TransitionErrorContext<OpsTaskState>) =>
+    kind === 'terminal'
+      ? new OpsTaskError(
+          'OPS_TERMINAL_STATE',
+          `Ops task in terminal state ${from} cannot transition to ${to}`,
+          { from, to },
+        )
+      : new OpsTaskError(
+          'OPS_INVALID_TRANSITION',
+          `Ops task cannot transition from ${from} to ${to}`,
+          { from, to },
+        ),
+});
+
 /** 检查并断言状态迁移合法；终态优先返回 OPS_TERMINAL_STATE。 */
 export function assertOpsTaskTransition(from: OpsTaskState, to: OpsTaskState): void {
-  if (isOpsTaskTerminalState(from)) {
-    throw new OpsTaskError(
-      'OPS_TERMINAL_STATE',
-      `Ops task in terminal state ${from} cannot transition to ${to}`,
-      { from, to },
-    );
-  }
-  if (!canTransitionOpsTaskState(from, to)) {
-    throw new OpsTaskError(
-      'OPS_INVALID_TRANSITION',
-      `Ops task cannot transition from ${from} to ${to}`,
-      { from, to },
-    );
-  }
+  opsTaskTransitionHelpers.assertTransition(from, to);
 }
 
 /** 用于 API 层乐观锁的版本一致性校验。成功时返回 true，失败时抛出稳定错误。 */
 export function validateOpsTaskVersion(actualVersion: number, expectedVersion: number): true {
-  if (
-    !Number.isSafeInteger(actualVersion) ||
-    !Number.isSafeInteger(expectedVersion) ||
-    actualVersion !== expectedVersion
-  ) {
-    throw new OpsTaskError(
+  return validateVersion(actualVersion, expectedVersion, ({ actual, expected }) =>
+    new OpsTaskError(
       'OPS_VERSION_CONFLICT',
-      `Ops task version conflict: expected ${expectedVersion}, got ${actualVersion}`,
-      { actualVersion, expectedVersion },
-    );
-  }
-  return true;
+      `Ops task version conflict: expected ${expected}, got ${actual}`,
+      { actualVersion: actual, expectedVersion: expected },
+    ),
+  );
 }
 
 export const assertOpsTaskVersion = validateOpsTaskVersion;
 
 export function isOpsTaskVersionMatch(actualVersion: number, expectedVersion: number): boolean {
-  return (
-    Number.isSafeInteger(actualVersion) &&
-    Number.isSafeInteger(expectedVersion) &&
-    actualVersion === expectedVersion
-  );
+  return isVersionMatch(actualVersion, expectedVersion);
 }
 
 export interface OpsTaskTarget {
@@ -356,17 +365,16 @@ export type OpsTaskRetrySpec = Omit<OpsTaskSpec, 'taskId' | 'parentTaskId'> & {
 
 /** 从既有规格派生重试规格；不会改变原规格或复制历史证据。 */
 export function createOpsTaskRetrySpec(source: OpsTaskSpec, taskId: string): OpsTaskRetrySpec {
-  if (!taskId || taskId === source.taskId) {
-    throw new OpsTaskError('OPS_INVALID_TRANSITION', 'Retry taskId must be a new non-empty id', {
-      taskId,
-      parentTaskId: source.taskId,
-    });
-  }
-  return {
-    ...source,
-    taskId,
-    parentTaskId: source.taskId,
-  };
+  return deriveRetrySpec<OpsTaskSpec, OpsTaskRetrySpec>(source, {
+    parentId: source.taskId,
+    newId: taskId,
+    onInvalidId: ({ taskId: rejectedId, parentTaskId }) =>
+      new OpsTaskError('OPS_INVALID_TRANSITION', 'Retry taskId must be a new non-empty id', {
+        taskId: rejectedId,
+        parentTaskId,
+      }),
+    build: (src) => ({ ...src, taskId, parentTaskId: src.taskId }),
+  });
 }
 
 /** 终态任务不能原地恢复，重试必须创建一个新的 draft 任务。 */

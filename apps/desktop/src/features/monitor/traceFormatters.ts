@@ -1,4 +1,5 @@
-import type { RunTraceCategory, RunTraceEnvelope, RunTraceLifecycle } from '@nexus/protocol';
+import type { RunTraceCategory, RunTraceEnvelope, RunTraceLifecycle } from '@suanlizi/protocol';
+import { formatSuanliziErrorMessage } from '@suanlizi/protocol';
 
 export function traceIcon(category: RunTraceCategory): string {
   const icons: Record<RunTraceCategory, string> = {
@@ -113,7 +114,7 @@ export function traceSummary(trace: RunTraceEnvelope, zh: boolean): string {
       const parts: string[] = [];
       if (itemType) parts.push(itemType);
       if (status) parts.push(status);
-      return parts.join(' · ') || trace.name;
+      return parts.join(' · ') || (zh ? '消息条目' : 'Item');
     }
     case 'file': {
       const action = p.action as string | undefined;
@@ -142,8 +143,8 @@ export function traceSummary(trace: RunTraceEnvelope, zh: boolean): string {
       const code = p.code as string | undefined;
       const message = p.message as string | undefined;
       const parts: string[] = [];
-      if (code) parts.push(code);
-      if (message) parts.push(truncate(message, 60));
+      if (message) parts.push(truncate(formatSuanliziErrorMessage(undefined, message, zh ? 'zh' : 'en'), 80));
+      else if (code) parts.push(truncate(formatSuanliziErrorMessage(undefined, code, zh ? 'zh' : 'en'), 80));
       return parts.join(': ') || trace.name;
     }
     case 'checkpoint': {
@@ -256,7 +257,7 @@ export function traceSummary(trace: RunTraceEnvelope, zh: boolean): string {
 
 export function formatDuration(ms: number | undefined): string {
   if (ms == null || ms < 0) return '';
-  if (ms < 1000) return `${ms}ms`;
+  if (ms < 1000) return '<1s';
   if (ms < 60000) return `${(ms / 1000).toFixed(ms < 10000 ? 2 : 1)}s`;
   const mins = Math.floor(ms / 60000);
   const secs = Math.floor((ms % 60000) / 1000);

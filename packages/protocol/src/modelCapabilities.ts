@@ -42,7 +42,7 @@ const MODEL_CAPABILITY_RULES: ModelCapabilityRule[] = [
   {
     id: 'minimax-m3',
     displayName: 'MiniMax M3',
-    provider: /^minimax$/,
+    provider: /^(?:minimax|openai_compatible)$/,
     model: /^minimax-m3$/i,
     baseUrl: /minimax/i,
     contextTokens: 1_000_000,
@@ -57,7 +57,7 @@ const MODEL_CAPABILITY_RULES: ModelCapabilityRule[] = [
   {
     id: 'glm-4.7',
     displayName: 'GLM-4.7',
-    provider: /^(?:zhipu|glm|zai)$/,
+    provider: /^(?:zhipu|glm|zai|openai_compatible|giteeai)$/,
     model: /^glm-4\.7/i,
     baseUrl: /(?:bigmodel|z\.ai|gitee)/i,
     contextTokens: 200_000,
@@ -78,6 +78,31 @@ const MODEL_CAPABILITY_RULES: ModelCapabilityRule[] = [
     model: /^(?:qwen3-coder-(?:plus|flash)|qwen3\.[5-7]-plus|qwen2\.5-.+1m)$/i,
     baseUrl: /dashscope|aliyun|alibabacloud/i,
     contextTokens: 1_000_000,
+  },
+  {
+    id: 'gitee-qwen3.8-flash-1m',
+    displayName: 'Gitee Qwen3.8 Flash 1M',
+    provider: /^(?:openai_compatible|giteeai)$/,
+    model: /^qwen3.8-flash$/i,
+    baseUrl: /ai.gitee.com(?:\/v1)?/i,
+    contextTokens: 1_000_000,
+  },
+  {
+    id: 'gitee-qwen3.8-27b-256k',
+    displayName: 'Gitee Qwen3.8 27B 256K',
+    provider: /^(?:openai_compatible|giteeai)$/,
+    model: /^(?:qwen\/)?qwen3.8-27b(?::[^\s]+)?$/i,
+    baseUrl: /ai.gitee.com(?:\/v1)?/i,
+    contextTokens: 262_144,
+  },
+  {
+    id: 'gitee-deepseek-v4-1m',
+    displayName: 'Gitee DeepSeek V4 1M',
+    provider: /^(?:openai_compatible|giteeai)$/,
+    model: /^deepseek-v4-(?:pro|flash)(?:-\d{4,})?$/i,
+    baseUrl: /ai.gitee.com(?:\/v1)?/i,
+    contextTokens: 1_000_000,
+    maxOutputTokens: 384_000,
   },
   {
     id: 'qwen-256k',
@@ -157,14 +182,10 @@ function matchModelCapabilityRule(provider: string, model: string, baseUrl: stri
   const normalizedModel = model.trim();
   const normalizedBaseUrl = baseUrl.trim();
   return MODEL_CAPABILITY_RULES.find((rule) => {
-    const providerMatched = Boolean(rule.provider?.test(provider));
-    const modelMatched = Boolean(rule.model?.test(normalizedModel));
-    const baseMatched = Boolean(rule.baseUrl?.test(normalizedBaseUrl));
-    if (rule.model && modelMatched) return true;
-    if (rule.provider && providerMatched && !rule.model) return true;
-    if (rule.provider && providerMatched && rule.baseUrl && baseMatched) return true;
-    if (!rule.provider && rule.baseUrl && baseMatched) return true;
-    return Boolean(rule.baseUrl && baseMatched && rule.model && modelMatched);
+    if (rule.provider && !rule.provider.test(provider)) return false;
+    if (rule.model && !rule.model.test(normalizedModel)) return false;
+    if (rule.baseUrl && !rule.baseUrl.test(normalizedBaseUrl)) return false;
+    return Boolean(rule.provider || rule.model || rule.baseUrl);
   });
 }
 

@@ -50,8 +50,8 @@ import type {
   Observation,
   Postcondition,
   TaskBudget,
-} from '@nexus/protocol';
-import { normalizeAccessPolicyConfig } from '@nexus/protocol';
+} from '@suanlizi/protocol';
+import { normalizeAccessPolicyConfig } from '@suanlizi/protocol';
 import type { ActionEvidence, ActionResult, BrowserRuntimePort } from '../port.js';
 import { BrowserPolicyEngine } from '../policy.js';
 import { BrowserTaskMachine, BudgetExceededError, DEFAULT_TASK_BUDGET } from '../taskMachine.js';

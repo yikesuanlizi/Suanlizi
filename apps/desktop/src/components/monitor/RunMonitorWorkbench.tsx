@@ -1,14 +1,17 @@
 import { useEffect, useState, useCallback } from 'react';
-import type { RunTraceCategory, RunTraceEnvelope } from '@nexus/protocol';
+import type { RunTraceCategory, RunTraceEnvelope } from '@suanlizi/protocol';
 import type { RunRecord, ThreadWithRuns } from '../../shared/types.js';
 import type { TracePageInfo } from '../../features/monitor/runMonitorState.js';
 import { RunExplorer } from './RunExplorer.js';
 import { TraceTimeline } from './TraceTimeline.js';
 import { TraceInspector } from './TraceInspector.js';
+import { SystemMonitorWidget } from './SystemMonitorWidget.js';
+import type { SystemMonitorStatus } from '@suanlizi/protocol';
 
 export interface RunMonitorWorkbenchProps {
   open: boolean;
   loading: boolean;
+  loadError: string | null;
   runs: RunRecord[];
   traces: RunTraceEnvelope[];
   visibleTraces: RunTraceEnvelope[];
@@ -18,6 +21,7 @@ export interface RunMonitorWorkbenchProps {
   selectedEventId: string;
   traceFocusVersion: number;
   selectedTrace: RunTraceEnvelope | null;
+  systemMonitorStatus?: SystemMonitorStatus | null;
   categoryFilter: RunTraceCategory[];
   errorsOnly: boolean;
   tracePage: TracePageInfo | null;
@@ -45,6 +49,7 @@ export function RunMonitorWorkbench(props: RunMonitorWorkbenchProps) {
   const {
     open,
     loading,
+    loadError,
     runs,
     traces,
     visibleTraces,
@@ -54,6 +59,7 @@ export function RunMonitorWorkbench(props: RunMonitorWorkbenchProps) {
     selectedEventId,
     traceFocusVersion,
     selectedTrace,
+    systemMonitorStatus = null,
     categoryFilter,
     errorsOnly,
     tracePage,
@@ -179,6 +185,7 @@ export function RunMonitorWorkbench(props: RunMonitorWorkbenchProps) {
             )}
           </div>
           <div className="runMonitorHeader__right">
+            <SystemMonitorWidget status={systemMonitorStatus} zh={zh} />
             <button
               type="button"
               className="runMonitorCloseBtn"
@@ -224,6 +231,7 @@ export function RunMonitorWorkbench(props: RunMonitorWorkbenchProps) {
               selectedRunId={selectedRunId}
               expandedThreadId={expandedThreadId}
               loading={loading}
+              loadError={loadError}
               threadId={threadId}
               zh={zh}
               onSelectRun={onSelectRun}

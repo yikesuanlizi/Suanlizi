@@ -33,18 +33,18 @@ describe('Sandbox exec policy', () => {
 describe('Sandbox path boundaries', () => {
   it('does not treat sibling directories as inside workspace', () => {
     const sandbox = new Sandbox({
-      workspaceRoot: 'E:\\langchain\\Nexus',
+      workspaceRoot: 'E:\\langchain\\Suanlizi',
       level: 'workspace_write',
     });
 
-    expect(sandbox.canRead('E:\\langchain\\Nexus\\README.md')).toBe(true);
-    expect(sandbox.canRead('E:\\langchain\\Nexus2\\README.md')).toBe(false);
-    expect(sandbox.canWrite('E:\\langchain\\Nexus2\\README.md')).toBe(false);
+    expect(sandbox.canRead('E:\\langchain\\Suanlizi\\README.md')).toBe(true);
+    expect(sandbox.canRead('E:\\langchain\\Suanlizi2\\README.md')).toBe(false);
+    expect(sandbox.canWrite('E:\\langchain\\Suanlizi2\\README.md')).toBe(false);
   });
 
   it('allows explicit additional read and write roots with path-aware matching', () => {
     const sandbox = new Sandbox({
-      workspaceRoot: 'E:\\langchain\\Nexus',
+      workspaceRoot: 'E:\\langchain\\Suanlizi',
       level: 'workspace_write',
       allowedReadPaths: ['E:\\langchain\\dexin-agent'],
       allowedWritePaths: ['E:\\langchain\\generated'],

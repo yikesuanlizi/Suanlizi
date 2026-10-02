@@ -14,6 +14,7 @@
  */
 
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { terminateProcessTree } from '@suanlizi/tools';
 
 const DEFAULT_SERVE_PORT = 4747;
 const HEALTH_CHECK_TIMEOUT_MS = 3_000;
@@ -144,11 +145,7 @@ class GitNexusServiceImpl {
    */
   async stop(): Promise<void> {
     if (this.serveProcess) {
-      try {
-        this.serveProcess.kill();
-      } catch {
-        // ignore
-      }
+      terminateProcessTree(this.serveProcess);
       this.serveProcess = null;
     }
     this.serveUrl = null;

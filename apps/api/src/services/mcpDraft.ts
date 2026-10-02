@@ -178,7 +178,7 @@ async function fetchMcpSourceContent(url: string): Promise<string> {
       const response = await fetch(candidate, {
         headers: {
           accept: 'text/plain,text/markdown,text/html,application/json',
-          'user-agent': 'Nexus/0.1',
+          'user-agent': 'Suanlizi/0.1',
         },
       });
       if (!response.ok) {

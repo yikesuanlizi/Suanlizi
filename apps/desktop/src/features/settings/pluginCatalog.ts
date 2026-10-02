@@ -134,7 +134,7 @@ export const recommendedMcps: RecommendedMcp[] = [
     titleEn: 'Filesystem MCP',
     descriptionZh: '受控读取项目文件和目录结构。',
     descriptionEn: 'Controlled access to project files and directory trees.',
-    draft: { name: 'filesystem', command: 'npx', args: '@modelcontextprotocol/server-filesystem@latest E:\\langchain\\Nexus', enabled: false },
+    draft: { name: 'filesystem', command: 'npx', args: '@modelcontextprotocol/server-filesystem@latest E:\\langchain\\Suanlizi', enabled: false },
   },
   {
     type: 'mcp',

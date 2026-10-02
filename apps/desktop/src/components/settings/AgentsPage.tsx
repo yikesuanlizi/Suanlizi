@@ -2,6 +2,7 @@
 // 与 web 版差异：含 desktopCapabilities、桥接说明、退登按钮、weixinBridgeDiagnostics
 // 钉钉/dws CLI 的 patch 直接调用 updateXxxConfig 完成「patch + 立即 save」
 import type React from 'react';
+import { formatSuanliziErrorMessage } from '@suanlizi/protocol';
 import type { Locale } from '../../config/config.js';
 import type { BotConfig, BotStatus } from '../../shared/types.js';
 import type { DesktopCapabilities } from '../../api/desktopBridge.js';
@@ -73,7 +74,7 @@ export function weixinBridgeDiagnostics(status: BotStatus, locale: Locale): Arra
   ];
   if (activeMonitor.lastError) {
     result.push({
-      label: `${locale === 'zh' ? '最后错误' : 'Last error'}: ${activeMonitor.lastError}`,
+      label: `${locale === 'zh' ? '最后错误' : 'Last error'}: ${formatSuanliziErrorMessage(undefined, activeMonitor.lastError, locale)}`,
       tone: 'bad' as const,
     });
   }

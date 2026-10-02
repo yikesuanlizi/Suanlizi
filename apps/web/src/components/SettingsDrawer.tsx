@@ -1,6 +1,6 @@
 // 设置面板入口薄壳：注册 Shell 与各 page；状态/handler 通过 useSettingsController 管理
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import type { AccessPolicyConfig } from '@nexus/protocol';
+import { formatSuanliziErrorMessage, type AccessPolicyConfig } from '@suanlizi/protocol';
 import type { Locale, RunConfig } from '../config/config.js';
 import { emptyMcp } from '../config/defaults.js';
 import type { RecommendedMcp, RecommendedSkill } from '../features/settings/pluginCatalog.js';
@@ -100,6 +100,7 @@ export function SettingsDrawer({
   requestModelPresetName,
   saveModelPreset,
   deleteModelPreset,
+  deleteCustomProvider,
   saveSkillDraft,
   saveProviderKey,
   saveProviderEnvVar,
@@ -143,8 +144,9 @@ export function SettingsDrawer({
   refreshBotStatus: () => void;
   refreshProviders: () => Promise<void>;
   requestModelPresetName: (defaultName: string) => Promise<string | null>;
-  saveModelPreset: (name: string, presetConfig: import('../shared/types.js').ModelPresetConfig, presetId?: string, status?: 'draft' | 'published') => Promise<void>;
+  saveModelPreset: (name: string, presetConfig: import('../shared/types.js').ModelPresetConfig, presetId?: string) => Promise<import('../shared/types.js').ModelPreset | string | void>;
   deleteModelPreset: (presetId: string) => Promise<void>;
+  deleteCustomProvider: (providerId: string) => Promise<void>;
   saveSkillDraft: (draft: import('../shared/types.js').SkillDraft) => Promise<void>;
   saveBotConfig: (config: BotConfig) => Promise<void>;
   saveProviderKey: (providerId: string, apiKey: string) => Promise<void>;
@@ -355,7 +357,7 @@ export function SettingsDrawer({
       }
       setAccessPolicyNotice(locale === 'zh' ? '权限规则已保存。' : 'Access policy saved.');
     } catch (error) {
-      setAccessPolicyNotice(error instanceof Error ? error.message : String(error));
+      setAccessPolicyNotice(formatSuanliziErrorMessage(undefined, error instanceof Error ? error.message : String(error), locale));
     } finally {
       setAccessPolicySaving(false);
     }
@@ -456,7 +458,7 @@ export function SettingsDrawer({
       await refreshSkills({ forceReload: true });
       setPluginNotice(locale === 'zh' ? `已安装 ${item.name}` : `Installed ${item.name}`);
     } catch (error) {
-      setPluginNotice(error instanceof Error ? error.message : String(error));
+      setPluginNotice(formatSuanliziErrorMessage(undefined, error instanceof Error ? error.message : String(error), locale));
     }
   }
 
@@ -513,7 +515,7 @@ export function SettingsDrawer({
       setPluginNotice(locale === 'zh' ? 'Firecrawl 已开启。' : 'Firecrawl enabled.');
       closeFirecrawlDialog();
     } catch (error) {
-      setPluginNotice(error instanceof Error ? error.message : String(error));
+      setPluginNotice(formatSuanliziErrorMessage(undefined, error instanceof Error ? error.message : String(error), locale));
     }
   }
 
@@ -524,7 +526,7 @@ export function SettingsDrawer({
       setPluginNotice(locale === 'zh' ? '已清除 Firecrawl 密钥。' : 'Firecrawl key cleared.');
       closeFirecrawlDialog();
     } catch (error) {
-      setPluginNotice(error instanceof Error ? error.message : String(error));
+      setPluginNotice(formatSuanliziErrorMessage(undefined, error instanceof Error ? error.message : String(error), locale));
     }
   }
 
@@ -595,6 +597,9 @@ export function SettingsDrawer({
             keyStates={keyStates}
             modelPresets={modelPresets}
             deleteModelPreset={deleteModelPreset}
+            deleteCustomProvider={deleteCustomProvider}
+            listProviderIconTabs={controller.listProviderIconTabs}
+            saveProviderIcon={controller.saveProviderIcon}
             apiKeyDraft={controller.apiKeyDraft}
             setApiKeyDraft={controller.setApiKeyDraft}
             modelKeySource={controller.modelKeySource}
@@ -602,6 +607,7 @@ export function SettingsDrawer({
             showSavedModelKey={controller.showSavedModelKey}
             setShowSavedModelKey={controller.setShowSavedModelKey}
             modelKeyNotice={controller.modelKeyNotice}
+            setModelKeyNotice={controller.setModelKeyNotice}
             hasSavedModelKey={controller.hasSavedModelKey}
             hasConfiguredModelEnvVar={controller.hasConfiguredModelEnvVar}
             modelEnvVarDraft={controller.modelEnvVarDraft}
@@ -611,13 +617,16 @@ export function SettingsDrawer({
             setCustomProviderName={controller.setCustomProviderName}
             selectModelProviderDraft={controller.selectModelProviderDraft}
             loadModelPresetIntoDraft={controller.loadModelPresetIntoDraft}
+
+            selectPreset={controller.selectPreset}
+
+
+            startNewModelPreset={controller.startNewModelPreset}
             handleSaveModelConfig={controller.handleSaveModelConfig}
             handleSetCurrentModelConfig={controller.handleSetCurrentModelConfig}
             onReset={controller.resetModelDraft}
             markDirty={controller.markDirty}
             dirtyFields={controller.dirtyFields}
-            registerCloseGuard={(handler) => { modelCloseGuardRef.current = handler; }}
-            onForceClose={() => setOpen(false)}
           />
         );
       case 'appearance':
@@ -671,7 +680,7 @@ export function SettingsDrawer({
             setConfig={setConfig}
             markDirty={controller.markDirty}
             dirtyFields={controller.dirtyFields}
-            onSave={controller.handleSave}
+            onSave={controller.handleSaveMonitorSettings}
           />
         );
       case 'runtime':
@@ -681,7 +690,7 @@ export function SettingsDrawer({
             config={config}
             setConfig={setConfig}
             markDirty={controller.markDirty}
-            onSave={controller.handleSave}
+            onSave={() => void controller.handleSaveRuntimeSettings()}
           />
         );
       case 'ssh':

@@ -118,7 +118,7 @@ export class DingtalkClient {
 
   async sendMarkdown(options: DingtalkSendTextOptions): Promise<DingtalkSendResult> {
     return this.sendMessage('sampleMarkdown', {
-      title: 'Nexus',
+      title: 'Suanlizi',
       text: adaptMarkdownForDingtalk(options.text),
     }, options);
   }
@@ -130,7 +130,7 @@ export class DingtalkClient {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
-      const outTrackId = options.outTrackId ?? `nexus_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const outTrackId = options.outTrackId ?? `suanlizi_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       const body: Record<string, unknown> = {
         cardTemplateId: options.cardTemplateId,
         outTrackId,

@@ -1,29 +1,31 @@
 import { randomUUID } from 'node:crypto';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type { Locale } from '@nexus/i18n';
+import type { Locale } from '@suanlizi/i18n';
 import {
   DEFAULT_EPISODE_MEMORY_SETTINGS,
   DEFAULT_MEMORY_SETTINGS,
   normalizeEpisodeMemorySettings,
   normalizeMemorySettings,
-} from '@nexus/memory';
+} from '@suanlizi/memory';
+import { normalizeCompactionThreshold } from '@suanlizi/runtime';
 import {
   accessPolicyConfigSchema,
   modelPresetConfigFrom,
   normalizeAccessPolicyConfig,
+  normalizeReasoningEffort,
   redactAccessPolicyForPublicConfig,
   type AccessPolicyConfig,
   type ModelPresetConfig,
-  type ModelPresetStatus,
   type PermissionPresetId,
   type ReasoningEffort,
   type RunProfile,
   type ThreadId,
   type ThreadRunConfigOverrides,
   type WebSearchMode,
-} from '@nexus/protocol';
-import type { ThreadStore } from '@nexus/storage';
+} from '@suanlizi/protocol';
+import type { ThreadStore } from '@suanlizi/storage';
+import { resolveAppDataRoot } from './appData.js';
 import { MCP_SERVERS_KEY, normalizeMcpServers, type McpServerConfig } from './mcp.js';
 
 // 网页提供者模式：原生 fetch | firecrawl — Chinese: web provider mode
@@ -32,7 +34,7 @@ export type WebProviderMode = 'native_fetch' | 'firecrawl';
 export type SecretSource = 'config' | 'env';
 // 界面主题：深色 | 浅色 | 跟随系统 — Chinese: UI theme mode
 export type ThemeMode = 'dark' | 'light' | 'system';
-export type { PermissionPresetId, ReasoningEffort, RunProfile, WebSearchMode } from '@nexus/protocol';
+export type { PermissionPresetId, ReasoningEffort, RunProfile, WebSearchMode } from '@suanlizi/protocol';
 
 // Codex 风格的子 Agent 角色档案（以 agent_type 为键） — Chinese: agent role profiles
 export type AgentRoleProfiles = Record<string, {
@@ -92,9 +94,15 @@ export interface AgentRunConfig {
   /** Optional explicit max output token override for the selected model. */
   /** 中文：当前模型最大输出 token 的显式覆盖；为空时按 provider/model 自动推导 */
   modelMaxOutputTokens?: number;
+  /** 模型单次响应超时（秒）；覆盖 model-gateway 的默认 120 秒。 */
+  modelTimeoutSeconds?: number;
+  /** 单次工具执行超时（秒）；覆盖内置工具默认值。 */
+  toolTimeoutSeconds?: number;
   /** Runtime trade-off profile: cache hit stability or long-running traceability. */
   /** 中文：运行时折中方案 — 缓存命中稳定性或长期可追溯 */
   runProfile: RunProfile;
+  /** 上下文压缩阈值：占模型上下文窗口的比例（0.3 ~ 0.95）。 */
+  compactionThreshold?: number;
   /** Codex-style subagent role profiles keyed by agent_type. */
   /** 中文：以 agent_type 为键的 Codex 风格子 Agent 角色档案 */
   agentRoles?: AgentRoleProfiles;
@@ -157,7 +165,6 @@ export interface ModelPreset {
   id: string;
   name: string;
   config: ModelPresetConfig;
-  status?: ModelPresetStatus;
   createdAt: string;
   updatedAt: string;
 }
@@ -168,16 +175,36 @@ export const WEB_PROVIDER_SECRETS_KEY = 'webProvider.secrets.v1';
 export const ACCESS_POLICY_KEY = 'accessPolicy.v1';
 export const THREAD_CONFIG_KEY_PREFIX = 'thread-config:';
 export const THREAD_CONFIG_OVERRIDES_KEY_PREFIX = 'thread-config-overrides:';
+/** Metadata that distinguishes explicit thread model limits from legacy snapshots. */
+export const THREAD_CONFIG_OVERRIDES_META_KEY_PREFIX = 'thread-config-overrides-meta:';
 export const THREAD_ACCESS_POLICY_KEY_PREFIX = 'thread-access-policy:';
 // A2A 协议配置存储 key — Chinese: A2A protocol config storage key
-export const A2A_CONFIG_KEY = 'nexus.a2aConfig';
+export const A2A_CONFIG_KEY = 'suanlizi.a2aConfig';
 
 // 当前对话可以覆盖的运行选择。模型字段之外的选择必须跟随线程保存，
 // 否则切换线程时会被全局配置或线程旧快照覆盖。
 export type ThreadConfigOverrides = Pick<
   ThreadRunConfigOverrides,
-  'provider' | 'model' | 'baseUrl' | 'permissions' | 'reasoningEffort' | 'runProfile'
+  'provider' | 'model' | 'baseUrl' | 'modelContextTokens' | 'modelMaxOutputTokens' | 'permissions' | 'reasoningEffort' | 'runProfile' | 'compactionThreshold'
 >;
+
+// modelContextTokens/modelMaxOutputTokens are valid only in the dedicated
+// thread override store. Tags are also written by ordinary turn requests, so
+// never treat a tagged value as an explicit model-window choice.
+const THREAD_TAG_OVERRIDE_KEYS: Array<keyof ThreadConfigOverrides> = [
+  'provider',
+  'model',
+  'baseUrl',
+  'permissions',
+  'reasoningEffort',
+  'runProfile',
+  'compactionThreshold',
+];
+
+type ThreadConfigOverrideMeta = {
+  modelContextTokens?: true;
+  modelMaxOutputTokens?: true;
+};
 
 export interface WebProviderSecrets {
   firecrawlApiKey?: string;
@@ -266,8 +293,8 @@ export const defaultConfig: AgentRunConfig = {
     persistentRules: [],
     temporaryGrants: [],
   },
-  dataDir: path.join(process.cwd(), '.nexus'),
-  skillsRoot: path.join(os.homedir(), '.nexus', 'skills'),
+  dataDir: resolveAppDataRoot(),
+  skillsRoot: path.join(os.homedir(), '.suanlizi', 'skills'),
   webSearchMode: 'auto',
   webProvider: 'native_fetch',
   webProviderKeySource: 'config',
@@ -277,7 +304,10 @@ export const defaultConfig: AgentRunConfig = {
   maxConcurrency: 4,
   maxParallelReadonlyTools: 2,
   maxSubagentDepth: 1,
+  modelTimeoutSeconds: 120,
+  toolTimeoutSeconds: 120,
   runProfile: 'runtime_os',
+  compactionThreshold: 0.8,
   themeMode: 'light',
   agentRoles: {},
   memoryEnabled: DEFAULT_MEMORY_SETTINGS.memoryEnabled,
@@ -329,9 +359,7 @@ export function resolveConfig(patch: Partial<AgentRunConfig> = {}): AgentRunConf
   if (!['config', 'env'].includes(merged.webProviderKeySource)) {
     merged.webProviderKeySource = defaultConfig.webProviderKeySource;
   }
-  if (!['low', 'medium', 'high'].includes(merged.reasoningEffort)) {
-    merged.reasoningEffort = defaultConfig.reasoningEffort;
-  }
+  merged.reasoningEffort = normalizeReasoningEffort(merged.reasoningEffort) ?? defaultConfig.reasoningEffort;
   const maxIterations = Number(merged.maxIterations);
   merged.maxIterations = Number.isFinite(maxIterations)
     ? Math.max(1, Math.min(1000, Math.floor(maxIterations)))
@@ -351,6 +379,14 @@ export function resolveConfig(patch: Partial<AgentRunConfig> = {}): AgentRunConf
     : defaultConfig.maxSubagentDepth;
   normalizeOptionalPositiveIntegerField(merged, 'modelContextTokens');
   normalizeOptionalPositiveIntegerField(merged, 'modelMaxOutputTokens');
+  const modelTimeoutSeconds = Number(merged.modelTimeoutSeconds);
+  merged.modelTimeoutSeconds = Number.isFinite(modelTimeoutSeconds)
+    ? Math.max(10, Math.min(3600, Math.floor(modelTimeoutSeconds)))
+    : defaultConfig.modelTimeoutSeconds;
+  const toolTimeoutSeconds = Number(merged.toolTimeoutSeconds);
+  merged.toolTimeoutSeconds = Number.isFinite(toolTimeoutSeconds)
+    ? Math.max(10, Math.min(600, Math.floor(toolTimeoutSeconds)))
+    : defaultConfig.toolTimeoutSeconds;
   // harness 不再是有效 RunProfile，旧值自动降级为 runtime_os
   if ((merged.runProfile as string) === 'harness') {
     merged.runProfile = 'runtime_os';
@@ -358,6 +394,8 @@ export function resolveConfig(patch: Partial<AgentRunConfig> = {}): AgentRunConf
   if (!['cache_first', 'runtime_os'].includes(merged.runProfile)) {
     merged.runProfile = defaultConfig.runProfile;
   }
+  // 压缩阈值：越界值收敛到允许区间，非法值回退默认。
+  merged.compactionThreshold = normalizeCompactionThreshold(merged.compactionThreshold);
   if (!['dark', 'light', 'system'].includes(merged.themeMode)) {
     merged.themeMode = defaultConfig.themeMode;
   }
@@ -532,8 +570,11 @@ export function createConfigRepository(store: ThreadStore) {
     }
   }
 
-  function modelPresetName(config: ModelPresetConfig): string {
-    return [config.provider, config.model].filter(Boolean).join(' / ') || 'Model preset';
+  // 预设名只作为兜底：优先使用客户端传入的真实厂商显示名，
+  // 绝不把 openai_compatible 这类协议 id 暴露给用户。
+  function modelPresetName(config: ModelPresetConfig, fallbackName?: string): string {
+    if (fallbackName?.trim()) return fallbackName.trim();
+    return config.model.trim() || 'Model preset';
   }
 
   function normalizePersistentAccessPolicy(input: unknown): AccessPolicyConfig {
@@ -553,19 +594,16 @@ export function createConfigRepository(store: ThreadStore) {
     id?: string;
     name?: string;
     config?: Record<string, unknown>;
-    status?: ModelPresetStatus;
   }): Promise<{ preset: ModelPreset; presets: ModelPreset[] }> {
     const safeConfig = modelPresetConfigFrom(input.config ?? {});
     const presets = await listModelPresets();
     const id = input.id?.trim() || randomUUID();
     const existing = presets.find((preset) => preset.id === id);
     const now = new Date().toISOString();
-    const status: ModelPresetStatus = input.status === 'draft' ? 'draft' : (input.status === 'published' ? 'published' : (existing?.status ?? 'published'));
     const preset: ModelPreset = {
       id,
       name: input.name?.trim() || existing?.name || modelPresetName(safeConfig),
       config: safeConfig,
-      status,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };
@@ -625,7 +663,16 @@ export function createConfigRepository(store: ThreadStore) {
     if (!raw) return null;
     try {
       const { skillsRoot: _skillsRoot, ...config } = JSON.parse(raw) as Partial<AgentRunConfig>;
-      return stripThreadOnlyGlobalAppearance(config);
+      const sanitized = stripThreadOnlyGlobalAppearance(config);
+      // Older builds persisted the entire effective RunConfig in thread tags.
+      // Ignore that legacy snapshot so stale model limits cannot override the
+      // current global configuration. New snapshots contain only explicit
+      // thread override fields.
+      // UI-only appearance fields are removed before this check so a legacy
+      // snapshot containing theme/avatar metadata can still retain legitimate
+      // model overrides.
+      if (Object.keys(sanitized).some((key) => !THREAD_TAG_OVERRIDE_KEYS.includes(key as keyof ThreadConfigOverrides))) return null;
+      return sanitized;
     } catch {
       return null;
     }
@@ -652,10 +699,21 @@ export function createConfigRepository(store: ThreadStore) {
     const base = await getDefaultRunConfig();
     const globalAccessPolicy = await getGlobalAccessPolicy();
     const threadAccessPolicy = await getThreadAccessPolicy(threadId);
+    // Ops/task threads carry their selected workspace on ThreadMeta. Keep that
+    // metadata as the runtime default unless an explicit thread access policy
+    // has a different root; otherwise a newly created task silently falls back
+    // to the global workspace and its harness operates on the wrong repository.
+    const threadWorkspaceRoot = !isPlainChatThread(thread) ? thread?.workspaceRoot?.trim() : undefined;
+    const workspaceRoot = path.resolve(
+      threadAccessPolicy?.workspaceRoot
+        || threadWorkspaceRoot
+        || globalAccessPolicy.workspaceRoot
+        || base.workspaceRoot,
+    );
     const accessPolicy = normalizePersistentAccessPolicy({
       ...(threadAccessPolicy ?? globalAccessPolicy),
       mode: threadAccessPolicy?.mode ?? globalAccessPolicy.mode,
-      workspaceRoot: threadAccessPolicy?.workspaceRoot || globalAccessPolicy.workspaceRoot || base.workspaceRoot,
+      workspaceRoot,
       persistentRules: [
         ...globalAccessPolicy.persistentRules,
         ...(threadAccessPolicy?.persistentRules ?? []),
@@ -663,7 +721,7 @@ export function createConfigRepository(store: ThreadStore) {
       temporaryGrants: [],
     });
     return applyThreadKindRuntimeWorkspace(
-      resolveConfig({ ...base, ...(threadConfig ?? {}), ...overrides, accessPolicy }),
+      resolveConfig({ ...base, ...(threadConfig ?? {}), ...overrides, workspaceRoot, accessPolicy }),
       thread,
     );
   }
@@ -678,20 +736,39 @@ export function createConfigRepository(store: ThreadStore) {
     if (configPatch.accessPolicy) {
       await saveThreadAccessPolicy(threadId, configPatch.accessPolicy);
     }
-    const current = { ...await getDefaultRunConfig(), ...(readThreadRunConfig(thread) ?? {}) };
+    const base = await getDefaultRunConfig();
+    const current = { ...base, ...(readThreadRunConfig(thread) ?? {}) };
     const safePatch = isPlainChatThread(thread) && configPatch.workspaceRoot === ''
       ? { ...configPatch, workspaceRoot: current.workspaceRoot }
       : configPatch;
     const next = applyThreadKindRuntimeWorkspace(resolveConfig({ ...current, ...safePatch }), thread);
-    const { skillsRoot: _skillsRoot, accessPolicy: _accessPolicy, ...threadConfig } = publicRunConfig(next);
+    const publicConfig = publicRunConfig(next);
+    const threadConfig: Partial<ThreadConfigOverrides> = {};
+    for (const key of THREAD_TAG_OVERRIDE_KEYS) {
+      const value = publicConfig[key];
+      if (value !== undefined && value !== base[key]) threadConfig[key] = value as never;
+    }
     await store.updateThreadMetadata(threadId, {
-      tags: { ...thread.tags, runConfig: JSON.stringify(stripThreadOnlyGlobalAppearance(threadConfig)) },
+      tags: { ...thread.tags, runConfig: JSON.stringify(threadConfig) },
     });
     return next;
   }
 
   function threadConfigOverridesKey(threadId: string): string {
     return `${THREAD_CONFIG_OVERRIDES_KEY_PREFIX}${threadId}`;
+  }
+
+  function threadConfigOverridesMetaKey(threadId: string): string {
+    return `${THREAD_CONFIG_OVERRIDES_META_KEY_PREFIX}${threadId}`;
+  }
+
+  function threadConfigOverrideMetaFrom(input: unknown): ThreadConfigOverrideMeta {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
+    const value = input as Record<string, unknown>;
+    return {
+      ...(value.modelContextTokens === true ? { modelContextTokens: true } : {}),
+      ...(value.modelMaxOutputTokens === true ? { modelMaxOutputTokens: true } : {}),
+    };
   }
 
   function threadAccessPolicyKey(threadId: string): string {
@@ -703,21 +780,44 @@ export function createConfigRepository(store: ThreadStore) {
     if (typeof input.provider === 'string') result.provider = input.provider.trim();
     if (typeof input.model === 'string') result.model = input.model.trim();
     if (typeof input.baseUrl === 'string') result.baseUrl = input.baseUrl.trim();
+    if (typeof input.modelContextTokens === 'number' && Number.isInteger(input.modelContextTokens) && input.modelContextTokens > 0) {
+      result.modelContextTokens = input.modelContextTokens;
+    }
+    if (typeof input.modelMaxOutputTokens === 'number' && Number.isInteger(input.modelMaxOutputTokens) && input.modelMaxOutputTokens > 0) {
+      result.modelMaxOutputTokens = input.modelMaxOutputTokens;
+    }
     if (input.permissions === 'read_only' || input.permissions === 'workspace' || input.permissions === 'danger_full_access') {
       result.permissions = input.permissions;
     }
-    if (input.reasoningEffort === 'low' || input.reasoningEffort === 'medium' || input.reasoningEffort === 'high') {
-      result.reasoningEffort = input.reasoningEffort;
-    }
+    const effort = normalizeReasoningEffort(input.reasoningEffort);
+    if (effort) result.reasoningEffort = effort;
     if (input.runProfile === 'cache_first' || input.runProfile === 'runtime_os') {
       result.runProfile = input.runProfile;
+    }
+    if (typeof input.compactionThreshold === 'number') {
+      result.compactionThreshold = normalizeCompactionThreshold(input.compactionThreshold);
     }
     return result;
   }
 
   async function getThreadConfigOverrides(threadId: string): Promise<ThreadConfigOverrides> {
     const stored = await store.getSetting<Record<string, unknown>>(threadConfigOverridesKey(threadId));
-    return stored ? threadConfigOverridesFrom(stored) : {};
+    if (!stored) return {};
+    const result = threadConfigOverridesFrom(stored);
+    const metadata = threadConfigOverrideMetaFrom(await store.getSetting<unknown>(threadConfigOverridesMetaKey(threadId)));
+    let migrated = false;
+    // Before the explicit marker existed, context/output values were written
+    // by every turn request. They must not override the current global model.
+    for (const key of ['modelContextTokens', 'modelMaxOutputTokens'] as const) {
+      if (result[key] !== undefined && metadata[key] !== true) {
+        delete result[key];
+        migrated = true;
+      }
+    }
+    if (migrated) {
+      await store.setSetting(threadConfigOverridesKey(threadId), result);
+    }
+    return result;
   }
 
   async function updateThreadConfigOverrides(
@@ -729,7 +829,18 @@ export function createConfigRepository(store: ThreadStore) {
       const current = await getThreadConfigOverrides(threadId);
       const safe = threadConfigOverridesFrom(input);
       const merged = threadConfigOverridesFrom({ ...current, ...safe });
+      const metadata = threadConfigOverrideMetaFrom(await store.getSetting<unknown>(threadConfigOverridesMetaKey(threadId)));
+      for (const key of ['modelContextTokens', 'modelMaxOutputTokens'] as const) {
+        if (typeof safe[key] === 'number') metadata[key] = true;
+      }
+      for (const key of ['modelContextTokens', 'modelMaxOutputTokens'] as const) {
+        if (Object.hasOwn(input, key) && input[key] === null) {
+          delete merged[key];
+          delete metadata[key];
+        }
+      }
       await store.setSetting(threadConfigOverridesKey(threadId), merged);
+      await store.setSetting(threadConfigOverridesMetaKey(threadId), metadata);
       return merged;
     });
     threadConfigOverrideQueues.set(threadId, operation);

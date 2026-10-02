@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { ThreadId, ThreadItem, ThreadMeta, TurnMeta } from '@nexus/protocol';
-import type { RunEvent, RunRecord, ThreadStore } from '@nexus/storage';
+import type { ThreadId, ThreadItem, ThreadMeta, TurnMeta } from '@suanlizi/protocol';
+import type { RunEvent, RunRecord, ThreadStore } from '@suanlizi/storage';
 import {
   compileWorkflowBlueprint,
   createDefaultWorkflowComponentRegistry,
@@ -26,7 +26,7 @@ import {
   type WorkflowRuntimeAction,
   type WorkflowSnapshot,
   type WorkflowNodeExecutors,
-} from '@nexus/runtime';
+} from '@suanlizi/runtime';
 import { readJson, sendError, sendJson } from '../shared/http.js';
 
 // 线程工作流标签（用于 thread.tags 中识别工作流）和存储键

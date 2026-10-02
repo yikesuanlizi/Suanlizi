@@ -10,7 +10,7 @@
 // storageState 存储层保留真实 cookie 值，脱敏发生在展示层（文档 4.4/4.6）。
 // — English: pure state-machine and sanitization logic only — no Playwright/DOM;
 //   the storage layer keeps real cookie values, redaction happens at the UI layer.
-import type { PageGraph } from '@nexus/protocol';
+import type { PageGraph } from '@suanlizi/protocol';
 
 // ─── 会话状态与认证状态 ────────────────────────────────────────────────────────
 // — English: session state and auth status

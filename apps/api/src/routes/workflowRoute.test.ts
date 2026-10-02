@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { ThreadId, ThreadItem, ThreadMeta, TurnMeta } from '@nexus/protocol';
-import type { RunEvent, RunRecord, ThreadStore } from '@nexus/storage';
+import type { ThreadId, ThreadItem, ThreadMeta, TurnMeta } from '@suanlizi/protocol';
+import type { RunEvent, RunRecord, ThreadStore } from '@suanlizi/storage';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
 import {
@@ -9,7 +9,7 @@ import {
   createWorkflowDefinitionFromGoal,
   createWorkflowRunFromDefinition,
   type WorkflowSnapshot,
-} from '@nexus/runtime';
+} from '@suanlizi/runtime';
 import {
   THREAD_WORKFLOW_TAG,
   appendWorkflowDraftTranscript,
@@ -127,7 +127,7 @@ describe('workflow route helpers', () => {
     const store = new FakeStore();
     store.threads.set('t1', thread('t1', { keep: 'yes' }));
     const registry = createDefaultWorkflowComponentRegistry();
-    const definition = createWorkflowDefinitionFromGoal('Release Nexus', registry, new Date('2026-06-15T00:00:00.000Z'));
+    const definition = createWorkflowDefinitionFromGoal('Release Suanlizi', registry, new Date('2026-06-15T00:00:00.000Z'));
     const snapshot: WorkflowSnapshot = {
       definition,
       run: createWorkflowRunFromDefinition(definition, new Date('2026-06-15T00:00:01.000Z'), registry),
@@ -136,7 +136,7 @@ describe('workflow route helpers', () => {
     const saved = await saveThreadWorkflowSnapshot(store as unknown as ThreadStore, 't1', snapshot, registry);
     expect(saved?.tags?.keep).toBe('yes');
     expect(saved?.tags?.[THREAD_WORKFLOW_TAG]).toContain('"definition"');
-    expect(readThreadWorkflowSnapshot(saved!, registry)?.definition.goal).toBe('Release Nexus');
+    expect(readThreadWorkflowSnapshot(saved!, registry)?.definition.goal).toBe('Release Suanlizi');
   });
 
   it('persists a workflow checkpoint item whenever a workflow snapshot is saved', async () => {

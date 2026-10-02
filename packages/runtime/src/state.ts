@@ -1,9 +1,9 @@
-import type { AgentDecisionRequest, ThreadId, TurnId, ItemId, Checkpoint } from '@nexus/protocol';
+import type { AgentDecisionRequest, ThreadId, TurnId, ItemId, Checkpoint } from '@suanlizi/protocol';
 
 // 方便外部再导出
 // Re-export for convenience
 export type { Checkpoint };
-export type { CheckpointLine } from '@nexus/protocol';
+export type { CheckpointLine } from '@suanlizi/protocol';
 
 // ─── TurnSummary ────────────────────────────────────────────────────────────
 /**

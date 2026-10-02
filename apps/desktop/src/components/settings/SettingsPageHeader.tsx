@@ -3,6 +3,8 @@ import React from 'react';
 
 export interface SettingsPageHeaderAction {
   label: string;
+  /** 图标按钮：提供后只渲染图标，label 仅用于 title/aria-label。 */
+  icon?: React.ReactNode;
   title?: string;
   primary?: boolean;
   danger?: boolean;
@@ -35,12 +37,14 @@ export function SettingsPageHeader({ eyebrow, title, description, actions }: Set
                 'settingsPageHeaderAction',
                 action.primary ? 'primary' : 'ghost',
                 action.danger ? 'danger' : '',
+                action.icon ? 'iconOnly' : '',
               ].filter(Boolean).join(' ')}
-              title={action.title}
+              title={action.title ?? action.label}
+              aria-label={action.label}
               disabled={action.disabled}
               onClick={action.onClick}
             >
-              {action.label}
+              {action.icon ?? action.label}
             </button>
           ))}
         </div>

@@ -37,8 +37,9 @@ export function TaskRuntimeMonitorPanel({
       <div className="taskRuntimeBody">
         {runtime ? (
           <div className="taskRuntimePhase">
+            { /* 不再显示内部 runProfile（runtime_os 之类），改显示阶段状态。 */ }
             <strong>{phaseLabel(runtime.phase, zh)}</strong>
-            <span>{runtime.runProfile}</span>
+            <span>{statusLabel(runtime.status, zh)}</span>
           </div>
         ) : <p className="taskRuntimeEmpty">{zh ? '暂无任务事件' : 'No task events'}</p>}
 

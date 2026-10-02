@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { ThreadMeta } from '@nexus/protocol';
-import type { ThreadStore } from '@nexus/storage';
+import type { ThreadMeta } from '@suanlizi/protocol';
+import type { ThreadStore } from '@suanlizi/storage';
 import { BotGateway } from './index.js';
 
 class MemoryBotStore implements Partial<ThreadStore> {
@@ -25,7 +25,7 @@ class MemoryBotStore implements Partial<ThreadStore> {
 }
 
 describe('BotGateway', () => {
-  it('creates one Nexus thread per WeChat dm session and sends the final reply', async () => {
+  it('creates one Suanlizi thread per WeChat dm session and sends the final reply', async () => {
     const store = new MemoryBotStore();
     const send = vi.fn(async () => {});
     const runTurn = vi.fn(async () => ({ text: '处理完成' }));
@@ -166,7 +166,7 @@ describe('BotGateway', () => {
     });
   });
 
-  it('relinks an existing Weixin session to the preferred Nexus thread', async () => {
+  it('relinks an existing Weixin session to the preferred Suanlizi thread', async () => {
     const store = new MemoryBotStore();
     store.threads.set('thread_current', {
       threadId: 'thread_current',
@@ -277,7 +277,7 @@ describe('BotGateway', () => {
     });
   });
 
-  it('does not reuse a Weixin session whose Nexus thread was deleted', async () => {
+  it('does not reuse a Weixin session whose Suanlizi thread was deleted', async () => {
     const store = new MemoryBotStore();
     store.settings.set('bot.sessions.v1', {
       sessions: [{

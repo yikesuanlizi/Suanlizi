@@ -2,7 +2,7 @@
 // — English: browser task state machine tests — folding, illegal transitions,
 //   budget, cancellation, checkpoint/restore, consecutive failures, human takeover
 import { describe, expect, it } from 'vitest';
-import type { ActionRecord, BrowserTaskEvent, HumanRequest, PlanStep } from '@nexus/protocol';
+import type { ActionRecord, BrowserTaskEvent, HumanRequest, PlanStep } from '@suanlizi/protocol';
 import {
   BudgetExceededError,
   BrowserTaskMachine,

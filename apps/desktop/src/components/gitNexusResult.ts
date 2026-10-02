@@ -699,7 +699,7 @@ export function parseGitNexusResult(item: ThreadItem): GitNexusGraphData | null 
   const source = extractSource(item);
   if (source === null) return null;
 
-  // 根据 tool 分发；Nexus 懒加载 MCP 时会通过 mcp_call_tool 包装真实工具名
+  // 根据 tool 分发；Suanlizi 懒加载 MCP 时会通过 mcp_call_tool 包装真实工具名
   const tool = extractGitNexusTool(item);
   switch (tool) {
     case 'context':

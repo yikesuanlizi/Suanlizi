@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ThreadStore } from '@nexus/storage';
+import type { ThreadStore } from '@suanlizi/storage';
 import { DEFAULT_BOT_CONFIG } from '../config/botConfig.js';
 import { clearRemoteBotBindingsForDeletedThread } from './threadDeletion.js';
 
@@ -16,7 +16,7 @@ class ThreadDeletionStore implements Partial<ThreadStore> {
 }
 
 describe('thread deletion route helpers', () => {
-  it('clears all remote bot bindings when the bound Nexus thread is deleted', async () => {
+  it('clears all remote bot bindings when the bound Suanlizi thread is deleted', async () => {
     const store = new ThreadDeletionStore();
     store.settings.set('bot.config.v1', {
       ...DEFAULT_BOT_CONFIG,

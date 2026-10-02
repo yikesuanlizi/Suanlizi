@@ -4,7 +4,7 @@
 //   constraint, fault tolerance (null, no throw), all four frame types,
 //   browser.act intent validation, frameId idempotency, one-frame-per-line
 import { describe, expect, it } from 'vitest';
-import type { ActionIntent } from '@nexus/protocol';
+import type { ActionIntent } from '@suanlizi/protocol';
 import { ipcCodec, isDuplicateFrame, makeFrameId } from './codec.js';
 import { parseIpcCommand, parseIpcEvent, parseIpcResponse } from './ipcSchemas.js';
 import { IPC_VERSION } from './ipcTypes.js';

@@ -4,7 +4,7 @@ import type {
   ReasoningEffort as ProtocolReasoningEffort,
   RunProfile as ProtocolRunProfile,
   WebSearchMode as ProtocolWebSearchMode,
-} from '@nexus/protocol';
+} from '@suanlizi/protocol';
 
 export type PermissionPresetId = ProtocolPermissionPresetId;
 export type Locale = 'zh' | 'en';
@@ -13,8 +13,8 @@ export type WebProviderMode = 'native_fetch' | 'firecrawl';
 export type SecretSource = 'config' | 'env';
 export type ReasoningEffort = ProtocolReasoningEffort;
 export type ThemeMode = 'dark' | 'light' | 'system';
-// 运行模式：缓存优先 | 长运行
-// harness 不再是 RunProfile，已降级为 runtime 底座能力，旧值自动降级为 runtime_os
+// 运行模式已收敛为单一策略：不再让用户在「缓存优先 / 长运行」之间选，
+// 压缩时机改由「上下文压缩阈值」表达。这里保留 RunProfile 仅为旧配置兼容。
 export type RunProfile = ProtocolRunProfile;
 export type UserAvatarId = 'asteroid' | 'rocket' | 'owl' | 'crystal' | 'paper-plane' | 'fox' | 'lightning' | 'mushroom' | 'custom';
 
@@ -37,7 +37,10 @@ export interface RunConfig {
   maxSubagentDepth: number;
   modelContextTokens?: number;
   modelMaxOutputTokens?: number;
+  modelTimeoutSeconds: number;
   runProfile: RunProfile;
+  /** 上下文压缩阈值：占模型上下文窗口的比例（0.3 ~ 0.95）。 */
+  compactionThreshold?: number;
   memoryEnabled: boolean;
   autoExtractMemories: boolean;
   useColdMemories: boolean;
@@ -99,7 +102,9 @@ const USER_FIELDS: Array<keyof RunConfig> = [
   'maxSubagentDepth',
   'modelContextTokens',
   'modelMaxOutputTokens',
+  'modelTimeoutSeconds',
   'runProfile',
+  'compactionThreshold',
   'memoryEnabled',
   'autoExtractMemories',
   'useColdMemories',
@@ -164,6 +169,7 @@ export function mergeRunConfigDefaults(
     maxActiveTasks: 4,
     maxParallelReadonlyTools: 2,
     maxSubagentDepth: 1,
+    modelTimeoutSeconds: 120,
     maxConcurrency: 4,
     toolTimeoutSeconds: 120,
     memoryThresholdPercent: 85,
@@ -175,6 +181,12 @@ export function mergeRunConfigDefaults(
     merged.maxActiveTasks = current.maxConcurrency ?? serverDefaults?.maxConcurrency ?? merged.maxActiveTasks;
   }
   for (const key of USER_FIELDS) {
+    // Model limits are persisted by the API and must not be replaced by a
+    // stale value restored from a previous thread/localStorage snapshot.
+    if ((key === 'modelContextTokens' || key === 'modelMaxOutputTokens')
+      && serverDefaults?.[key] !== undefined) {
+      continue;
+    }
     const value = current[key];
     if (value !== '' && value !== undefined) {
       (merged as Record<keyof RunConfig, RunConfig[keyof RunConfig]>)[key] = value;

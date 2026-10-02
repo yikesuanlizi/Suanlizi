@@ -1,6 +1,6 @@
 // 远程 A2A Agent 客户端：封装 @a2a-js/sdk 的 ClientFactory，
 // 提供 checkHealth / sendTask / sendTaskStream 三个简化接口，
-// 供 Nexus 的 spawn_remote_agent 协作工具调用。
+// 供 Suanlizi 的 spawn_remote_agent 协作工具调用。
 //
 // 设计要点：
 // - 每次调用都按 agentUrl 重新创建 Client（createFromUrl 会自动拉取

@@ -56,4 +56,14 @@ describe('app module structure', () => {
     expect(transcriptRender).toContain('key={group.id}');
     expect(transcriptRender).not.toContain('-${index}');
   });
+
+  it('follows one end sentinel frame without resize-driven transcript forcing', () => {
+    const source = readFileSync(join(here, 'main.tsx'), 'utf-8');
+
+    expect(source).toContain('const transcriptEndRef = useRef<HTMLDivElement | null>(null);');
+    expect(source).toContain("transcriptEndRef.current?.scrollIntoView({ block: 'end' });");
+    expect(source).toContain('className="transcriptEndSentinel"');
+    expect(source).not.toContain('ResizeObserver');
+    expect(source).not.toContain('transcript.scrollTop = transcript.scrollHeight');
+  });
 });

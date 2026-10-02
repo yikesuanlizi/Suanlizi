@@ -5,6 +5,13 @@ import path from 'node:path';
 import './link-workspaces.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const desktopDataRoot = path.join(root, 'app-data');
+
+function resolveAppDataRoot() {
+  if (process.env.SUANLIZI_DATA_DIR?.trim()) return path.resolve(process.env.SUANLIZI_DATA_DIR.trim());
+  if (process.env.SUANLIZI_PORTABLE_DATA_DIR?.trim()) return path.resolve(process.env.SUANLIZI_PORTABLE_DATA_DIR.trim());
+  return desktopDataRoot;
+}
 const isWindows = process.platform === 'win32';
 const DEFAULT_WEIXIN_BRIDGE_PORT = 18790;
 const children = new Set();
@@ -23,7 +30,10 @@ async function waitForHttp(url, timeoutMs = 30_000) {
         // 首页返回后 vite 已开始编译依赖；再给一点时间让入口编译完成。
         // — English: once the index returns, vite has started compiling deps;
         //   give it a moment to finish the entry modules.
-        await new Promise((r) => setTimeout(r, 800));
+        const warmupMs = Number.parseInt(process.env.SUANLIZI_WARMUP_MS ?? '120', 10);
+        if (Number.isFinite(warmupMs) && warmupMs > 0) {
+          await new Promise((r) => setTimeout(r, warmupMs));
+        }
         return true;
       }
     } catch {
@@ -55,9 +65,9 @@ function run(command, args, options = {}) {
   children.add(child);
   child.on('exit', (code) => {
     children.delete(child);
-    if (code && !options.allowExit) {
+    if (options.primary || (code && !options.allowExit)) {
       stopChildren(child);
-      process.exit(code);
+      process.exit(code ?? 0);
     }
   });
   return child;
@@ -108,14 +118,14 @@ async function isPortFreeAnyAddress(port) {
 }
 
 async function chooseWeixinBridgePort() {
-  const explicit = process.env.NEXUS_WEIXIN_BRIDGE_PORT;
+  const explicit = process.env.SUANLIZI_WEIXIN_BRIDGE_PORT;
   const preferred = Number(explicit || DEFAULT_WEIXIN_BRIDGE_PORT);
   if (!Number.isInteger(preferred) || preferred <= 0) return DEFAULT_WEIXIN_BRIDGE_PORT;
   if (await isPortFree(preferred)) return preferred;
   if (explicit) return preferred;
   for (let port = DEFAULT_WEIXIN_BRIDGE_PORT + 1; port < DEFAULT_WEIXIN_BRIDGE_PORT + 40; port += 1) {
     if (await isPortFree(port)) {
-      console.warn(`[desktop] Weixin bridge port ${preferred} is occupied; using ${port} for this Nexus desktop session.`);
+      console.warn(`[desktop] Weixin bridge port ${preferred} is occupied; using ${port} for this Suanlizi desktop session.`);
       return port;
     }
   }
@@ -132,13 +142,14 @@ build.on('exit', async (code) => {
   });
 });
 async function startDesktopStack() {
-  const apiPort = process.env.NEXUS_API_PORT ?? '4127';
+  const apiPort = process.env.SUANLIZI_API_PORT ?? '4127';
   if (!await isPortFreeAnyAddress(Number(apiPort))) {
-    console.error(`[api] Port ${apiPort} is already in use. Nexus may already be running.`);
-    console.error(`[api] Stop the existing Nexus process first, or start with NEXUS_API_PORT=<free-port>.`);
+    console.error(`[api] Port ${apiPort} is already in use. Suanlizi may already be running.`);
+    console.error(`[api] Stop the existing Suanlizi process first, or start with SUANLIZI_API_PORT=<free-port>.`);
     process.exit(1);
   }
-  const logDir = path.join(root, '.nexus', 'logs');
+  const appDataRoot = resolveAppDataRoot();
+  const logDir = path.join(appDataRoot, 'logs');
   const weixinBridgePort = await chooseWeixinBridgePort();
   const weixinBridgeUrl = `http://127.0.0.1:${weixinBridgePort}/api/v1/admin/rpc`;
 
@@ -152,18 +163,20 @@ async function startDesktopStack() {
 
   const api = run('node', ['apps/api/dist/server.js'], {
     env: {
-      NEXUS_API_PORT: apiPort,
-      NEXUS_WEIXIN_BRIDGE_PORT: String(weixinBridgePort),
-      NEXUS_WEIXIN_BRIDGE_URL: weixinBridgeUrl,
-      NEXUS_LOG_DIR: process.env.NEXUS_LOG_DIR ?? logDir,
-      NEXUS_BROWSER_TOKEN: browserToken,
+      SUANLIZI_API_PORT: apiPort,
+      SUANLIZI_WEIXIN_BRIDGE_PORT: String(weixinBridgePort),
+      SUANLIZI_WEIXIN_BRIDGE_URL: weixinBridgeUrl,
+      SUANLIZI_DATA_DIR: process.env.SUANLIZI_DATA_DIR ?? process.env.SUANLIZI_PORTABLE_DATA_DIR ?? desktopDataRoot,
+      SUANLIZI_LOG_DIR: process.env.SUANLIZI_LOG_DIR ?? logDir,
+      SUANLIZI_BROWSER_TOKEN: browserToken,
     },
   });
   const weixinBridge = run('node', ['apps/desktop/bridge/weixin-bridge.mjs'], {
     env: {
-      NEXUS_API_URL: `http://127.0.0.1:${apiPort}`,
-      NEXUS_WEIXIN_BRIDGE_PORT: String(weixinBridgePort),
-      NEXUS_LOG_DIR: process.env.NEXUS_LOG_DIR ?? logDir,
+      SUANLIZI_API_URL: `http://127.0.0.1:${apiPort}`,
+      SUANLIZI_WEIXIN_BRIDGE_PORT: String(weixinBridgePort),
+      SUANLIZI_DATA_DIR: process.env.SUANLIZI_DATA_DIR ?? process.env.SUANLIZI_PORTABLE_DATA_DIR ?? desktopDataRoot,
+      SUANLIZI_LOG_DIR: process.env.SUANLIZI_LOG_DIR ?? logDir,
     },
   });
   const apiReady = await waitForHttp(`http://127.0.0.1:${apiPort}/api/settings`);
@@ -172,7 +185,11 @@ async function startDesktopStack() {
   }
   const desktopUi = run(bin('vite'), ['--host', '127.0.0.1', '--port', '5178'], {
     cwd: path.join(root, 'apps', 'desktop'),
-    env: { FORCE_COLOR: '1', NEXUS_API_URL: `http://127.0.0.1:${apiPort}` },
+    env: {
+      FORCE_COLOR: '1',
+      SUANLIZI_API_URL: `http://127.0.0.1:${apiPort}`,
+      SUANLIZI_DATA_DIR: process.env.SUANLIZI_DATA_DIR ?? process.env.SUANLIZI_PORTABLE_DATA_DIR ?? desktopDataRoot,
+    },
   });
 
   // 等 vite 就绪并预热首页：首次请求会触发 vite 编译入口模块，编译完成后
@@ -192,8 +209,14 @@ async function startDesktopStack() {
   //   args are relative to cwd (apps/desktop) — no apps/desktop prefix, or the
   //   path doubles and Electron can't find the app.
   const electronMain = run(bin('electron'), ['dist-electron/main/index.js'], {
+    primary: true,
     cwd: path.join(root, 'apps', 'desktop'),
-    env: { NEXUS_ELECTRON_LOAD: 'dev', NEXUS_API_URL: `http://127.0.0.1:${apiPort}`, NEXUS_BROWSER_TOKEN: browserToken },
+    env: {
+      SUANLIZI_ELECTRON_LOAD: 'dev',
+      SUANLIZI_API_URL: `http://127.0.0.1:${apiPort}`,
+      SUANLIZI_BROWSER_TOKEN: browserToken,
+      SUANLIZI_PORTABLE_DATA_DIR: process.env.SUANLIZI_DATA_DIR ?? process.env.SUANLIZI_PORTABLE_DATA_DIR ?? desktopDataRoot,
+    },
   });
 
   const stop = () => {
@@ -202,4 +225,5 @@ async function startDesktopStack() {
 
   process.on('SIGINT', stop);
   process.on('SIGTERM', stop);
+  process.on('exit', () => stopChildren());
 }

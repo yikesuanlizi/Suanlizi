@@ -13,6 +13,7 @@ package-lock.json.*
 .env
 .data/
 .nexus/
+app-data/
 .npm-cache/
 .playwright-cli/
 .test-storage-*/
@@ -28,3 +29,9 @@ outputs/
 **/src/**/*.d.ts
 **/src/**/*.d.ts.map
 .reasonix/
+.suanlizi/
+tmp-*.py
+tmp-*.txt
+历史思考功能.txt
+
+agent-slice.txt

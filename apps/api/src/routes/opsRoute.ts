@@ -23,8 +23,8 @@ import {
   validateOpsTaskVersion,
   isOpsTaskTerminalState,
   OpsTaskError,
-} from '@nexus/protocol';
-import type { ThreadStore } from '@nexus/storage';
+} from '@suanlizi/protocol';
+import type { ThreadStore } from '@suanlizi/storage';
 import { readJson, sendError, sendJson } from '../shared/http.js';
 import type { TenantContext } from '../shared/tenant.js';
 import {
@@ -1315,10 +1315,17 @@ export async function handleOpsRoute(options: {
     const taskState = opsTaskStateFromQuery(url);
     const limitRaw = Number(url.searchParams.get('limit') ?? 100);
     const limit = Number.isSafeInteger(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 500) : 100;
+    const lastActivityAt = (task: OpsTaskSession): string => {
+      const events = state.events[task.spec.taskId] ?? [];
+      return events.at(-1)?.occurredAt ?? '';
+    };
     const tasks = Object.values(state.tasks)
       .filter((task) => !threadId || task.spec.threadId === threadId)
       .filter((task) => !taskState || task.state === taskState)
-      .sort((a, b) => b.sequence - a.sequence)
+      .sort((a, b) => {
+        const activityOrder = lastActivityAt(b).localeCompare(lastActivityAt(a));
+        return activityOrder || b.sequence - a.sequence || b.taskVersion - a.taskVersion;
+      })
       .slice(0, limit);
     sendJson(res, 200, { tasks });
     return true;

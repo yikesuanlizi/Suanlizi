@@ -95,7 +95,7 @@ describe('RightPane', () => {
     expect(workbenchSource).toContain('mainThreadId: mainAgentThreadId');
     expect(workbenchSource).toContain('if (!selectedAgentId) return null');
     expect(workbenchSource).toContain('setSelectedAgentId((current) => current === threadId ? null : threadId)');
-    expect(workbenchSource).toContain('{selectedNode ? (');
+    expect(workbenchSource).toContain('hasActiveThread && selectedNode ? (');
     expect(agentStageSource).toContain('aria-pressed={selectedThreadId === mainRow.threadId}');
     expect(agentStageSource).toContain('收起主 Agent 详情');
   });
@@ -156,11 +156,11 @@ describe('RightPane', () => {
     const rightPaneSource = readFileSync(join(here, 'RightPane.tsx'), 'utf-8');
 
     expect(rightPaneSource).toContain('useState<RightPaneTab>');
-    expect(rightPaneSource).toContain("localStorage.getItem('nexus.rightPane.tab')");
-    expect(rightPaneSource).toContain("localStorage.setItem('nexus.rightPane.tab', tab)");
+    expect(rightPaneSource).toContain('localStorage.getItem(rightPaneStorageKey(normalized))');
+    expect(rightPaneSource).toContain('localStorage.setItem(rightPaneStorageKey(threadScope), tab)');
     expect(mainSource).not.toContain('setRightPaneTab');
     expect(mainSource).toContain("setRightPaneSizingMode(rightPaneSizingModeForTab(tab))");
-    expect(mainSource).toContain("return tab === 'files' ? 'files' : 'standard';");
+    expect(mainSource).toContain("function rightPaneSizingModeForTab(tab: string)");
     expect(mainSource).not.toContain('onTabChange={setRightPaneTab}');
   });
 
@@ -211,7 +211,7 @@ describe('RightPane', () => {
 
     expect(html).not.toContain('资源使用');
     expect(html).toContain('最近事件');
-    expect(html).toContain('Nexus 主控 Agent');
+    expect(html).toContain('Suanlizi 主控 Agent');
     expect(html).toContain('MCP');
     expect(html).toContain('gitnexus / search_code');
     expect(html).toContain('Skill');

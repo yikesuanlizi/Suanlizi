@@ -75,7 +75,7 @@ export function WorkspaceThreadList({
   const [renaming, setRenaming] = useState<ThreadMeta | null>(null);
   const threadListScrollRef = useRef<HTMLDivElement | null>(null);
   const pendingScrollTopRef = useRef<number | null>(null);
-  const workflowThreads = useMemo(() => threads.filter(isWorkflowThread).filter((thread) => thread.parentThreadId === undefined), [threads]);
+  const workflowThreads = useMemo(() => threads.filter((thread) => isWorkflowThread(thread) && thread.parentThreadId === undefined), [threads]);
   const listedThreads = useMemo(() => threads.filter((thread) => !isWorkflowThread(thread)), [threads]);
   const plainChats = useMemo(() => buildPlainChatThreads({ searchQuery, threads: listedThreads }), [listedThreads, searchQuery]);
   const groups = useMemo(() => buildWorkspaceThreadGroups({
@@ -122,10 +122,11 @@ export function WorkspaceThreadList({
   return (
     <section className="threadListPanel" aria-label={t(locale, 'conversations')}>
       <SidebarIconSprite />
-      <header className="threadListHeader">
-        <div className="threadListBrand">
-          <strong>{t(locale, 'title')}</strong>
-        </div>
+      <div className="workspaceThreadsHeader">
+        <button className={searchVisible ? 'searchLauncher active' : 'searchLauncher'} type="button" title={locale === 'zh' ? '搜索对话' : 'Search chats'} onClick={() => setSearchOpen(true)}>
+          <SidebarIcon className="icon" name="search" />
+          <span>{locale === 'zh' ? '搜索' : 'Search'}</span>
+        </button>
         <button
           className="miniIconButton"
           type="button"
@@ -134,13 +135,6 @@ export function WorkspaceThreadList({
           onClick={onToggleSidebar}
         >
           <Icon className="icon" name="chevron" />
-        </button>
-      </header>
-
-      <div className="workspaceThreadsHeader">
-        <button className={searchVisible ? 'searchLauncher active' : 'searchLauncher'} type="button" title={locale === 'zh' ? '搜索对话' : 'Search chats'} onClick={() => setSearchOpen(true)}>
-          <SidebarIcon className="icon" name="search" />
-          <span>{locale === 'zh' ? '搜索' : 'Search'}</span>
         </button>
       </div>
 
@@ -206,6 +200,7 @@ export function WorkspaceThreadList({
             onCreateInWorkspace={onCreateInWorkspace}
             onDeleteThread={onDeleteThread}
             onForgetWorkspace={onForgetWorkspace}
+            pinned={group.pinned === true}
             onRenameThread={(thread) => setRenaming(thread)}
             onSelectThread={selectThreadPreservingScroll}
             onToggleCollapsed={() => setCollapsed((current) => ({ ...current, [group.workspaceRoot]: !current[group.workspaceRoot] }))}
@@ -455,6 +450,7 @@ function WorkspaceGroupView({
   onCreateInWorkspace,
   onDeleteThread,
   onForgetWorkspace,
+  pinned,
   onRenameThread,
   onSelectThread,
   onToggleCollapsed,
@@ -471,6 +467,7 @@ function WorkspaceGroupView({
   onCreateInWorkspace(workspaceRoot: string): void;
   onDeleteThread(threadId: string): void;
   onForgetWorkspace(workspaceRoot: string): void;
+  pinned?: boolean;
   onRenameThread(thread: ThreadMeta): void;
   onSelectThread(threadId: string): void;
   onToggleCollapsed(): void;

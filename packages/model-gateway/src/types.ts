@@ -1,5 +1,5 @@
 // 引入协议层的多模态输入部件与重试策略
-import type { InputPart, RetryPolicy } from '@nexus/protocol';
+import type { InputPart, RetryPolicy } from '@suanlizi/protocol';
 
 // ─── Model Provider Configuration ───────────────────────────────────────────
 /** @deprecated Use string provider ids from the ProviderRegistry instead. */
@@ -20,7 +20,7 @@ export interface ModelConfig {
   // 模型名（例如 gpt-4o、deepseek-chat）
   model: string;
   /** API key override — if empty, resolved from env var or config file. */
-  // 显式 API key；为空时从环境变量或 ~/.nexus/config.json 解析
+  // 显式 API key；为空时从环境变量或 ~/.suanlizi/config.json 解析
   apiKey?: string;
   /** 单次响应最大 token 数 */
   maxTokens?: number;
@@ -28,6 +28,14 @@ export interface ModelConfig {
   temperature?: number;
   /** 核采样参数 */
   topP?: number;
+  /** Top-k sampling parameter for providers such as Gitee AI/Qwen. */
+  topK?: number;
+  /** Frequency penalty passed through to Chat Completions providers. */
+  frequencyPenalty?: number;
+  /** Presence penalty passed through to Chat Completions providers. */
+  presencePenalty?: number;
+  /** Provider-specific Chat Completions fields. Values are flattened into the wire body. */
+  extraBody?: Record<string, unknown>;
   /** 额外 HTTP header（如自定义网关需要的 token / project） */
   extraHeaders?: Record<string, string>;
   /** 请求超时（毫秒），默认 120000 */
@@ -38,6 +46,8 @@ export interface ModelConfig {
   cacheStrategy?: CacheStrategy | 'auto';
   /** 推理努力程度（OpenAI o-series、DeepSeek R1 等） */
   reasoningEffort?: 'low' | 'medium' | 'high' | string;
+  /** 服务端上下文窗口；llama.cpp 会将其作为请求前的硬上限提示。 */
+  contextTokens?: number;
 }
 
 // 缓存策略：deepseek-native（原生）/ openai-compatible（带缓存字段）/ anthropic-cache-control / none
@@ -60,6 +70,50 @@ export interface ModelRetryNotice {
 export interface ModelRequestOptions {
   signal?: AbortSignal;            // 取消信号
   onRetry?: (notice: ModelRetryNotice) => void | Promise<void>;  // 每次重试时回调
+  /** llama.cpp request controls. These are opt-in because not every compatible gateway supports them. */
+  llama?: {
+    idSlot?: number;
+    cachePrompt?: boolean;
+    returnProgress?: boolean;
+    slotEpoch?: string;
+  };
+}
+
+/**
+ * Capability metadata returned by an OpenAI-compatible `/models` endpoint.
+ *
+ * Providers are not required to expose limits here.  In particular, a
+ * reachable endpoint with no limit metadata must not be treated as a guessed
+ * 40K window.
+ */
+export interface OpenAIModelCapabilities {
+  provider: string;
+  model: string;
+  reachable: boolean;
+  contextTokens?: number;
+  maxOutputTokens?: number;
+  error?: string;
+}
+
+export interface LlamaCapabilities {
+  provider: 'llama_cpp';
+  reachable: boolean;
+  /** Number of prompt-cache slots reported by llama-server (-np). */
+  slotCount?: number;
+  /** Effective per-slot context reported by /props.default_generation_settings.n_ctx. */
+  contextTokens?: number;
+  /** Training context advertised by the loaded model, when exposed by /props. */
+  trainingContextTokens?: number;
+  /** Build identity exposed by llama-server. */
+  buildInfo?: string;
+  /** Loaded model path/alias exposed by llama-server, when available. */
+  modelPath?: string;
+  /** Stable capability epoch used to invalidate leases after endpoint/model changes. */
+  epoch?: string;
+  chatTemplate?: string;
+  hasToolTemplate: boolean;
+  hasReasoningTemplate: boolean;
+  error?: string;
 }
 
 // 上下文 token 估算结果
@@ -77,6 +131,7 @@ export const DEFAULT_BASE_URLS: Record<string, string> = {
   ollama: 'http://localhost:11434/v1',
   lmstudio: 'http://localhost:1234/v1',
   vllm: 'http://localhost:8000/v1',
+  llama_cpp: 'http://localhost:8080/v1',
   giteeai: 'https://ai.gitee.com/v1',
   openai_compatible: 'http://localhost:8080/v1',
   anthropic: 'https://api.anthropic.com/v1',
@@ -99,10 +154,22 @@ export interface ChatMessage {
   tool_call_id?: string;                  // tool 消息对应的工具调用 id
   reasoning_content?: string;             // DeepSeek/Moonshot 等 OpenAI-compatible 推理回放字段
   reasoning_details?: unknown[];          // MiniMax/OpenRouter 等兼容端点的结构化推理字段
-  providerFrame?: {
-    format: 'anthropic_messages';
-    contentBlocks: AnthropicContentBlock[];
-  };
+  providerFrame?:
+    | {
+        format: 'openai_chat';
+        content: string | null;
+        toolCalls?: ToolCall[];
+        reasoningContent?: string;
+        reasoningDetails?: unknown[];
+      }
+    | {
+        format: 'openai_responses';
+        outputItems: unknown[];
+      }
+    | {
+        format: 'anthropic_messages';
+        contentBlocks: AnthropicContentBlock[];
+      };
 }
 
 // 多模态内容：文本或图片
@@ -133,6 +200,20 @@ export interface ToolDefinition {
   function: { name: string; description: string; parameters: unknown };
 }
 
+/** Structured output request shared by Chat Completions and Responses. */
+export type ResponseFormat =
+  | { type: 'text' }
+  | { type: 'json_object' }
+  | {
+      type: 'json_schema';
+      json_schema: {
+        name: string;
+        description?: string;
+        schema: Record<string, unknown>;
+        strict?: boolean;
+      };
+    };
+
 // ─── OpenAI Request / Response ──────────────────────────────────────────────
 // OpenAI Chat Completions 请求体
 export interface ChatCompletionRequest {
@@ -143,6 +224,11 @@ export interface ChatCompletionRequest {
   max_tokens?: number;
   temperature?: number;
   top_p?: number;
+  top_k?: number;
+  frequency_penalty?: number;
+  presence_penalty?: number;
+  /** OpenAI SDK-compatible provider extensions (flattened into the JSON body). */
+  extra_body?: Record<string, unknown>;
   reasoning_effort?: 'low' | 'medium' | 'high' | string;
   thinking?: {
     type: 'enabled' | 'disabled';
@@ -152,8 +238,13 @@ export interface ChatCompletionRequest {
   enable_thinking?: boolean;
   parallel_tool_calls?: boolean;
   tool_stream?: boolean;
+  id_slot?: number;
+  cache_prompt?: boolean;
+  return_progress?: boolean;
   stream?: boolean;
   stop?: string[];
+  /** Optional structured output contract. Providers may map this to their native shape. */
+  response_format?: ResponseFormat;
 }
 
 // 归一化后的用量：统一 OpenAI / Anthropic 字段
@@ -162,6 +253,11 @@ export interface NormalizedUsage {
   completion_tokens: number;        // 输出 token
   total_tokens: number;             // 总 token
   cached_tokens?: number;           // 缓存命中 token
+  /** Anthropic prompt-cache creation tokens when the provider reports them. */
+  cache_creation_tokens?: number;
+  /** False means the provider did not report a cache value; it is not a zero hit. */
+  cache_reported?: boolean;
+  cache_source?: 'deepseek' | 'openai' | 'anthropic' | 'llama-timings';
   cache_strategy?: Exclude<CacheStrategy, 'none'>;
 }
 
@@ -173,6 +269,7 @@ export interface ChatCompletionResponse {
   model: string;
   choices: Choice[];
   usage?: NormalizedUsage;
+  timings?: unknown;
 }
 
 // 单条回答选项
@@ -282,9 +379,11 @@ export interface AnthropicSSEEvent {
 export type StreamEvent =
   | { type: 'delta'; content: string }                                           // 文本增量
   | { type: 'reasoning_delta'; content: string }                                 // 推理/思考增量
+  | { type: 'prompt_progress'; total?: number; cache?: number; processed?: number; timeMs?: number } // llama.cpp 预填进度
   | { type: 'tool_call_start'; id: string; name: string }                        // 工具调用开始
   | { type: 'tool_call_delta'; id: string; arguments: string }                   // 工具参数增量
   | { type: 'tool_call_end'; id: string; name: string; arguments: string }       // 工具调用结束
+  | { type: 'protocol_error'; message: string }                                   // provider 输出了无法解析的工具协议
   | { type: 'done'; usage?: NormalizedUsage }                                    // 流式结束
   | { type: 'error'; error: Error };                                             // 错误
 

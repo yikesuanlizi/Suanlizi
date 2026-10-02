@@ -66,7 +66,7 @@ describe('WorkspaceThreadList', () => {
     const source = readFileSync(resolve(process.cwd(), 'apps/desktop/src/components/WorkspaceThreadList.tsx'), 'utf8');
     const css = readFileSync(resolve(process.cwd(), 'apps/desktop/src/styles.css'), 'utf8');
     expect(source).toContain('<Icon className="icon" name="chevron" />');
-    expect(css).toContain('.appShell .threadListHeader > .miniIconButton');
+    expect(css).toContain('.appShell .workspaceThreadsHeader > .miniIconButton');
     expect(css).toContain('visibility: visible');
   });
 

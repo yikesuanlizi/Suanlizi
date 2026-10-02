@@ -2,9 +2,17 @@ import * as fs from 'node:fs/promises';
 import { Dirent } from 'node:fs';
 import * as path from 'node:path';
 import { createHash } from 'node:crypto';
+import { exec, type ChildProcess } from 'node:child_process';
+import { terminateProcessTree } from './processTree.js';
 import type { ToolDefinition, ToolContext, ToolResult } from './registry.js';
 import { browserTools } from './browserTool.js';
-import { resolveToolPath, resolveToolPathAccess, toolResultFromAccessDecision } from './accessGuard.js';
+import {
+  assertCanonicalToolPathStable,
+  resolveCanonicalToolPath,
+  resolveToolPath,
+  resolveToolPathAccess,
+  toolResultFromAccessDecision,
+} from './accessGuard.js';
 import { WebProviderRouter } from './web/provider.js';
 import {
   artifactRecordForResult,
@@ -150,7 +158,7 @@ export const readFileTool: ToolDefinition = {
 
 export const readDocumentTool: ToolDefinition = {
   name: 'read_document',
-  description: 'Extract readable text from docx, pdf, xlsx, or pptx files. Use this instead of read_file for office/PDF documents so Nexus can detect stale extracted artifacts.',
+  description: 'Extract readable text from docx, pdf, xlsx, or pptx files. Use this instead of read_file for office/PDF documents so Suanlizi can detect stale extracted artifacts.',
   parameters: {
     type: 'object',
     properties: {
@@ -388,6 +396,7 @@ export const writeFileTool: ToolDefinition = {
     if (access.denied) return access.denied;
     const filePath = access.filePath;
     await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await assertCanonicalToolPathStable(ctx.workspaceRoot, filePath);
     await fs.writeFile(filePath, String(args.content), 'utf-8');
     return { output: `Wrote ${Buffer.byteLength(String(args.content))} bytes to ${args.filePath}`, status: 'completed' };
   },
@@ -417,7 +426,6 @@ export const shellCommandTool: ToolDefinition = {
   maxOutputLength: 20_000,
   timeoutMs: 120_000,
   async execute(args, ctx): Promise<ToolResult> {
-    const { exec } = await import('node:child_process');
     const cmd = String(args.command);
     const accessDecision = await ctx.requestAccess?.({
       access: 'command',
@@ -430,40 +438,14 @@ export const shellCommandTool: ToolDefinition = {
     if (accessDecision && accessDecision.decision !== 'allow') {
       return toolResultFromAccessDecision(accessDecision);
     }
-    const cwd =
-      args.cwd ? resolveToolPath(ctx.workspaceRoot, String(args.cwd)) : ctx.workspaceRoot;
-
-    return new Promise((resolve) => {
-      exec(
-        cmd,
-        {
-          cwd,
-          maxBuffer: 10 * 1024 * 1024,
-          timeout: 120_000,
-          windowsHide: true,
-        },
-        (error, stdout, stderr) => {
-          const output = [stdout, stderr ? `\n[stderr]\n${stderr}` : '']
-            .filter(Boolean)
-            .join('\n')
-            .trim();
-          if (error && error.code !== 0 && !output) {
-            resolve({
-              output: `Command failed: ${error.message}`,
-              status: 'failed',
-              exitCode: error.code ?? 1,
-              error: { message: error.message },
-            });
-          } else {
-            resolve({
-              output: output || '(no output)',
-              status: 'completed',
-              exitCode: error?.code ?? 0,
-            });
-          }
-        },
-      );
+    const cwdAccess = await guardPathAccess(ctx, {
+      path: args.cwd ? String(args.cwd) : '.',
+      access: 'write',
+      toolName: 'shell_command',
+      description: `在目录执行命令 ${args.cwd ? String(args.cwd) : '.'}`,
     });
+    if (cwdAccess.denied) return cwdAccess.denied;
+    return runShellCommand(cmd, cwdAccess.filePath, ctx.signal, ctx.onOutputDelta);
   },
 };
 
@@ -530,7 +512,7 @@ export const gitNexusAnalyzeTool: ToolDefinition = {
               status: 'failed',
               exitCode,
               data: baseData,
-              error: { message: error.message, code: 'GITNEXUS_ANALYZE_FAILED' },
+              error: { message: error.message, code: 'GITSUANLIZI_ANALYZE_FAILED' },
             });
             return;
           }
@@ -543,7 +525,7 @@ export const gitNexusAnalyzeTool: ToolDefinition = {
         },
       );
       if (ctx.signal) {
-        ctx.signal.addEventListener('abort', () => child.kill(), { once: true });
+        ctx.signal.addEventListener('abort', () => terminateProcessTree(child), { once: true });
       }
     });
   },
@@ -775,12 +757,12 @@ export const applyPatchTool: ToolDefinition = {
   requiresApproval: true,
   async execute(args, ctx): Promise<ToolResult> {
     const patchText = String(args.patch);
-    let actions: NexusPatchAction[];
+    let actions: SuanliziPatchAction[];
     try {
-      actions = parseNexusPatch(patchText);
-      const patchAccessDenied = await guardPatchActions(ctx, actions);
-      if (patchAccessDenied) return patchAccessDenied;
-      const changes = await applyNexusPatchActions(ctx.workspaceRoot, actions);
+      actions = parseSuanliziPatch(patchText);
+      const pathAccess = await guardPatchActions(ctx, actions);
+      if ('denied' in pathAccess) return pathAccess.denied;
+      const changes = await applySuanliziPatchActions(ctx.workspaceRoot, actions, pathAccess.paths);
       return {
         output: changes.map((change) => `${change.kind} ${change.path} (+${change.addedLines ?? 0}/-${change.removedLines ?? 0})`).join('\n') || 'No changes applied',
         status: 'completed',
@@ -1001,9 +983,10 @@ async function guardPathAccess(
     description: string;
   },
 ): Promise<{ filePath: string; denied?: ToolResult }> {
+  const canonicalPath = await resolveCanonicalToolPath(ctx.workspaceRoot, input.path);
   const request = resolveToolPathAccess({
     workspaceRoot: ctx.workspaceRoot,
-    path: input.path,
+    path: canonicalPath,
     access: input.access,
     threadId: ctx.threadId,
     turnId: ctx.turnId,
@@ -1017,8 +1000,12 @@ async function guardPathAccess(
   return { filePath: request.target.path ?? '' };
 }
 
-async function guardPatchActions(ctx: ToolContext, actions: NexusPatchAction[]): Promise<ToolResult | null> {
+async function guardPatchActions(
+  ctx: ToolContext,
+  actions: SuanliziPatchAction[],
+): Promise<{ paths: Map<string, string> } | { denied: ToolResult }> {
   const paths = new Set<string>();
+  const canonicalPaths = new Map<string, string>();
   for (const action of actions) {
     paths.add(action.path);
     if (action.kind === 'update' && action.moveTo) paths.add(action.moveTo);
@@ -1030,9 +1017,85 @@ async function guardPatchActions(ctx: ToolContext, actions: NexusPatchAction[]):
       toolName: 'apply_patch',
       description: `应用补丁 ${filePath}`,
     });
-    if (access.denied) return access.denied;
+    if (access.denied) return { denied: access.denied };
+    canonicalPaths.set(filePath, access.filePath);
   }
-  return null;
+  return { paths: canonicalPaths };
+}
+
+function runShellCommand(command: string, cwd: string, signal?: AbortSignal, onOutputDelta?: (delta: string) => void): Promise<ToolResult> {
+  return new Promise((resolve) => {
+    let settled = false;
+    let removeAbort: (() => void) | undefined;
+    let streamedLength = 0;
+    const finish = (result: ToolResult): void => {
+      if (settled) return;
+      settled = true;
+      removeAbort?.();
+      resolve(result);
+    };
+    const child = exec(command, {
+      cwd,
+      windowsHide: true,
+      maxBuffer: 10 * 1024 * 1024,
+    }, (error, stdout, stderr) => {
+      const output = [
+        String(stdout ?? ''),
+        stderr ? `\n[stderr]\n${String(stderr)}` : '',
+      ].filter(Boolean).join('').trim();
+      if (error) {
+        const exitCode = typeof error.code === 'number' ? error.code : 1;
+        finish({
+          output: output || error.message,
+          status: 'failed',
+          exitCode,
+          data: { command, cwd, exitCode },
+          error: { message: error.message, code: 'SHELL_COMMAND_FAILED' },
+        });
+        return;
+      }
+      finish({
+        output,
+        status: 'completed',
+        exitCode: 0,
+        data: { command, cwd, exitCode: 0 },
+      });
+    });
+    // 流式输出：stdout/stderr 增量通过 onOutputDelta 推给运行时，
+    // 供前端"终端式"实时预览（长命令几秒到几十分钟都能看到进度）。
+    // — Chinese: stream stdout/stderr deltas via onOutputDelta for live preview.
+    if (onOutputDelta) {
+      child.stdout?.on('data', (chunk: Buffer | string) => {
+        const text = String(chunk);
+        streamedLength += text.length;
+        onOutputDelta(text);
+      });
+      child.stderr?.on('data', (chunk: Buffer | string) => {
+        const text = String(chunk);
+        streamedLength += text.length;
+        onOutputDelta(text);
+      });
+    }
+    const cancel = (): void => {
+      terminateShellProcess(child);
+      finish({
+        output: 'Shell command cancelled',
+        status: 'failed',
+        error: { message: 'Shell command cancelled', code: 'TOOL_CANCELLED' },
+        data: { command, cwd },
+      });
+    };
+    if (signal?.aborted) {
+      cancel();
+    } else if (signal) {
+      signal.addEventListener('abort', cancel, { once: true });
+      removeAbort = () => signal.removeEventListener('abort', cancel);
+    }
+  });
+}
+
+function terminateShellProcess(child: ChildProcess): void {
+  terminateProcessTree(child);
 }
 
 function errorMessage(error: unknown): string {
@@ -1417,16 +1480,16 @@ function dedupeSearchResults<T extends { url: string }>(results: T[]): T[] {
   });
 }
 
-type NexusPatchAction =
+type SuanliziPatchAction =
   | { kind: 'add'; path: string; lines: string[] }
   | { kind: 'delete'; path: string }
-  | { kind: 'update'; path: string; moveTo?: string; hunks: NexusPatchHunk[] };
+  | { kind: 'update'; path: string; moveTo?: string; hunks: SuanliziPatchHunk[] };
 
-interface NexusPatchHunk {
+interface SuanliziPatchHunk {
   lines: Array<{ prefix: ' ' | '+' | '-'; text: string }>;
-  // 实际新增的行内容（不含 '+' 前缀），在 parseNexusPatch 中按出现顺序收集
+  // 实际新增的行内容（不含 '+' 前缀），在 parseSuanliziPatch 中按出现顺序收集
   addedLinesContent: string[];
-  // 实际删除的行内容（不含 '-' 前缀），在 parseNexusPatch 中按出现顺序收集
+  // 实际删除的行内容（不含 '-' 前缀），在 parseSuanliziPatch 中按出现顺序收集
   removedLinesContent: string[];
 }
 
@@ -1448,12 +1511,12 @@ interface AppliedChange {
   summary: string;
 }
 
-function parseNexusPatch(patch: string): NexusPatchAction[] {
+function parseSuanliziPatch(patch: string): SuanliziPatchAction[] {
   const lines = patch.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
   let index = 0;
   if (lines[index] !== '*** Begin Patch') throw new Error('missing "*** Begin Patch"');
   index++;
-  const actions: NexusPatchAction[] = [];
+  const actions: SuanliziPatchAction[] = [];
 
   while (index < lines.length) {
     const line = lines[index];
@@ -1483,8 +1546,8 @@ function parseNexusPatch(patch: string): NexusPatchAction[] {
         moveTo = lines[index].slice('*** Move to: '.length).trim();
         index++;
       }
-      const hunks: NexusPatchHunk[] = [];
-      let current: NexusPatchHunk | null = null;
+      const hunks: SuanliziPatchHunk[] = [];
+      let current: SuanliziPatchHunk | null = null;
       while (index < lines.length && !lines[index].startsWith('*** ')) {
         const hunkLine = lines[index];
         if (hunkLine === '' && index === lines.length - 1) break;
@@ -1522,13 +1585,17 @@ function parseNexusPatch(patch: string): NexusPatchAction[] {
   return actions;
 }
 
-async function applyNexusPatchActions(workspaceRoot: string, actions: NexusPatchAction[]): Promise<AppliedChange[]> {
+async function applySuanliziPatchActions(
+  workspaceRoot: string,
+  actions: SuanliziPatchAction[],
+  approvedPaths: Map<string, string>,
+): Promise<AppliedChange[]> {
   const staged = new Map<string, string | null>();
   const changes: AppliedChange[] = [];
 
   for (const action of actions) {
     if (action.kind === 'add') {
-      const abs = resolveToolPath(workspaceRoot, action.path);
+      const abs = approvedPatchPath(approvedPaths, action.path);
       staged.set(abs, action.lines.join('\n'));
       changes.push({
         path: action.path,
@@ -1548,7 +1615,7 @@ async function applyNexusPatchActions(workspaceRoot: string, actions: NexusPatch
       continue;
     }
     if (action.kind === 'delete') {
-      const abs = resolveToolPath(workspaceRoot, action.path);
+      const abs = approvedPatchPath(approvedPaths, action.path);
       const content = await readStagedOrDisk(staged, abs);
       if (content === null) throw new Error(`${action.path}: file not found`);
       staged.set(abs, null);
@@ -1571,11 +1638,11 @@ async function applyNexusPatchActions(workspaceRoot: string, actions: NexusPatch
       });
       continue;
     }
-    const abs = resolveToolPath(workspaceRoot, action.path);
+    const abs = approvedPatchPath(approvedPaths, action.path);
     const original = await readStagedOrDisk(staged, abs);
     if (original === null) throw new Error(`${action.path}: file not found`);
     const applied = applyUpdateHunks(original, action.path, action.hunks);
-    const targetAbs = action.moveTo ? resolveToolPath(workspaceRoot, action.moveTo) : abs;
+    const targetAbs = action.moveTo ? approvedPatchPath(approvedPaths, action.moveTo) : abs;
     staged.set(abs, action.moveTo ? null : applied.content);
     if (action.moveTo) staged.set(targetAbs, applied.content);
     if (action.moveTo) {
@@ -1626,13 +1693,21 @@ async function applyNexusPatchActions(workspaceRoot: string, actions: NexusPatch
 
   for (const [absPath, content] of staged) {
     if (content === null) {
+      await assertCanonicalToolPathStable(workspaceRoot, absPath);
       await fs.rm(absPath, { force: true });
     } else {
       await fs.mkdir(path.dirname(absPath), { recursive: true });
+      await assertCanonicalToolPathStable(workspaceRoot, absPath);
       await fs.writeFile(absPath, content, 'utf-8');
     }
   }
   return changes;
+}
+
+function approvedPatchPath(approvedPaths: Map<string, string>, requestedPath: string): string {
+  const approvedPath = approvedPaths.get(requestedPath);
+  if (!approvedPath) throw new Error(`Patch path was not approved: ${requestedPath}`);
+  return approvedPath;
 }
 
 async function readStagedOrDisk(staged: Map<string, string | null>, absPath: string): Promise<string | null> {
@@ -1644,7 +1719,7 @@ async function readStagedOrDisk(staged: Map<string, string | null>, absPath: str
   }
 }
 
-function applyUpdateHunks(content: string, filePath: string, hunks: NexusPatchHunk[]): {
+function applyUpdateHunks(content: string, filePath: string, hunks: SuanliziPatchHunk[]): {
   content: string;
   added: number;
   removed: number;
@@ -1676,7 +1751,7 @@ function applyUpdateHunks(content: string, filePath: string, hunks: NexusPatchHu
       endLine: index + Math.max(oldLines.length, 1),
       addedLines: hunkAdded,
       removedLines: hunkRemoved,
-      // 中文注释：透传在 parseNexusPatch 阶段收集到的实际行内容
+      // 中文注释：透传在 parseSuanliziPatch 阶段收集到的实际行内容
       addedLinesContent: hunk.addedLinesContent.slice(),
       removedLinesContent: hunk.removedLinesContent.slice(),
       summary: `+${hunkAdded}/-${hunkRemoved}`,

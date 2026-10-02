@@ -18,7 +18,7 @@ describe('MCP draft source preparation', () => {
         'Run it with:',
         '',
         '```bash',
-        'npx -y @modelcontextprotocol/server-filesystem E:/langchain/Nexus',
+        'npx -y @modelcontextprotocol/server-filesystem E:/langchain/Suanlizi',
         '```',
       ].join('\n'));
     };
@@ -29,7 +29,7 @@ describe('MCP draft source preparation', () => {
     expect(prepared.draft).toMatchObject({
       name: 'filesystem',
       command: 'npx',
-      args: '-y @modelcontextprotocol/server-filesystem E:/langchain/Nexus',
+      args: '-y @modelcontextprotocol/server-filesystem E:/langchain/Suanlizi',
       enabled: true,
       sourceKind: 'url',
       sourceUrl: 'https://github.com/modelcontextprotocol/server-filesystem',

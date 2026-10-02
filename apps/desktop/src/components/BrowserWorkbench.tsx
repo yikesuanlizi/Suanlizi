@@ -16,48 +16,53 @@ interface BrowserTabState {
   visible: boolean;
   loading: boolean;
   openedBy?: 'user' | 'agent';
+  threadId?: string;
   favicon?: string;
 }
 
 type BrowserEvent =
-  | { type: 'tab-created'; tabId: string; url: string; openedBy?: 'user' | 'agent' }
+  | { type: 'tab-created'; tabId: string; url: string; openedBy?: 'user' | 'agent'; threadId?: string }
   | { type: 'tab-closed'; tabId: string }
-  | { type: 'tab-visible'; tabId: string; visible: boolean }
-  | { type: 'did-navigate'; tabId: string; url: string }
-  | { type: 'page-title'; tabId: string; title: string }
-  | { type: 'loading'; tabId: string; loading: boolean };
+  | { type: 'tab-visible'; tabId: string; visible: boolean; threadId?: string }
+  | { type: 'did-navigate'; tabId: string; url: string; threadId?: string }
+  | { type: 'page-title'; tabId: string; title: string; threadId?: string }
+  | { type: 'loading'; tabId: string; loading: boolean; threadId?: string };
 
 interface BrowserApi {
-  createTab(input: { url: string; bounds: { x: number; y: number; width: number; height: number }; openedBy?: 'user' | 'agent' }): Promise<BrowserTabState>;
-  closeTab(input: { tabId: string }): Promise<void>;
-  hideAllTabs(): Promise<void>;
-  activateTab(input: { tabId: string }): Promise<void>;
-  setBounds(input: { tabId: string; bounds: { x: number; y: number; width: number; height: number } }): Promise<void>;
-  navigate(input: { tabId: string; url: string }): Promise<void>;
-  back(input: { tabId: string }): Promise<boolean>;
-  forward(input: { tabId: string }): Promise<boolean>;
-  reload(input: { tabId: string }): Promise<void>;
-  stop(input: { tabId: string }): Promise<void>;
-  listTabs(): Promise<BrowserTabState[]>;
+  createTab(input: { url: string; bounds: { x: number; y: number; width: number; height: number }; openedBy?: 'user' | 'agent'; threadId?: string }): Promise<BrowserTabState>;
+  closeTab(input: { tabId: string; threadId: string }): Promise<void>;
+  hideAllTabs(input?: { threadId?: string }): Promise<void>;
+  activateTab(input: { tabId: string; threadId?: string }): Promise<void>;
+  setBounds(input: { tabId: string; threadId: string; bounds: { x: number; y: number; width: number; height: number } }): Promise<void>;
+  navigate(input: { tabId: string; threadId: string; url: string }): Promise<void>;
+  back(input: { tabId: string; threadId: string }): Promise<boolean>;
+  forward(input: { tabId: string; threadId: string }): Promise<boolean>;
+  reload(input: { tabId: string; threadId: string }): Promise<void>;
+  stop(input: { tabId: string; threadId: string }): Promise<void>;
+  listTabs(input?: { threadId?: string }): Promise<BrowserTabState[]>;
   subscribe(handler: (event: BrowserEvent) => void): () => void;
 }
 
 function getBrowserApi(): BrowserApi | undefined {
-  const api = (window as unknown as { nexusDesktop?: { browser?: BrowserApi } }).nexusDesktop?.browser;
+  const api = (window as unknown as { suanliziDesktop?: { browser?: BrowserApi } }).suanliziDesktop?.browser;
   return api ?? undefined;
 }
 
 const DEFAULT_URL = 'about:blank';
-const BROWSER_SESSION_STORAGE_KEY = 'nexus.browser.session.v1';
+const BROWSER_SESSION_STORAGE_KEY = 'suanlizi.browser.session.v1';
 
 interface PersistedBrowserSession {
   tabs: Array<{ url: string; title?: string; openedBy?: 'user' | 'agent' }>;
   activeIndex: number;
 }
 
-function readStoredBrowserSession(): PersistedBrowserSession | null {
+function browserSessionStorageKey(threadId: string): string {
+  return `${BROWSER_SESSION_STORAGE_KEY}:${encodeURIComponent(threadId || 'unscoped')}`;
+}
+
+function readStoredBrowserSession(threadId: string): PersistedBrowserSession | null {
   try {
-    const raw = localStorage.getItem(BROWSER_SESSION_STORAGE_KEY);
+    const raw = localStorage.getItem(browserSessionStorageKey(threadId));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<PersistedBrowserSession>;
     const tabs = Array.isArray(parsed.tabs)
@@ -75,10 +80,10 @@ function readStoredBrowserSession(): PersistedBrowserSession | null {
   }
 }
 
-function writeStoredBrowserSession(tabs: BrowserTabState[], activeTabId: string | null): void {
+function writeStoredBrowserSession(threadId: string, tabs: BrowserTabState[], activeTabId: string | null): void {
   try {
     const activeIndex = Math.max(0, tabs.findIndex((tab) => tab.tabId === activeTabId));
-    localStorage.setItem(BROWSER_SESSION_STORAGE_KEY, JSON.stringify({
+    localStorage.setItem(browserSessionStorageKey(threadId), JSON.stringify({
       tabs: tabs.map((tab) => ({ url: tab.url || DEFAULT_URL, title: tab.title, openedBy: tab.openedBy })),
       activeIndex,
     } satisfies PersistedBrowserSession));
@@ -107,10 +112,12 @@ export function normalizeBrowserUrl(input: string): string {
 
 export function BrowserWorkbench({
   active = true,
+  threadId = '',
   navigationRequest,
 }: {
   active?: boolean;
-  navigationRequest?: { url: string; nonce: number } | null;
+  threadId?: string;
+  navigationRequest?: { url: string; nonce: number; threadId?: string } | null;
 }) {
   const apiRef = useRef<BrowserApi | undefined>(undefined);
   const [tabs, setTabs] = useState<BrowserTabState[]>([]);
@@ -125,6 +132,7 @@ export function BrowserWorkbench({
   const [rendererOverlayVisible, setRendererOverlayVisible] = useState(false);
   const effectiveActive = active && !rendererOverlayVisible;
   const activeRef = useRef(effectiveActive);
+  const threadScope = threadId.trim();
 
   useEffect(() => {
     activeRef.current = effectiveActive;
@@ -158,6 +166,13 @@ export function BrowserWorkbench({
     if (!api) return;
     apiRef.current = api;
     let cancelled = false;
+    initialTabRequestedRef.current = false;
+    browserStateHydratedRef.current = false;
+    setBrowserReady(false);
+    setTabs([]);
+    setActiveTabId(null);
+    setAddress('');
+    setLoading(false);
     let layoutRetry = 0;
     const createInitialTab = (): void => {
       if (cancelled || initialTabRequestedRef.current) return;
@@ -171,6 +186,7 @@ export function BrowserWorkbench({
       initialTabRequestedRef.current = true;
       void api.createTab({
         url: DEFAULT_URL,
+        threadId: threadScope || undefined,
         bounds: {
           x: Math.round(rect.x),
           y: Math.round(rect.y),
@@ -189,7 +205,7 @@ export function BrowserWorkbench({
         return;
       }
       initialTabRequestedRef.current = true;
-      const saved = readStoredBrowserSession();
+      const saved = readStoredBrowserSession(threadScope);
       if (!saved) {
         initialTabRequestedRef.current = false;
         createInitialTab();
@@ -203,6 +219,7 @@ export function BrowserWorkbench({
             created.push(await api.createTab({
               url: savedTab.url,
               openedBy: savedTab.openedBy,
+              threadId: threadScope || undefined,
               bounds: {
                 x: Math.round(rect.x),
                 y: Math.round(rect.y),
@@ -219,11 +236,18 @@ export function BrowserWorkbench({
           setActiveTabId(active.tabId);
           setAddress(active.url);
           setLoading(active.loading);
-          if (activeRef.current) void api.activateTab({ tabId: active.tabId });
+          if (activeRef.current) void api.activateTab({ tabId: active.tabId, threadId: threadScope || undefined });
         }
       })();
     };
-    void api.listTabs().then((existing) => {
+    if (!threadScope) {
+      setBrowserReady(true);
+      return () => {
+        cancelled = true;
+        window.cancelAnimationFrame(layoutRetry);
+      };
+    }
+    void api.listTabs({ threadId: threadScope }).then((existing) => {
       if (cancelled) return;
       browserStateHydratedRef.current = true;
       setBrowserReady(true);
@@ -233,15 +257,16 @@ export function BrowserWorkbench({
         setActiveTabId(active.tabId);
         setAddress(active.url);
         setLoading(active.loading);
-        if (activeRef.current) void api.activateTab({ tabId: active.tabId });
+        if (activeRef.current) void api.activateTab({ tabId: active.tabId, threadId: threadScope || undefined });
       } else {
         restoreOrCreateTabs();
       }
     });
     const unsubscribe = api.subscribe((event) => {
+      if (threadScope && event.type !== 'tab-closed' && event.threadId !== threadScope) return;
       switch (event.type) {
         case 'tab-created':
-          setTabs((prev) => [...prev, { tabId: event.tabId, url: event.url, title: '', visible: true, loading: true, openedBy: event.openedBy }]);
+          setTabs((prev) => [...prev, { tabId: event.tabId, url: event.url, title: '', visible: true, loading: true, openedBy: event.openedBy, threadId: event.threadId }]);
           setActiveTabId(event.tabId);
           setAddress(event.url);
           break;
@@ -249,7 +274,7 @@ export function BrowserWorkbench({
           setTabs((prev) => prev.map((tab) => (tab.tabId === event.tabId ? { ...tab, visible: event.visible } : tab)));
           // A queued Agent action can reactivate the native view while a modal
           // is still open. Remove it again without destroying the tab/session.
-          if (event.visible && !activeRef.current) void api.hideAllTabs();
+          if (event.visible && !activeRef.current) void api.hideAllTabs({ threadId: threadScope });
           break;
         case 'tab-closed':
           setTabs((prev) => prev.filter((t) => t.tabId !== event.tabId));
@@ -282,14 +307,20 @@ export function BrowserWorkbench({
       unsubscribe();
       // 右侧栏收起会卸载 React 工作台；仅隐藏原生 View，页面及 Agent pageId
       // 绑定由主进程保留，避免再次打开时退回 about:blank。
-      void api.hideAllTabs();
+      if (threadScope) void api.hideAllTabs({ threadId: threadScope });
     };
-  }, []);
+  }, [threadScope]);
 
   useEffect(() => {
     const request = navigationRequest;
     const api = apiRef.current;
-    if (!browserReady || !request?.url || !api || appliedNavigationNonceRef.current === request.nonce) return;
+    if (
+      !browserReady
+      || !request?.url
+      || !api
+      || (request.threadId !== undefined && request.threadId !== threadScope)
+      || appliedNavigationNonceRef.current === request.nonce
+    ) return;
     const container = containerRef.current;
     if (!container) return;
     const rect = container.getBoundingClientRect();
@@ -304,25 +335,25 @@ export function BrowserWorkbench({
     const currentTabId = activeTabId ?? tabs[0]?.tabId;
     void (async () => {
       if (currentTabId) {
-        await api.navigate({ tabId: currentTabId, url: request.url });
+        await api.navigate({ tabId: currentTabId, threadId: threadScope, url: request.url });
         setActiveTabId(currentTabId);
         setAddress(request.url);
-        if (effectiveActive) await api.activateTab({ tabId: currentTabId });
+        if (effectiveActive) await api.activateTab({ tabId: currentTabId, threadId: threadScope || undefined });
         return;
       }
-      const created = await api.createTab({ url: request.url, bounds, openedBy: 'user' });
+      const created = await api.createTab({ url: request.url, bounds, openedBy: 'user', threadId: threadScope || undefined });
       setActiveTabId(created.tabId);
       setAddress(created.url || request.url);
       setLoading(created.loading);
     })().catch(() => {
       appliedNavigationNonceRef.current = 0;
     });
-  }, [activeTabId, browserReady, effectiveActive, navigationRequest, tabs]);
+  }, [activeTabId, browserReady, effectiveActive, navigationRequest, tabs, threadScope]);
 
   useEffect(() => {
     if (!browserStateHydratedRef.current) return;
-    writeStoredBrowserSession(tabs, activeTabId);
-  }, [tabs, activeTabId]);
+    writeStoredBrowserSession(threadScope, tabs, activeTabId);
+  }, [tabs, activeTabId, threadScope]);
 
   // 原生 WebContentsView 不属于 React 的层叠上下文。切换到文件、活动或任意
   // 模态层时必须从 Main 的 contentView 移除它，否则会压在 Renderer UI 之上。
@@ -330,15 +361,15 @@ export function BrowserWorkbench({
     const api = apiRef.current;
     if (!api) return;
     if (!effectiveActive) {
-      void api.hideAllTabs();
+      if (threadScope) void api.hideAllTabs({ threadId: threadScope });
       return;
     }
     const tabId = activeTabId ?? tabs[0]?.tabId;
     if (!tabId) return;
-    void api.activateTab({ tabId });
-    const frame = window.requestAnimationFrame(() => reportBrowserBounds(api, containerRef.current, tabId));
+    void api.activateTab({ tabId, threadId: threadScope || undefined });
+    const frame = window.requestAnimationFrame(() => reportBrowserBounds(api, containerRef.current, tabId, threadScope));
     return () => window.cancelAnimationFrame(frame);
-  }, [effectiveActive, activeTabId, tabs]);
+  }, [effectiveActive, activeTabId, tabs, threadScope]);
 
   // 容器尺寸变化 → 上报 bounds（Main 设置 View 布局）。
   // — English: container resize → report bounds (Main lays out the view).
@@ -346,7 +377,7 @@ export function BrowserWorkbench({
     const api = apiRef.current;
     const container = containerRef.current;
     if (!api || !container) return;
-    const report = (): void => reportBrowserBounds(api, container, activeTabId);
+    const report = (): void => reportBrowserBounds(api, container, activeTabId, threadScope);
     const observer = new ResizeObserver(report);
     observer.observe(container);
     window.addEventListener('resize', report);
@@ -355,7 +386,7 @@ export function BrowserWorkbench({
       observer.disconnect();
       window.removeEventListener('resize', report);
     };
-  }, [effectiveActive, activeTabId]);
+  }, [effectiveActive, activeTabId, threadScope]);
 
   const createTab = useCallback(() => {
     const api = apiRef.current;
@@ -364,6 +395,8 @@ export function BrowserWorkbench({
     const rect = container.getBoundingClientRect();
     void api.createTab({
       url: DEFAULT_URL,
+      openedBy: 'user',
+      threadId: threadScope || undefined,
       bounds: {
         x: Math.round(rect.x),
         y: Math.round(rect.y),
@@ -371,7 +404,7 @@ export function BrowserWorkbench({
         height: Math.round(rect.height),
       },
     });
-  }, []);
+  }, [threadScope]);
 
   const submitAddress = useCallback(() => {
     const api = apiRef.current;
@@ -387,6 +420,8 @@ export function BrowserWorkbench({
       const rect = container.getBoundingClientRect();
       void api.createTab({
         url: normalized,
+        openedBy: 'user',
+        threadId: threadScope || undefined,
         bounds: {
           x: Math.round(rect.x),
           y: Math.round(rect.y),
@@ -396,27 +431,27 @@ export function BrowserWorkbench({
       });
       return;
     }
-    void api.navigate({ tabId: activeTabId, url: normalized });
-  }, [activeTabId, address]);
+    void api.navigate({ tabId: activeTabId, threadId: threadScope, url: normalized });
+  }, [activeTabId, address, threadScope]);
 
   const activateTab = useCallback(
     (tabId: string) => {
       const api = apiRef.current;
       if (!api) return;
       setActiveTabId(tabId);
-      void api.activateTab({ tabId });
+      void api.activateTab({ tabId, threadId: threadScope || undefined });
       const tab = tabs.find((t) => t.tabId === tabId);
       setAddress(tab?.url ?? '');
       setLoading(tab?.loading ?? false);
     },
-    [tabs],
+    [tabs, threadScope],
   );
 
   const closeTab = useCallback((tabId: string) => {
     const api = apiRef.current;
     if (!api) return;
-    void api.closeTab({ tabId });
-  }, []);
+    void api.closeTab({ tabId, threadId: threadScope });
+  }, [threadScope]);
 
   const callNav = useCallback(
     (fn: (api: BrowserApi) => Promise<unknown>) => {
@@ -424,7 +459,7 @@ export function BrowserWorkbench({
       if (!api || !activeTabId) return;
       void fn(api);
     },
-    [activeTabId],
+    [activeTabId, threadScope],
   );
 
   const activeTitle = tabs.find((t) => t.tabId === activeTabId)?.title ?? '';
@@ -432,13 +467,13 @@ export function BrowserWorkbench({
   return (
     <section className="browserWorkbench" data-testid="browserWorkbench">
       <div className="browserToolbar">
-        <button type="button" className="browserToolbarButton" aria-label="后退" onClick={() => callNav((a) => a.back({ tabId: activeTabId! }))} disabled={!activeTabId}>
+      <button type="button" className="browserToolbarButton" aria-label="后退" onClick={() => callNav((a) => a.back({ tabId: activeTabId!, threadId: threadScope }))} disabled={!activeTabId}>
           <Icon name="chevronLeft" />
         </button>
-        <button type="button" className="browserToolbarButton" aria-label="前进" onClick={() => callNav((a) => a.forward({ tabId: activeTabId! }))} disabled={!activeTabId}>
+        <button type="button" className="browserToolbarButton" aria-label="前进" onClick={() => callNav((a) => a.forward({ tabId: activeTabId!, threadId: threadScope }))} disabled={!activeTabId}>
           <Icon name="chevronRight" />
         </button>
-        <button type="button" className="browserToolbarButton" aria-label="刷新" onClick={() => callNav((a) => (loading ? a.stop({ tabId: activeTabId! }) : a.reload({ tabId: activeTabId! })))} disabled={!activeTabId}>
+        <button type="button" className="browserToolbarButton" aria-label="刷新" onClick={() => callNav((a) => (loading ? a.stop({ tabId: activeTabId!, threadId: threadScope }) : a.reload({ tabId: activeTabId!, threadId: threadScope })))} disabled={!activeTabId}>
           <Icon name={loading ? 'stop' : 'refresh'} />
         </button>
         <input
@@ -493,12 +528,13 @@ export function BrowserWorkbench({
   );
 }
 
-function reportBrowserBounds(api: BrowserApi, container: HTMLDivElement | null, tabId: string | null): void {
-  if (!container || !tabId) return;
+function reportBrowserBounds(api: BrowserApi, container: HTMLDivElement | null, tabId: string | null, threadId: string): void {
+  if (!container || !tabId || !threadId) return;
   const rect = container.getBoundingClientRect();
   if (rect.width < 1 || rect.height < 1) return;
   void api.setBounds({
     tabId,
+    threadId,
     bounds: {
       x: Math.round(rect.x),
       y: Math.round(rect.y),

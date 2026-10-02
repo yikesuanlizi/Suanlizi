@@ -31,15 +31,15 @@ import {
   type ProtocolFrame,
   type SidecarHandle,
   type SidecarTransport,
-} from '@nexus/browser-runtime';
-import { buildRuntimeAccessPolicy, evaluateAccessRequest } from '@nexus/runtime';
+} from '@suanlizi/browser-runtime';
+import { buildRuntimeAccessPolicy, evaluateAccessRequest } from '@suanlizi/runtime';
 import type {
   AccessRule,
   ActionIntent,
   ApprovalRequest,
   BrowserTaskEvent,
   BrowserTaskState,
-} from '@nexus/protocol';
+} from '@suanlizi/protocol';
 
 // ─── 内存 transport 桥接 ────────────────────────────────────────────────────
 // sendLine → sidecarHandle.handleLine(line)；handleLine 返回的帧数组逐行回调

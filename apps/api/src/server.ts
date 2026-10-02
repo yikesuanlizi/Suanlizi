@@ -1,16 +1,16 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { URL } from 'node:url';
-import { type ThreadState } from '@nexus/runtime';
-import { addCustomProvider, listAllProviders, type ModelGateway } from '@nexus/model-gateway';
-import { createStore, resolveStorageOptions } from '@nexus/storage';
-import { forkThread } from '@nexus/memory';
-import type { AccessPolicyConfig, AccessRequest, AccessRule, PersistentAccessScope, ThreadEvent, ThreadId, ThreadItem, TurnMeta, UserInput } from '@nexus/protocol';
-import { buildAgentCard, type AgentRuntimePort } from '@nexus/protocol';
-import { createA2AHandler, handleA2ARoute, type A2AHandler } from './a2a/a2aRoute.js';
+import { listAllProviders, removeCustomProvider } from '@suanlizi/model-gateway';
+import { createStore, resolveStorageOptions } from '@suanlizi/storage';
+import { forkThread } from '@suanlizi/memory';
+import type { PersistentAccessScope, ThreadEvent, ThreadItem, UserInput } from '@suanlizi/protocol';
+import { handleA2ARoute } from './a2a/a2aRoute.js';
 import { WebApprovalBroker } from './services/approval.js';
 import { handleCompactThread } from './routes/compactRoute.js';
-import { readJson, sendError, sendJson } from './shared/http.js';
-import { DEFAULT_TENANT_ID, tenantEventKey, type TenantContext } from './shared/tenant.js';
+import { RequestBodyTooLargeError, readJson, sendError, sendJson } from './shared/http.js';
+import { DEFAULT_TENANT_ID, tenantEventKey } from './shared/tenant.js';
+import { generateServerId } from './shared/threadSerialization.js';
+import { createThreadEventBus } from './services/threadEventBus.js';
 import { installGracefulShutdown } from './runtime/shutdown.js';
 import { handlePickWorkspaceDirectory } from './routes/workspacePicker.js';
 import { autoStartDingtalkForTenant, handleBotRoute } from './routes/botRoute.js';
@@ -18,28 +18,56 @@ import { handleWorkspaceFilesRoute } from './routes/workspaceFiles.js';
 import { handleTerminalRoute } from './routes/terminal.js';
 import { handleSettingsRoute } from './routes/settingsRoute.js';
 import { handleWorkflowRoute } from './routes/workflowRoute.js';
+import { handleTaskRoute } from './routes/taskRoute.js';
+import { handleWorkflowScriptRoute } from './routes/workflowScriptRoute.js';
+import { taskWorkflowIntegrationForTenant, workflowScriptServiceForTenant } from './services/workflowScriptWiring.js';
+import { createTaskGoalStatusService } from './services/taskGoalStatusService.js';
+import { appendPersistentRule, persistentRuleFromApproval } from './services/accessPolicyRules.js';
+import { adaptAgentLoopToPort, createA2AHandlerRegistry } from './services/a2aHandlerRegistry.js';
+import { createSkillDraftService, skillInstallUrlsFromBody } from './services/skillDraftService.js';
 import { handleRunMonitorRoute } from './routes/runMonitorRoute.js';
+import { handleSystemMonitorRoute } from './routes/systemMonitorRoute.js';
 import { handleGitNexusRoute } from './routes/gitnexusRoute.js';
 import { handleMemoryRoute } from './routes/memoryRoute.js';
 import { handleThreadRoutes } from './routes/threadRoutes.js';
 import { harnessRuntimeRegistry } from './services/harnessRuntime.js';
+import { terminateAllProcessTrees } from '@suanlizi/tools';
+import { startTaskRunRecovery } from './services/taskRecovery.js';
+import { reconcileTasksFromTags } from './services/taskReconcile.js';
+import { reconcileThreadRuntimeOnStartup } from './services/threadRuntimeReconcile.js';
 import { handleRollbackThreadRuntimeAction, handleRunControlAction } from './routes/threadRuntimeActions.js';
-import { buildSkillDraftSystemPrompt, createSkillInstallTurnItems, createTemplateSkillDraft, deleteSkill, installSkillsFromGitHubUrls, prepareSkillDraftRequest, safeGeneratedSkillDraft, writeSkillDraft, type InstallSkillsResult, type SkillDraft } from './services/skills.js';
+import { handleThreadSkillInstall } from './routes/threadSkillInstall.js';
+import { deleteSkill, installSkillsFromGitHubUrls, writeSkillDraft, type SkillDraft } from './services/skills.js';
 import { prepareMcpDraftRequest } from './services/mcpDraft.js';
 import { shouldRetitleThread, titleFromInput } from './services/threadTitle.js';
+
+const activeAgentProcesses: import('node:child_process').ChildProcess[] = [];
 import { buildUserInputFromTurnRequest } from './services/turnInput.js';
 import { defaultConfig, hiddenChatWorkspaceRoot, resolveConfig, type AgentRunConfig, type TurnRequest, A2A_CONFIG_KEY, normalizeA2AConfig } from './config/config.js';
+import { cleanupLegacyProjectAppData } from './runtime/appDataMigration.js';
 import { createTenantRuntime } from './runtime/tenantRuntime.js';
 import { applyCorsHeaders, resolveCorsOptions } from './shared/cors.js';
 import { handleRequestGate } from './routes/requestGate.js';
 import { handleStatusRoute } from './routes/statusRoute.js';
 import { handleKeysRoute } from './routes/keysRoute.js';
+import { handleModelCapabilitiesRoute } from './routes/modelCapabilitiesRoute.js';
+import { handleProviderModelsRoute } from './routes/providerModelsRoute.js';
+import { handleModelCatalogRoute } from './routes/modelCatalogRoute.js';
+import { pruneOrphanCustomProviders, reconcileRemovedModelSelection } from './services/modelCatalogService.js';
 import { handleOpsRoute, recoverOpsTasks } from './routes/opsRoute.js';
 import { handleKnowledgeRoute } from './routes/knowledgeRoute.js';
 
+cleanupLegacyProjectAppData(defaultConfig.dataDir);
 const storageOptions = resolveStorageOptions();
-const { store: rootStore } = createStore(defaultConfig.dataDir);
-const eventClients = new Map<string, Set<ServerResponse>>();
+const { store: rootStore, taskStore } = createStore(defaultConfig.dataDir);
+// SSE 发布/订阅与回放缓冲已下沉到 ./services/threadEventBus.ts；本处只按需取用。
+const {
+  publishEvent,
+  publishCompletedItems,
+  closeThreadEventClients,
+  clients: eventClients,
+  history: threadEventHistory,
+} = createThreadEventBus();
 const approvalBroker = new WebApprovalBroker(5 * 60_000, (entry) => {
   publishEvent({
     type: 'approval.resolved',
@@ -52,48 +80,9 @@ const approvalBroker = new WebApprovalBroker(5 * 60_000, (entry) => {
   });
 });
 
-function publishEvent(event: ThreadEvent, tenantId: string = DEFAULT_TENANT_ID): void {
-  const threadId = 'threadId' in event ? event.threadId : undefined;
-  if (!threadId) return;
-  const clients = eventClients.get(tenantEventKey(tenantId, threadId));
-  if (!clients) return;
-  const line = `data: ${JSON.stringify(event)}\n\n`;
-  for (const client of clients) {
-    client.write(line);
-  }
-}
+// 事件广播、回放缓冲与订阅关闭已下沉到 ./services/threadEventBus.ts。
 
-function persistentRuleFromApproval(request: AccessRequest, scope: PersistentAccessScope): AccessRule {
-  const createdAt = new Date().toISOString();
-  return {
-    id: `approval_allow_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
-    effect: 'allow',
-    access: request.access,
-    target: request.target,
-    scope,
-    ...(scope === 'thread' ? { threadId: request.threadId } : {}),
-    ...(scope === 'workspace' && request.workspaceRoot ? { workspaceRoot: request.workspaceRoot } : {}),
-    reason: '通过审批面板允许类似操作',
-    createdAt,
-    updatedAt: createdAt,
-  };
-}
-
-function appendPersistentRule(policy: AccessPolicyConfig, rule: AccessRule): AccessPolicyConfig {
-  const alreadyPresent = policy.persistentRules.some((current) =>
-    current.effect === rule.effect
-    && current.access === rule.access
-    && current.scope === rule.scope
-    && current.threadId === rule.threadId
-    && current.workspaceRoot === rule.workspaceRoot
-    && JSON.stringify(current.target) === JSON.stringify(rule.target),
-  );
-  return {
-    ...policy,
-    persistentRules: alreadyPresent ? policy.persistentRules : [...policy.persistentRules, rule],
-    temporaryGrants: [],
-  };
-}
+// 审批面板的持久化规则构造已下沉到 ./services/accessPolicyRules.ts（§5：server.ts 只做装配）。
 
 const tenantRuntime = createTenantRuntime({
   rootStore,
@@ -101,260 +90,23 @@ const tenantRuntime = createTenantRuntime({
   publishEvent,
 });
 
-// A2A handler 单例缓存（按租户隔离）— Chinese: A2A handler singleton cache per tenant
-const a2aHandlers = new Map<string, A2AHandler>();
+// ─── Workflow 脚本服务（P4b）──────────────────────────────────────────────────
+// 按租户缓存的进程级单例：service 内部持有 runId → AbortController 取消注册表，
+// 必须跨请求共享（每请求新建会丢失取消能力）。子代理执行器走既有 AgentLoop
+// runTurn（source='harness' + 用户不可见 + 不进冷记忆），权限治理不旁路。
+// 工厂实现见 ./services/workflowScriptWiring.ts（含 runTurn 子代理执行器适配与按租户缓存）。
 
-/**
- * 将 Nexus AgentLoop 适配到 A2A AgentRuntimePort 端口接口。
- * AgentLoop 的 onEvent 返回 unsubscribe；runTurn 返回 { items, usage }，端口只取 { items }。
- */
-// — Chinese: adapt AgentLoop to A2A AgentRuntimePort. onEvent returns unsubscribe.
-function adaptAgentLoopToPort(agent: {
-  runTurn(threadId: ThreadId, input: { type: 'text'; text: string }, signal?: AbortSignal): Promise<{ items: ThreadItem[] }>;
-  interrupt(threadId: ThreadId): boolean;
-  onEvent(listener: (event: ThreadEvent) => void): () => void;
-}): AgentRuntimePort {
-  return {
-    runTurn: (threadId, input, signal) => agent.runTurn(threadId, input, signal),
-    interrupt: (threadId) => agent.interrupt(threadId),
-    onEvent: (listener) => agent.onEvent(listener),
-  };
-}
+// A2A handler 的按租户单例缓存与 AgentCard 组装已下沉到 ./services/a2aHandlerRegistry.ts。
+const a2aRegistry = createA2AHandlerRegistry({
+  storeForTenant: (ctx) => tenantRuntime.storeForTenant(ctx),
+  createRuntimePort: async (ctx) => adaptAgentLoopToPort(await tenantRuntime.getDefaultAgent(ctx)),
+});
 
-/** 推导 A2A 端点基础 URL（支持 NEXUS_A2A_BASE_URL 环境变量覆盖）。 */
-// — Chinese: resolve A2A endpoint base URL (overridable via NEXUS_A2A_BASE_URL)
-function resolveA2ABaseUrl(req: IncomingMessage): string {
-  const envBase = process.env.NEXUS_A2A_BASE_URL;
-  if (envBase) return envBase.replace(/\/$/, '');
-  const proto = (req.headers['x-forwarded-proto'] as string | undefined) ?? 'http';
-  const host = req.headers.host ?? `localhost:${process.env.NEXUS_API_PORT ?? '4127'}`;
-  return `${proto}://${host}`;
-}
-
-/**
- * 获取或创建本地 A2A handler（单例）。
- * 装配 AgentCard、TaskStore、AgentExecutor，并注入 agentFactory。
- */
-function getA2AHandler(
-  tenantContext: TenantContext,
-  req: IncomingMessage,
-): A2AHandler {
-  const cached = a2aHandlers.get(tenantContext.tenantId);
-  if (cached) return cached;
-
-  const baseUrl = resolveA2ABaseUrl(req);
-  const store = tenantRuntime.storeForTenant(tenantContext);
-  const agentCard = buildAgentCard({
-    name: 'Nexus',
-    description: 'Nexus Agent OS — A2A endpoint powered by AgentLoop runtime',
-    url: `${baseUrl}/api/a2a`,
-    version: '0.3.0',
-    // 本地实例不启用远程认证。
-    securityScheme: 'none',
-  });
-
-  const handler = createA2AHandler({
-    agentCard,
-    threadStore: store,
-    agentFactory: async () => {
-      const agent = await tenantRuntime.getDefaultAgent(tenantContext);
-      return adaptAgentLoopToPort(agent);
-    },
-  });
-  a2aHandlers.set(tenantContext.tenantId, handler);
-  return handler;
-}
-
-export function serializeThreadState(state: ThreadState): unknown {
-  return {
-    status: state.status,
-    activeTurnId: state.activeTurnId,
-    generation: state.generation,
-    pendingInterrupts: state.pendingInterrupts,
-    pendingRollback: state.pendingRollback,
-    pendingDecision: state.pendingDecision,
-    terminalStatus: state.terminalStatus,
-    lastCheckpoint: state.lastCheckpoint,
-    lastTerminalTurnId: state.lastTerminalTurnId,
-    hasCancelController: Boolean(state.cancelController),
-    turnSummary: state.turnSummary
-      ? {
-          ...state.turnSummary,
-          commandExecutionsStarted: [...state.turnSummary.commandExecutionsStarted],
-        }
-      : null,
-  };
-}
-
-function extractJsonObject(text: string): Record<string, unknown> | null {
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1];
-  const candidate = fenced ?? text;
-  const start = candidate.indexOf('{');
-  const end = candidate.lastIndexOf('}');
-  if (start < 0 || end < start) return null;
-  try {
-    return JSON.parse(candidate.slice(start, end + 1)) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-}
-
-async function draftSkill(
-  description: string,
-  configPatch: Partial<AgentRunConfig> | undefined,
-  tenantContext: TenantContext = { tenantId: DEFAULT_TENANT_ID },
-): Promise<{
-  draft: SkillDraft;
-  source: 'model' | 'template';
-  error?: string;
-}> {
-  const locale = configPatch?.locale ?? 'zh';
-  const prepared = await prepareSkillDraftRequest(description);
-  const templateDraft = createTemplateSkillDraft(prepared, locale);
-
-  try {
-    const { model } = await tenantRuntime.createAgent(configPatch, tenantContext);
-    const response = await model.chat({
-      messages: [
-        {
-          role: 'system',
-          content: buildSkillDraftSystemPrompt(locale),
-        },
-        { role: 'user', content: prepared.prompt },
-      ],
-      tool_choice: 'none',
-      max_tokens: 1200,
-      temperature: 0.2,
-    });
-    const text = String(response.choices[0]?.message.content ?? '');
-    const json = extractJsonObject(text);
-    return {
-      draft: safeGeneratedSkillDraft(json, prepared, templateDraft),
-      source: 'model',
-    };
-  } catch (error) {
-    return {
-      draft: templateDraft,
-      source: 'template',
-      error: error instanceof Error ? error.message : String(error),
-    };
-  }
-}
-
-async function createSkillInstallReply(
-  model: ModelGateway,
-  result: InstallSkillsResult,
-  inputText: string,
-  locale: AgentRunConfig['locale'],
-): Promise<string> {
-  const fallback = fallbackSkillInstallReply(result, locale);
-  try {
-    const response = await model.chat({
-      messages: [
-        {
-          role: 'system',
-          content: locale === 'zh'
-            ? '你是 Nexus。根据工具安装结果，用中文简洁回答用户。不要编造未安装的 Skill。'
-            : 'You are Nexus. Reply concisely in English based on the skill installation result. Do not invent skills that were not installed.',
-        },
-        {
-          role: 'user',
-          content: JSON.stringify({
-            command: inputText,
-            skillsRoot: result.skillsRoot,
-            installed: result.installed.map((skill) => ({
-              name: skill.name,
-              sourcePath: skill.sourcePath,
-              path: skill.path,
-            })),
-          }, null, 2),
-        },
-      ],
-      tool_choice: 'none',
-      max_tokens: 300,
-      temperature: 0.2,
-    });
-    const text = String(response.choices[0]?.message.content ?? '').trim();
-    return text || fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function fallbackSkillInstallReply(result: InstallSkillsResult, locale: AgentRunConfig['locale']): string {
-  const names = result.installed.map((skill) => skill.name).join(', ');
-  if (locale === 'en') {
-    return `Installed ${result.installed.length} skill(s): ${names || 'none'}.`;
-  }
-  return `已安装 ${result.installed.length} 个 Skill：${names || '无'}。`;
-}
-
-function createSkillInstallFailureItems(
-  turnId: string,
-  input: string,
-  message: string,
-  timestamp: string,
-  installUrls: string[] = [],
-): ThreadItem[] {
-  const skillUrl = input.replace(/^\/skills\s+add\s+/i, '').trim();
-  return [
-    {
-      id: `${turnId}_item_0`,
-      type: 'user_message',
-      turnId,
-      text: input,
-      timestamp,
-    },
-    {
-      id: `${turnId}_item_1`,
-      type: 'tool_call',
-      turnId,
-      toolName: 'skills_add',
-      arguments: {
-        input: skillUrl,
-        ...(installUrls.length > 0 ? { urls: installUrls } : {}),
-      },
-      error: { message },
-      status: 'failed',
-      timestamp,
-    },
-    {
-      id: `${turnId}_item_2`,
-      type: 'error',
-      turnId,
-      message,
-      timestamp,
-    },
-  ];
-}
-
-function skillInstallUrlsFromBody(body: { url?: string; urls?: string[] }): string[] {
-  const candidates = Array.isArray(body.urls) ? body.urls : [body.url ?? ''];
-  return candidates
-    .map((value) => String(value).trim())
-    .filter(Boolean)
-    .filter((value, index, current) => current.indexOf(value) === index);
-}
-
-function publishCompletedItems(threadId: ThreadId, turnId: string, items: ThreadItem[], tenantId: string = DEFAULT_TENANT_ID): void {
-  for (const item of items) {
-    publishEvent({ type: 'item.completed', threadId, turnId, item }, tenantId);
-  }
-}
-
-function closeThreadEventClients(threadId: ThreadId, tenantId: string = DEFAULT_TENANT_ID): void {
-  const key = tenantEventKey(tenantId, threadId);
-  const clients = eventClients.get(key);
-  if (!clients) return;
-  for (const client of clients) {
-    client.end();
-  }
-  eventClients.delete(key);
-}
-
-function generateServerId(): string {
-  return `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-}
+// Skill 草拟 / 安装回复的提示词组装与兼容回落已下沉到 ./services/skillDraftService.ts。
+const skillDraftService = createSkillDraftService({
+  createModel: async (configPatch, ctx) => (await tenantRuntime.createAgent(configPatch ?? {}, ctx)).model,
+  defaultTenantContext: { tenantId: DEFAULT_TENANT_ID },
+});
 
 async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const url = new URL(req.url ?? '/', 'http://localhost');
@@ -367,6 +119,13 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const gate = handleRequestGate({ req, res, corsOptions });
   if (gate.handled) return;
   const { tenantContext } = gate;
+
+  if (await handleSystemMonitorRoute({
+    req,
+    res,
+    pathname: url.pathname,
+    getStatus: () => tenantRuntime.getSystemMonitorStatus(tenantContext),
+  })) return;
 
   const store = tenantRuntime.storeForTenant(tenantContext);
   const configRepo = tenantRuntime.configRepoForTenant(tenantContext);
@@ -392,6 +151,7 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const createTenantAgent = (config?: Partial<AgentRunConfig>) => tenantRuntime.createAgent(config ?? {}, tenantContext);
   const getTenantDefaultAgent = () => tenantRuntime.getDefaultAgent(tenantContext);
   const publishTenantEvent = (event: ThreadEvent) => publishEvent(event, tenantContext.tenantId);
+  const goalStatusService = createTaskGoalStatusService({ taskStore, threadStore: store });
   const tenantMcpManager = tenantRuntime.mcpManagerForTenant(tenantContext);
   if (await handleBotRoute({
     req,
@@ -419,12 +179,50 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     // Ops 的模型调查始终使用只读权限，避免复用用户当前的写入预设。
     getAgent: async () => (await createTenantAgent({ permissions: 'read_only' })).agent,
   })) return;
+  // Workflow 脚本 API（P4b）：validate → 批准启动 → result / cancel。
+  // 必须装配在 handleTaskRoute 之前：taskRoute 会把 /api/tasks/:id/workflows/*
+  // 当未知子段 404。子代理执行器注入见 workflowScriptServiceForTenant。
+  if (await handleWorkflowScriptRoute({
+    req,
+    res,
+    url,
+    segments,
+    service: workflowScriptServiceForTenant(tenantContext, {
+      taskStore,
+      publishEvent,
+      createTenantAgent: async () => (await createTenantAgent()) as never,
+    }),
+  })) return;
+
+  // 目标任务中心 API（P0：基础 CRUD 与查询） — English: goal-task routes (P0 CRUD/query)
+  // P2 生命周期端点（pause/resume/cancel/retry/redirect/input/start）由同一注入点装配：
+  // agent 复用租户缺省编排（生命周期写入需要完整权限，不复用 Ops 的只读预设）。
+  if (await handleTaskRoute({
+    req,
+    res,
+    url,
+    segments,
+    taskStore,
+    tenantContext,
+    getAgent: async () => (await createTenantAgent()).agent,
+    publishEvent: publishTenantEvent,
+    registry: harnessRuntimeRegistry,
+    // P6：Goal × Workflow 组合（提案转发 + 证据预载）见 taskWorkflowIntegrationForTenant。
+    workflow: taskWorkflowIntegrationForTenant(tenantContext, {
+      taskStore,
+      publishEvent,
+      createTenantAgent: async () => (await createTenantAgent()) as never,
+    }),
+    // P3 §13.1：goal-status 只读投影；同一实例的读接口还用于发 task.goal.evaluation.available 事件。
+    goalStatus: goalStatusService,
+    readGoalEvaluation: async (params) => goalStatusService.readGoalEvaluation(params.taskId, params.runId),
+  })) return;
 
   // A2A 标准发现路径 — /.well-known/agent-card.json
   // A2A 规范要求 Agent Card 在此路径暴露，SDK 的 ClientFactory.createFromUrl 默认查找此路径
   // — Chinese: A2A standard discovery path required by the spec
   if (req.method === 'GET' && url.pathname === '/.well-known/agent-card.json') {
-    const a2aHandler = getA2AHandler(tenantContext, req);
+    const a2aHandler = a2aRegistry.handler(tenantContext, req);
     sendJson(res, 200, a2aHandler.agentCard);
     return;
   }
@@ -432,7 +230,7 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   // A2A (Agent2Agent) JSON-RPC 路由 — Chinese: A2A JSON-RPC route
   // Agent Card 始终可访问（用于发现），JSON-RPC 调用需要启用配置
   if (segments[0] === 'api' && segments[1] === 'a2a') {
-    const a2aHandler = getA2AHandler(tenantContext, req);
+    const a2aHandler = a2aRegistry.handler(tenantContext, req);
     const isCardRequest = req.method === 'GET' && segments[2] === 'card';
     const a2aConfig = normalizeA2AConfig(await store.getSetting(A2A_CONFIG_KEY));
     if (!isCardRequest && !a2aConfig.enabled) {
@@ -495,7 +293,7 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const body = await readJson<{ description?: string; config?: Partial<AgentRunConfig> }>(req);
     const description = body.description?.trim();
     if (!description) { sendError(res, 400, 'Skill description is required'); return; }
-    sendJson(res, 200, await draftSkill(description, body.config, tenantContext));
+    sendJson(res, 200, await skillDraftService.draft(description, body.config, tenantContext));
     return;
   }
 
@@ -546,68 +344,12 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     return;
   }
 
-  if (req.method === 'GET' && url.pathname === '/api/providers') {
-    sendJson(res, 200, { providers: listAllProviders() });
-    return;
-  }
-
-  if (req.method === 'POST' && url.pathname === '/api/providers') {
-    try {
-      const body = await readJson<{ name?: string; baseUrl?: string; protocol?: 'openai' | 'anthropic' }>(req);
-      const name = (body.name ?? '').trim();
-      if (!name) {
-        sendError(res, 400, 'Provider name is required');
-        return;
-      }
-      const baseUrl = (body.baseUrl ?? '').trim() || 'http://localhost:8080/v1';
-      const protocol: 'openai' | 'anthropic' = body.protocol === 'anthropic' ? 'anthropic' : 'openai';
-      const slug = name
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '_')
-        .replace(/^_+|_+$/g, '')
-        .slice(0, 32) || 'custom';
-      let id = `custom_${slug}`;
-      const existing = listAllProviders();
-      let n = 1;
-      while (existing.some((p) => p.id === id)) {
-        id = `custom_${slug}_${++n}`;
-      }
-      addCustomProvider({
-        id,
-        name,
-        baseUrl,
-        apiKeyEnvVar: '',
-        protocol,
-        isLocal: false,
-        description: `Custom provider: ${name}`,
-      });
-      sendJson(res, 200, { ok: true, provider: listAllProviders().find((p) => p.id === id) });
-    } catch (error) {
-      sendError(res, 400, error instanceof Error ? error.message : String(error));
-    }
-    return;
-  }
-
-  if (req.method === 'GET' && url.pathname === '/api/model-presets') {
-    sendJson(res, 200, { presets: await listModelPresets() });
-    return;
-  }
-
-  if (req.method === 'POST' && url.pathname === '/api/model-presets') {
-    const body = await readJson<{
-      id?: string;
-      name?: string;
-      config?: Partial<AgentRunConfig>;
-      status?: 'draft' | 'published';
-    }>(req);
-    sendJson(res, 200, await upsertModelPreset(body));
-    return;
-  }
-
-  if (req.method === 'DELETE' && segments[0] === 'api' && segments[1] === 'model-presets' && segments[2]) {
-    sendJson(res, 200, { ok: true, presets: await deleteModelPreset(segments[2]) });
-    return;
-  }
+  if (await handleModelCatalogRoute({
+    req, res, pathname: url.pathname, segments, repo: configRepo, store,
+    saveDefault: saveTenantDefaultRunConfig,
+  })) return;
+  if (await handleProviderModelsRoute(req, res, tenantRuntime, tenantContext)) return;
+  if (await handleModelCapabilitiesRoute(req, res, tenantRuntime, tenantContext)) return;
 
   if (await handleKeysRoute(req, res, segments, url.pathname)) return;
 
@@ -619,7 +361,7 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   }
 
   if (req.method === 'GET' && url.pathname === '/api/threads') {
-    sendJson(res, 200, { threads: await store.listThreads({ limit: 50 }) });
+    sendJson(res, 200, { threads: await store.listThreads() });
     return;
   }
 
@@ -704,7 +446,7 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
       effectiveConfig.workspaceRoot = hiddenChatWorkspaceRoot(effectiveConfig.dataDir);
     }
     const agent = body.config ? (await createTenantAgent(effectiveConfig)).agent : await getTenantDefaultAgent();
-    const thread = await agent.startThread(body.title ?? 'Nexus', {
+    const thread = await agent.startThread(body.title ?? 'Suanlizi', {
       workspaceRoot: conversationKind === 'chat' ? '' : effectiveConfig.workspaceRoot,
       tags: conversationKind === 'chat' ? { conversationKind: 'chat' } : body.workflowProject ? { workflowProject: 'true' } : {},
     });
@@ -721,20 +463,42 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     return;
   }
 
-  if (await handleThreadRoutes(req, res, url, segments, { store, tenantContext, createTenantAgent, getTenantDefaultAgent, publishTenantEvent, getThreadRunConfig, saveThreadRunConfig, getThreadConfigOverrides, updateThreadConfigOverrides, getThreadAccessPolicy, saveThreadAccessPolicy, publicThreadRunConfig, closeThreadEventClients, activeRunRegistry: tenantRuntime.activeRunRegistry })) return;
+  if (await handleThreadRoutes(req, res, url, segments, { store, tenantContext, taskStore, createTenantAgent, getTenantDefaultAgent, publishTenantEvent, getThreadRunConfig, saveThreadRunConfig, getThreadConfigOverrides, updateThreadConfigOverrides, getThreadAccessPolicy, saveThreadAccessPolicy, publicThreadRunConfig, closeThreadEventClients, activeRunRegistry: tenantRuntime.activeRunRegistry })) return;
 
   if (req.method === 'GET' && segments[0] === 'api' && segments[1] === 'events' && segments[2]) {
     const threadId = segments[2];
+    const headerCursor = req.headers['last-event-id'];
+    const rawHeaderCursor = Array.isArray(headerCursor) ? headerCursor[0] : headerCursor;
+    const rawCursor = url.searchParams.get('afterSequence') ?? url.searchParams.get('after') ?? rawHeaderCursor;
+    const explicitCursor = rawCursor !== undefined && rawCursor !== null && rawCursor.trim() !== '';
+    const parsedCursor = explicitCursor ? Number(rawCursor) : undefined;
+    const replay = explicitCursor
+      ? threadEventHistory.replayAfter(tenantContext.tenantId, threadId, Number.isSafeInteger(parsedCursor) && parsedCursor! >= 0 ? parsedCursor! : 0)
+      : { events: [], oldestSequence: null, latestSequence: 0, truncated: false };
+    const afterSequence = parsedCursor ?? replay.latestSequence;
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       Connection: 'keep-alive',
     });
-    res.write('data: {"type":"connected"}\n\n');
     const eventKey = tenantEventKey(tenantContext.tenantId, threadId);
     const clients = eventClients.get(eventKey) ?? new Set<ServerResponse>();
     clients.add(res);
     eventClients.set(eventKey, clients);
+    if (replay.truncated) {
+      res.write(`event: thread.replay.gap\ndata: ${JSON.stringify({
+        type: 'thread.replay.gap',
+        threadId,
+        afterSequence,
+        oldestSequence: replay.oldestSequence,
+        latestSequence: replay.latestSequence,
+        isReplay: true,
+      })}\n\n`);
+    }
+    res.write('data: {"type":"connected","isReplay":false}\n\n');
+    for (const entry of replay.events) {
+      res.write(`id: ${entry.sequence}\ndata: ${JSON.stringify({ ...entry.event, sequence: entry.sequence, isReplay: true })}\n\n`);
+    }
     req.on('close', () => {
       clients.delete(res);
       if (clients.size === 0) eventClients.delete(eventKey);
@@ -747,77 +511,25 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const action = segments[3];
 
     if (action === 'skills' && segments[4] === 'install') {
-      const body = await readJson<{ input?: string; url?: string; urls?: string[]; config?: Partial<AgentRunConfig> }>(req);
-      const skillUrls = skillInstallUrlsFromBody(body);
-      if (skillUrls.length === 0) { sendError(res, 400, 'Skill URL is required'); return; }
-      const config = body.config ? await saveThreadRunConfig(threadId, body.config) : await getThreadRunConfig(threadId);
-      const thread = await store.getThread(threadId);
-      if (!thread) { sendError(res, 404, 'Thread not found'); return; }
-
-      const inputText = body.input?.trim() || `/skills add ${skillUrls.join(' ')}`;
-      if (shouldRetitleThread(thread.title)) {
-        const nextTitle = titleFromInput(inputText) ?? inputText.slice(0, 60);
-        await store.updateThreadMetadata(threadId, { title: nextTitle });
-        publishTenantEvent({
-          type: 'thread.metadata.updated',
-          threadId,
-          title: nextTitle,
-        });
-      }
-
-      const turnId = generateServerId();
-      const startedAt = new Date().toISOString();
-      const skillsRunId = `run_${turnId}`;
-      const turn: TurnMeta = {
-        turnId,
+      // 安装 Skill 的 turn 生命周期已下沉到 ./routes/threadSkillInstall.ts。
+      await handleThreadSkillInstall({
+        req,
+        res,
         threadId,
-        index: thread.turnCount,
-        userInput: { type: 'text', text: inputText },
-        status: 'running',
-        startedAt,
-        completedAt: null,
-      };
-      await store.saveTurn(turn);
-      await store.updateThreadMetadata(threadId, { turnCount: thread.turnCount + 1 });
-      publishTenantEvent({ type: 'turn.started', threadId, turnId, runId: skillsRunId, turnIndex: thread.turnCount });
-
-      try {
-        const result = await installSkillsFromGitHubUrls(config.skillsRoot, skillUrls);
-        resetTenantDefaultAgent();
-        const { model } = await createTenantAgent(config);
-        const agentText = await createSkillInstallReply(model, result, inputText, config.locale);
-        const items = createSkillInstallTurnItems({
-          turnId,
-          input: inputText,
-          installUrls: skillUrls,
-          installed: result.installed,
-          skillsRoot: result.skillsRoot,
-          agentText,
-          timestamp: startedAt,
-        });
-        await store.appendItems(threadId, items);
-        publishCompletedItems(threadId, turnId, items, tenantContext.tenantId);
-        turn.status = 'completed';
-        turn.completedAt = new Date().toISOString();
-        await store.saveTurn(turn);
-        publishTenantEvent({ type: 'turn.completed', threadId, turnId, runId: skillsRunId, usage: null, status: 'completed' });
-        sendJson(res, 200, { ok: true, items, ...result });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        const items = createSkillInstallFailureItems(turnId, inputText, message, startedAt, skillUrls);
-        await store.appendItems(threadId, items);
-        publishCompletedItems(threadId, turnId, items, tenantContext.tenantId);
-        turn.status = 'failed';
-        turn.completedAt = new Date().toISOString();
-        await store.saveTurn(turn);
-        publishTenantEvent({ type: 'turn.failed', threadId, turnId, runId: skillsRunId, error: { message } });
-        sendError(res, 400, message);
-      }
+        tenantId: tenantContext.tenantId,
+        store,
+        getRunConfig: getThreadRunConfig,
+        saveRunConfig: saveThreadRunConfig,
+        createModel: async (config) => (await tenantRuntime.createAgent(config, tenantContext)).model,
+        resetDefaultAgent: resetTenantDefaultAgent,
+        publishEvent: publishTenantEvent,
+        publishCompletedItems,
+      });
       return;
     }
 
     if (action === 'turn') {
-      const body = await readJson<TurnRequest>(req);
+      const body = await readJson<TurnRequest>(req, { maxBytes: 30 * 1024 * 1024 });
       const config = body.config
         ? await saveThreadRunConfig(threadId, body.config)
         : await getThreadRunConfig(threadId);
@@ -849,12 +561,31 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
           sendError(res, 409, `Thread ${threadId} is ${runtimeState.executionStatus}`);
           return;
         }
-        const result = await agent.runTurn(threadId, await buildUserInputFromTurnRequest(body, {
-          threadId,
-          workspaceRoot: config.workspaceRoot,
-          dataDir: config.dataDir,
-        }));
-        sendJson(res, 200, result);
+        let input: UserInput;
+        try {
+          input = await buildUserInputFromTurnRequest(body, {
+            threadId,
+            workspaceRoot: config.workspaceRoot,
+            dataDir: config.dataDir,
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          sendError(res, message.includes('must not exceed') ? 413 : 400, message);
+          return;
+        }
+        try {
+          const result = await agent.runTurn(threadId, input);
+          sendJson(res, 200, result);
+        } catch (error) {
+          // Return the persisted transcript along with the failure. The
+          // runtime writes a terminal error item before rejecting, and the
+          // client can render it without racing a follow-up snapshot read.
+          const items = await store.getItems(threadId).catch(() => [] as ThreadItem[]);
+          sendJson(res, 500, {
+            error: error instanceof Error ? error.message : String(error),
+            items,
+          });
+        }
       } finally {
         tenantRuntime.activeRunRegistry.releaseTopLevel(topLevelReservation);
       }
@@ -885,8 +616,28 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
       const agent = (await createTenantAgent(config)).agent;
       const input: UserInput | undefined =
         body.input && body.input.trim() ? { type: 'text', text: body.input } : undefined;
-      const result = await agent.resumeRunning(threadId, input);
-      sendJson(res, 200, result);
+      // P2 取消链（计划 §9.2 / 盘点 §4.1）：resume-running 自己发起的续跑也必须可取消。
+      // 之前这一段没有 AbortSignal（也没有 activeRunRegistry 条目），/interrupt 只能写
+      // stopping checkpoint，模型流与工具/子代理执行层不会中断。这里按 activeRunRegistry
+      // 现有形状登记一个可取消条目：interrupt = agent.interrupt + abort 双写，结束后收口。
+      // — English: register a cancellable AbortSignal for the resumed run and always release it.
+      const resumeController = new AbortController();
+      const resumeTurnId = (await agent.getRuntimeState(threadId)).checkpoint?.turnId ?? '';
+      const releaseResumeRun = tenantRuntime.activeRunRegistry.register({
+        runId: `resume_${threadId}_${Date.now()}`,
+        threadId,
+        turnId: resumeTurnId,
+        interrupt: () => {
+          agent.interrupt(threadId);
+          resumeController.abort();
+        },
+      });
+      try {
+        const result = await agent.resumeRunning(threadId, input, resumeController.signal);
+        sendJson(res, 200, result);
+      } finally {
+        releaseResumeRun();
+      }
       return;
     }
 
@@ -935,15 +686,37 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   sendError(res, 404, 'Not found');
 }
 
-const port = Number(process.env.NEXUS_API_PORT ?? 4127);
+const port = Number(process.env.SUANLIZI_API_PORT ?? 4127);
 const server = createServer((req, res) => {
   route(req, res).catch((error) => {
-    sendError(res, 500, error instanceof Error ? error.message : String(error));
+    sendError(
+      res,
+      error instanceof RequestBodyTooLargeError ? error.statusCode : 500,
+      error instanceof Error ? error.message : String(error),
+    );
   });
 });
 
-server.listen(port, () => {
-  console.log(`Nexus API listening on http://localhost:${port}`);
+async function listenAfterModelCatalogMigration(): Promise<void> {
+  const repo = tenantRuntime.configRepoForTenant({ tenantId: DEFAULT_TENANT_ID });
+  try {
+    await pruneOrphanCustomProviders({
+      listPresets: () => repo.listModelPresets(),
+      listProviders: listAllProviders,
+      removeProvider: removeCustomProvider,
+      onRemoved: (providerId, remaining) => reconcileRemovedModelSelection({
+        repo,
+        store: rootStore,
+        removed: { providerId },
+        remaining,
+        saveDefault: (patch) => tenantRuntime.saveDefaultRunConfig(patch, { tenantId: DEFAULT_TENANT_ID }),
+      }),
+    });
+  } catch (error) {
+    console.warn('[models] 孤儿厂商清理失败：', error instanceof Error ? error.message : String(error));
+  }
+  server.listen(port, () => {
+  console.log(`Suanlizi API listening on http://localhost:${port}`);
   const defaultTenantStore = tenantRuntime.storeForTenant({ tenantId: DEFAULT_TENANT_ID });
   const defaultCfgRepo = tenantRuntime.configRepoForTenant({ tenantId: DEFAULT_TENANT_ID });
   void autoStartDingtalkForTenant({
@@ -962,11 +735,77 @@ server.listen(port, () => {
   }).catch((err) => {
     console.warn('[ops] task recovery failed:', err instanceof Error ? err.message : String(err));
   });
-});
+  // 启动扫描非终态 TaskRun（计划 §11.2，与 recoverOpsTasks 并列）；恢复真相只在 Agent Checkpoint。
+  // P5：被改写的 workflow run 同步把 WorkflowRunRecord 标记 interrupted（脚本运行状态只在进程内）。
+  startTaskRunRecovery({
+    taskStore,
+    isLive: (run) => Boolean(run.harnessRunId && harnessRuntimeRegistry.get(run.harnessRunId)?.runtimeStatus === 'running'),
+    onRecovered: (rewritten) => {
+      const workflowRunIds = rewritten
+        .filter((run) => run.kind === 'workflow' && run.workflowRunId)
+        .map((run) => run.workflowRunId as string);
+      if (workflowRunIds.length === 0) return;
+      void workflowScriptServiceForTenant({ tenantId: DEFAULT_TENANT_ID }, {
+        taskStore,
+        publishEvent,
+        createTenantAgent: async () => {
+          const { agent } = await tenantRuntime.createAgent({}, { tenantId: DEFAULT_TENANT_ID });
+          return { agent: agent as never };
+        },
+      })
+        .markWorkflowRunsInterrupted(workflowRunIds)
+        .catch(() => undefined);
+    },
+  });
+  // §14.6 切换期：以 thread.tags 为摘要源对 task 表做幂等对账（只写 task 表，类型面上无法改 tags）。
+  // 与恢复扫描并列、不阻塞端口就绪；重复执行结果一致（已领先的任务会被 skip）。
+  void reconcileTasksFromTags({
+    threadStore: defaultTenantStore,
+    taskStore,
+    listThreads: async () => defaultTenantStore.listThreads(),
+    logger: { warn: (message) => console.warn(message), info: (message) => console.log(message) },
+    isLive: ({ harnessRunId }) => harnessRuntimeRegistry.get(harnessRunId)?.runtimeStatus === 'running',
+  })
+    .then((report) => {
+      if (report.created + report.updated > 0) {
+        console.log(`[tasks] tag→task 对账完成：补建 ${report.created}、修正 ${report.updated}、冲突 ${report.conflicts}`);
+      }
+    })
+    .catch((error) => {
+      console.warn('[tasks] tag→task 对账失败：', error instanceof Error ? error.message : String(error));
+    });
+
+  // 重启对账：进程被强杀/崩溃会留下 running checkpoint，而内存态是 idle，
+  // /state 会用 checkpoint 回推成 running，导致 UI 永远卡在“进行中”。
+  // 启动时把所有非本进程活跃的 running/stopping checkpoint 收敛为 interrupted。
+  void reconcileThreadRuntimeOnStartup({
+    threadStore: defaultTenantStore,
+    // 刚启动时没有任何进程内运行句柄，register 过的一定是活着的。
+    isThreadLive: (threadId) => tenantRuntime.activeRunRegistry.getByThreadId(threadId) !== null,
+    log: (message) => console.log(message),
+    warn: (message) => console.warn(message),
+  }).catch((error) => {
+    console.warn('[runtime] 启动运行态对账失败：', error instanceof Error ? error.message : String(error));
+  });
+  });
+}
+void listenAfterModelCatalogMigration();
 
 installGracefulShutdown({
   server,
   store: rootStore,
-  // 进程退出时取消所有运行中的 harness run — English: abort running harness runs on exit
-  onShutdown: () => harnessRuntimeRegistry.abortAll(),
+  // 进程退出时取消对话运行并终止 MCP/任务子进程。
+  onShutdown: () => {
+    harnessRuntimeRegistry.abortAll();
+    for (const runId of tenantRuntime.activeRunRegistry.listActiveRunIds()) {
+      void tenantRuntime.activeRunRegistry.get(runId)?.interrupt();
+    }
+    void tenantRuntime.mcpManagerForTenant({ tenantId: DEFAULT_TENANT_ID }).shutdown();
+    terminateAllProcessTrees(activeAgentProcesses);
+    activeAgentProcesses.length = 0;
+  },
+});
+
+process.on('exit', () => {
+  terminateAllProcessTrees(activeAgentProcesses);
 });

@@ -13,9 +13,9 @@ import {
   saveThreadWorkingSetSnapshot,
   setEpisodeMemorySettings,
   setMemorySettings,
-} from '@nexus/memory';
-import type { EpisodeMemoryMode, ThreadId, UserInput } from '@nexus/protocol';
-import type { ThreadStore } from '@nexus/storage';
+} from '@suanlizi/memory';
+import type { EpisodeMemoryMode, ThreadId, UserInput } from '@suanlizi/protocol';
+import type { ThreadStore } from '@suanlizi/storage';
 import { readJson, sendError, sendJson } from '../shared/http.js';
 import type { AgentRunConfig } from '../config/config.js';
 import type { IncomingMessage, ServerResponse } from 'node:http';

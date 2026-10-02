@@ -8,12 +8,12 @@ import type {
   TurnId,
   Usage,
   UserInput,
-} from '@nexus/protocol';
-import type { ChatMessage, ToolCall, ToolDefinition as ModelToolDefinition } from '@nexus/model-gateway';
-import type { RunEvent, RunEventLevel, ThreadStore } from '@nexus/storage';
-import type { SandboxLevel } from '@nexus/sandbox';
-import type { ToolContext, ToolDefinition, ToolResult } from '@nexus/tools';
-import type { Locale } from '@nexus/i18n';
+} from '@suanlizi/protocol';
+import type { ChatMessage, LlamaSlotLease, MultimodalContent, ToolCall, ToolDefinition as ModelToolDefinition } from '@suanlizi/model-gateway';
+import type { RunEvent, RunEventLevel, ThreadStore } from '@suanlizi/storage';
+import type { SandboxLevel } from '@suanlizi/sandbox';
+import type { ToolContext, ToolDefinition, ToolResult } from '@suanlizi/tools';
+import type { Locale } from '@suanlizi/i18n';
 import type { ThreadStateManager } from './state.js';
 import type { RunProfile } from './runProfile.js';
 import type { WebSearchMode } from './webSearchPolicy.js';
@@ -23,7 +23,7 @@ import type {
   ContextEngine,
   ExperienceEngine,
   ProviderContext,
-} from '@nexus/context';
+} from '@suanlizi/context';
 
 // RuntimeTurnContext：单 turn 的运行时上下文，提供执行所需的数据与操作入口
 export interface RuntimeTurnContext {
@@ -64,7 +64,16 @@ export interface RuntimeModelRequest {
   messages: ChatMessage[];
   tools?: ModelToolDefinition[];
   tool_choice?: 'auto' | 'none' | 'required' | { type: 'function'; function: { name: string } };
+  max_tokens?: number;
   signal?: AbortSignal;
+  llama?: {
+    slot?: LlamaSlotLease;
+    idSlot?: number;
+    cachePrompt?: boolean;
+    returnProgress?: boolean;
+    /** Effective per-slot context discovered from llama.cpp /props. */
+    contextTokens?: number;
+  };
 }
 
 // 模型调用响应：生成的消息和 token 使用统计
@@ -330,16 +339,48 @@ export function createDynamicContextMiddleware(options?: DynamicContextMiddlewar
         cached.inserted = true;
         return;
       }
-      const message: ChatMessage = { role: 'system', content: text };
-      const [first, ...rest] = request.messages;
-      request.messages = first ? [first, message, ...rest] : [message];
+      // llama.cpp chat templates require every system message to be the first
+      // message. Merge dynamic context into the existing first system message
+      // and fold any unexpected later system messages into it as well.
+      const systemMessages = request.messages.filter((message) => message.role === 'system');
+      let nextMessages: ChatMessage[];
+      if (systemMessages.length > 0) {
+        const firstSystem = systemMessages[0];
+        let content = appendSystemContent(firstSystem.content, text);
+        for (const extraSystem of systemMessages.slice(1)) {
+          content = appendSystemContent(content, extraSystem.content);
+        }
+        nextMessages = [
+          { ...firstSystem, content },
+          ...request.messages.filter((message) => message.role !== 'system'),
+        ];
+      } else {
+        nextMessages = [{ role: 'system', content: text }, ...request.messages];
+      }
+      request.messages.splice(0, request.messages.length, ...nextMessages);
       cached.inserted = true;
+      return { ...request, messages: request.messages };
     },
 
     afterTurn: (ctx) => {
       turnCache.delete(ctx.turnId);
     },
   };
+}
+
+function appendSystemContent(
+  current: ChatMessage['content'],
+  addition: ChatMessage['content'],
+): ChatMessage['content'] {
+  if (typeof current === 'string' && typeof addition === 'string') {
+    return current ? `${current}\n\n${addition}` : addition;
+  }
+  const toParts = (value: ChatMessage['content']): MultimodalContent[] => (
+    typeof value === 'string'
+      ? (value ? [{ type: 'text', text: value }] : [])
+      : value
+  );
+  return [...toParts(current), ...toParts(addition)];
 }
 
 function extractUserInputText(input: UserInput): string {
@@ -426,7 +467,7 @@ async function buildDynamicContext(
     `租户：tenantId=${ctx.tenantId}`,
     `工作区路径：${ctx.workspaceRoot}`,
     `运行状态：status=${ctx.runtimeState.status}; resumable=${ctx.runtimeState.resumable}; stale=${ctx.runtimeState.stale}; checkpoint=${checkpoint ? `${checkpoint.status ?? 'unknown'}@${checkpoint.itemIndex}` : 'none'}`,
-    `运行配置：runProfile=${ctx.runProfile}; webSearchMode=${ctx.webSearchMode}; 权限 preset=${ctx.permissions.presetId ?? 'custom'}; sandbox=${ctx.permissions.level}; network=${ctx.permissions.networkAllowed}`,
+    `运行配置：webSearchMode=${ctx.webSearchMode}; 权限 preset=${ctx.permissions.presetId ?? 'custom'}; sandbox=${ctx.permissions.level}; network=${ctx.permissions.networkAllowed}`,
     `最近上传/图片数量=${countImages(ctx.userInput)}`,
     `最近文件变更：${fileChanges.length > 0 ? fileChanges.join(' | ') : '无'}`,
     `子 agent 打开数量=${openSubagents.length}`,

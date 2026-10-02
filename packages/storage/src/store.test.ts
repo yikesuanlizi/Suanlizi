@@ -3,11 +3,11 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createStore } from './index.js';
-import type { ThreadMeta, TurnMeta } from '@nexus/protocol';
+import type { ThreadMeta, TurnMeta } from '@suanlizi/protocol';
 
 describe('LocalThreadStore settings', () => {
   it('persists arbitrary JSON settings by key', async () => {
-    const { store } = createStore(mkdtempSync(join(tmpdir(), 'nexus-storage-')));
+    const { store } = createStore(mkdtempSync(join(tmpdir(), 'suanlizi-storage-')));
 
     await store.setSetting('runConfig.default', {
       provider: 'volcengine',
@@ -21,7 +21,7 @@ describe('LocalThreadStore settings', () => {
   });
 
   it('scopes tenant settings while preserving default tenant reads', async () => {
-    const { store } = createStore(mkdtempSync(join(tmpdir(), 'nexus-storage-')));
+    const { store } = createStore(mkdtempSync(join(tmpdir(), 'suanlizi-storage-')));
     const tenantA = store.scope!('tenantA');
     const tenantB = store.scope!('tenantB');
 
@@ -34,7 +34,7 @@ describe('LocalThreadStore settings', () => {
   });
 
   it('keeps auth token registry global across tenant scopes', async () => {
-    const { store } = createStore(mkdtempSync(join(tmpdir(), 'nexus-storage-')));
+    const { store } = createStore(mkdtempSync(join(tmpdir(), 'suanlizi-storage-')));
     const tenantA = store.scope!('tenantA');
 
     await store.setSetting('auth.tokens.v1', { tokens: [{ id: 'token-a' }] });
@@ -47,7 +47,7 @@ describe('LocalThreadStore settings', () => {
 
 describe('LocalThreadStore cold memories', () => {
   it('persists, searches, uses, deletes, and tenant-scopes memory records', async () => {
-    const { store } = createStore(mkdtempSync(join(tmpdir(), 'nexus-storage-memory-')));
+    const { store } = createStore(mkdtempSync(join(tmpdir(), 'suanlizi-storage-memory-')));
     const tenantA = store.scope!('tenantA');
     const tenantB = store.scope!('tenantB');
     const now = '2026-06-19T00:00:00.000Z';
@@ -60,7 +60,7 @@ describe('LocalThreadStore cold memories', () => {
       scope: 'global',
       sourceThreadId: 'thread-a',
       sourceTurnIds: ['turn-a'],
-      workspaceRoot: 'E:/langchain/Nexus',
+      workspaceRoot: 'E:/langchain/Suanlizi',
       tags: ['language'],
       confidence: 0.9,
       usageCount: 0,
@@ -69,7 +69,7 @@ describe('LocalThreadStore cold memories', () => {
       updatedAt: now,
     });
 
-    await expect(tenantA.searchMemoryRecords!('中文', { workspaceRoot: 'E:/langchain/Nexus' })).resolves.toEqual([
+    await expect(tenantA.searchMemoryRecords!('中文', { workspaceRoot: 'E:/langchain/Suanlizi' })).resolves.toEqual([
       expect.objectContaining({ id: 'mem-a', tenantId: 'tenantA' }),
     ]);
     await expect(tenantB.searchMemoryRecords!('中文')).resolves.toEqual([]);
@@ -86,14 +86,14 @@ describe('LocalThreadStore cold memories', () => {
 
 describe('LocalThreadStore episode memories', () => {
   it('persists, searches, uses, and tenant-scopes episode records', async () => {
-    const { store } = createStore(mkdtempSync(join(tmpdir(), 'nexus-storage-episode-')));
+    const { store } = createStore(mkdtempSync(join(tmpdir(), 'suanlizi-storage-episode-')));
     const tenantA = store.scope!('tenantA');
     const tenantB = store.scope!('tenantB');
     const now = '2026-06-20T00:00:00.000Z';
 
     await tenantA.upsertEpisodeRecord!({
       id: 'ep-a',
-      workspaceRoot: 'E:/langchain/Nexus',
+      workspaceRoot: 'E:/langchain/Suanlizi',
       sourceThreadId: 'thread-a',
       sourceTurnStart: 'turn-0',
       sourceTurnEnd: 'turn-0',
@@ -119,7 +119,7 @@ describe('LocalThreadStore episode memories', () => {
       updatedAt: now,
     });
 
-    await expect(tenantA.searchEpisodeRecords!('auth', { workspaceRoot: 'E:/langchain/Nexus' })).resolves.toEqual([
+    await expect(tenantA.searchEpisodeRecords!('auth', { workspaceRoot: 'E:/langchain/Suanlizi' })).resolves.toEqual([
       expect.objectContaining({ id: 'ep-a', tenantId: 'tenantA' }),
     ]);
     await expect(tenantB.searchEpisodeRecords!('auth')).resolves.toEqual([]);
@@ -131,7 +131,7 @@ describe('LocalThreadStore episode memories', () => {
   });
 
   it('saves and retrieves a thread working set snapshot', async () => {
-    const { store } = createStore(mkdtempSync(join(tmpdir(), 'nexus-storage-ws-')));
+    const { store } = createStore(mkdtempSync(join(tmpdir(), 'suanlizi-storage-ws-')));
     const now = '2026-06-20T00:00:00.000Z';
 
     await store.saveThreadWorkingSet!({
@@ -154,7 +154,7 @@ describe('LocalThreadStore episode memories', () => {
 
 describe('LocalThreadStore threads', () => {
   it('persists tenant-scoped run records, events, progress, and feedback', async () => {
-    const { store } = createStore(mkdtempSync(join(tmpdir(), 'nexus-storage-')));
+    const { store } = createStore(mkdtempSync(join(tmpdir(), 'suanlizi-storage-')));
     const tenantA = store.scope!('tenantA');
     const tenantB = store.scope!('tenantB');
     const now = '2026-06-16T00:00:00.000Z';
@@ -240,7 +240,7 @@ describe('LocalThreadStore threads', () => {
   });
 
   it('persists thread spawn edges and lists children by open/closed status', async () => {
-    const { store } = createStore(mkdtempSync(join(tmpdir(), 'nexus-storage-')));
+    const { store } = createStore(mkdtempSync(join(tmpdir(), 'suanlizi-storage-')));
     const now = new Date().toISOString();
     const parent: ThreadMeta = {
       threadId: 'thread-parent',
@@ -293,7 +293,7 @@ describe('LocalThreadStore threads', () => {
   });
 
   it('isolates threads and spawn edges by tenant scope', async () => {
-    const { store } = createStore(mkdtempSync(join(tmpdir(), 'nexus-storage-')));
+    const { store } = createStore(mkdtempSync(join(tmpdir(), 'suanlizi-storage-')));
     const tenantA = store.scope!('tenantA');
     const tenantB = store.scope!('tenantB');
     const now = new Date().toISOString();
@@ -341,7 +341,7 @@ describe('LocalThreadStore threads', () => {
   });
 
   it('uses tenant rollout paths and reads legacy default rollouts compatibly', async () => {
-    const dataDir = mkdtempSync(join(tmpdir(), 'nexus-storage-'));
+    const dataDir = mkdtempSync(join(tmpdir(), 'suanlizi-storage-'));
     const { store } = createStore(dataDir);
     const tenantA = store.scope!('tenantA');
 
@@ -369,7 +369,7 @@ describe('LocalThreadStore threads', () => {
   });
 
   it('recovers missing thread and turn metadata from rollout JSONL', async () => {
-    const dataDir = mkdtempSync(join(tmpdir(), 'nexus-storage-'));
+    const dataDir = mkdtempSync(join(tmpdir(), 'suanlizi-storage-'));
     const threadId = 'thread-recover-test';
     const turnId = 'turn-recover-test';
     const now = '2026-06-08T10:00:00.000Z';
@@ -425,7 +425,7 @@ describe('LocalThreadStore threads', () => {
   });
 
   it('deletes thread metadata, turns, and rollout items', async () => {
-    const { store } = createStore(mkdtempSync(join(tmpdir(), 'nexus-storage-')));
+    const { store } = createStore(mkdtempSync(join(tmpdir(), 'suanlizi-storage-')));
     const now = new Date().toISOString();
     const thread: ThreadMeta = {
       threadId: 'thread-delete-test',
@@ -468,7 +468,7 @@ describe('LocalThreadStore threads', () => {
   });
 
   it('filters turns and rollout items to the active checkpoint turn count', async () => {
-    const { store } = createStore(mkdtempSync(join(tmpdir(), 'nexus-storage-')));
+    const { store } = createStore(mkdtempSync(join(tmpdir(), 'suanlizi-storage-')));
     const now = new Date().toISOString();
     const thread: ThreadMeta = {
       threadId: 'thread-active-turns',
@@ -502,7 +502,7 @@ describe('LocalThreadStore threads', () => {
   });
 
   it('persists rollback markers without exposing them as thread items', async () => {
-    const dataDir = mkdtempSync(join(tmpdir(), 'nexus-storage-'));
+    const dataDir = mkdtempSync(join(tmpdir(), 'suanlizi-storage-'));
     const { store } = createStore(dataDir);
     const threadId = 'thread-rollback-marker';
 
@@ -519,7 +519,7 @@ describe('LocalThreadStore threads', () => {
   });
 
   it('prunes stale turns so new turns do not resurrect history', async () => {
-    const { store } = createStore(mkdtempSync(join(tmpdir(), 'nexus-storage-rollback-')));
+    const { store } = createStore(mkdtempSync(join(tmpdir(), 'suanlizi-storage-rollback-')));
     const now = '2026-07-19T00:00:00.000Z';
     const thread: ThreadMeta = {
       threadId: 'thread-rollback-reuse',
@@ -583,7 +583,7 @@ describe('LocalThreadStore threads', () => {
   });
 
   it('records schema migrations so future upgrades are explicit', async () => {
-    const { store } = createStore(mkdtempSync(join(tmpdir(), 'nexus-storage-')));
+    const { store } = createStore(mkdtempSync(join(tmpdir(), 'suanlizi-storage-')));
 
     await expect(store.getSetting('storage.schemaVersion')).resolves.toEqual({
       version: 6,
@@ -591,7 +591,7 @@ describe('LocalThreadStore threads', () => {
   });
 
   it('isolates thread working sets by tenant scope', async () => {
-    const { store } = createStore(mkdtempSync(join(tmpdir(), 'nexus-storage-ws-tenant-')));
+    const { store } = createStore(mkdtempSync(join(tmpdir(), 'suanlizi-storage-ws-tenant-')));
     const tenantA = store.scope!('tenantA');
     const tenantB = store.scope!('tenantB');
     const now = '2026-06-20T00:00:00.000Z';
@@ -633,12 +633,12 @@ describe('LocalThreadStore threads', () => {
   });
 
   it('searches episodes with paths and colons without FTS syntax errors', async () => {
-    const { store } = createStore(mkdtempSync(join(tmpdir(), 'nexus-storage-fts-')));
+    const { store } = createStore(mkdtempSync(join(tmpdir(), 'suanlizi-storage-fts-')));
     const now = '2026-06-20T00:00:00.000Z';
 
     await store.upsertEpisodeRecord!({
       id: 'ep-path',
-      workspaceRoot: 'E:/langchain/Nexus',
+      workspaceRoot: 'E:/langchain/Suanlizi',
       sourceThreadId: 'thread-fts',
       sourceTurnStart: 'turn-0',
       sourceTurnEnd: 'turn-0',
@@ -648,7 +648,7 @@ describe('LocalThreadStore threads', () => {
       temperature: 'warm',
       title: 'Path episode',
       objective: 'Fix src/foo.ts',
-      summary: 'Worked on E:/langchain/Nexus/src/foo.ts and src/bar.ts',
+      summary: 'Worked on E:/langchain/Suanlizi/src/foo.ts and src/bar.ts',
       facts: [],
       decisions: [],
       artifacts: ['src/foo.ts'],
@@ -664,7 +664,7 @@ describe('LocalThreadStore threads', () => {
       updatedAt: now,
     });
 
-    await expect(store.searchEpisodeRecords!('E:/langchain/Nexus/src/foo.ts')).resolves.toEqual([
+    await expect(store.searchEpisodeRecords!('E:/langchain/Suanlizi/src/foo.ts')).resolves.toEqual([
       expect.objectContaining({ id: 'ep-path' }),
     ]);
     await expect(store.searchEpisodeRecords!('src/foo.ts')).resolves.toEqual([
@@ -674,7 +674,7 @@ describe('LocalThreadStore threads', () => {
   });
 
   it('compacts rollout JSONL before the latest checkpoint item index', async () => {
-    const dataDir = mkdtempSync(join(tmpdir(), 'nexus-storage-'));
+    const dataDir = mkdtempSync(join(tmpdir(), 'suanlizi-storage-'));
     const { store } = createStore(dataDir);
     const threadId = 'thread-rollout-compact';
     const now = new Date().toISOString();

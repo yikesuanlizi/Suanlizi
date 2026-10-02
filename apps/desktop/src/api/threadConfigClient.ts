@@ -1,8 +1,8 @@
-import type { AccessPolicyConfig, ThreadRunConfigOverrides } from '@nexus/protocol';
+import type { AccessPolicyConfig, ThreadRunConfigOverrides } from '@suanlizi/protocol';
 
 export type ThreadConfigOverrides = Pick<
   ThreadRunConfigOverrides,
-  'provider' | 'model' | 'baseUrl' | 'permissions' | 'reasoningEffort' | 'runProfile'
+  'provider' | 'model' | 'baseUrl' | 'modelContextTokens' | 'modelMaxOutputTokens' | 'permissions' | 'reasoningEffort' | 'runProfile' | 'compactionThreshold'
 >;
 
 export interface ThreadConfigResponse {
@@ -23,10 +23,16 @@ export async function patchThreadConfigOverrides(
   threadId: string,
   overrides: ThreadConfigOverrides,
 ): Promise<ThreadConfigOverrides> {
+  const payload: Record<string, unknown> = { ...overrides };
+  for (const key of ['modelContextTokens', 'modelMaxOutputTokens'] as const) {
+    if (Object.hasOwn(overrides, key) && overrides[key] === undefined) {
+      payload[key] = null;
+    }
+  }
   const response = await fetch(`/api/threads/${threadId}/config`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ overrides }),
+    body: JSON.stringify({ overrides: payload }),
   });
   if (!response.ok) {
     throw new Error('Failed to patch thread config overrides');

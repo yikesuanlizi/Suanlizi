@@ -2,7 +2,7 @@
 // — English: fake browser runtime tests — observation contract, action loop,
 //   epoch validation, cancellation propagation and postcondition verification.
 import { describe, expect, it } from 'vitest';
-import type { ActionIntent } from '@nexus/protocol';
+import type { ActionIntent } from '@suanlizi/protocol';
 import { FakeBrowserRuntime, type FakeSessionHandle, type FakeSiteDefinition } from './fakeRuntime.js';
 
 // 构造 ActionIntent 的测试辅助函数。

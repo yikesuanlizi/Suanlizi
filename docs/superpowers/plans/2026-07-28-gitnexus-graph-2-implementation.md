@@ -382,8 +382,8 @@ npm run lint
 - [ ] **Step 3: Run UI builds**
 
 ```bash
-npm --workspace @nexus/web run build
-npm --workspace @nexus/desktop run build:ui
+npm --workspace @suanlizi/web run build
+npm --workspace @suanlizi/desktop run build:ui
 ```
 
 - [ ] **Step 4: Summarize remaining gaps**

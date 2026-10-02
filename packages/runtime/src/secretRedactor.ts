@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
  * Version of the rule set, persisted with Evidence so a replay can use the
  * same detector contract that produced the original redacted content.
  */
-export const SECRET_REDACTION_VERSION = 'nexus-secret-rules-v1';
+export const SECRET_REDACTION_VERSION = 'suanlizi-secret-rules-v1';
 
 export type SecretRuleId =
   | 'private_key'

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { ThreadId, ThreadMeta } from '@nexus/protocol';
-import type { ThreadStore } from '@nexus/storage';
+import type { ThreadId, ThreadMeta } from '@suanlizi/protocol';
+import type { ThreadStore } from '@suanlizi/storage';
 import { normalizeThreadTitlePatch, updateThreadTitle } from './threadMetadata.js';
 
 function thread(threadId: string): ThreadMeta {

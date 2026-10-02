@@ -1,12 +1,15 @@
 import { useEffect, useRef } from 'react';
 import { FitAddon } from '@xterm/addon-fit';
+import { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 import type { Locale } from '../../config/config.js';
+import { formatSuanliziErrorMessage } from '@suanlizi/protocol';
 
 type TerminalSessionResponse = {
   sessionId: string;
   root: string;
+  threadId: string;
 };
 
 type TerminalOutputResponse = {
@@ -20,8 +23,9 @@ const INPUT_BATCH_MS = 8;
 const OUTPUT_WAIT_MS = 750;
 const OUTPUT_RETRY_MS = 150;
 
-export function TerminalPanel({ locale, workspaceRoot, active = true }: { locale: Locale; workspaceRoot: string; active?: boolean }) {
+export function TerminalPanel({ locale, workspaceRoot, threadId, active = true }: { locale: Locale; workspaceRoot: string; threadId: string; active?: boolean }) {
   const root = workspaceRoot.trim();
+  const threadScope = threadId.trim();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -44,7 +48,7 @@ export function TerminalPanel({ locale, workspaceRoot, active = true }: { locale
 
     const panel = container.closest<HTMLElement>('.terminalPanel');
     const resolveDark = (): boolean => {
-      const explicitTheme = document.documentElement.dataset.nexusTheme;
+      const explicitTheme = document.documentElement.dataset.suanliziTheme;
       if (explicitTheme === 'dark') return true;
       if (explicitTheme === 'light') return false;
       const shell = document.querySelector('.appShell');
@@ -66,12 +70,19 @@ export function TerminalPanel({ locale, workspaceRoot, active = true }: { locale
       fontSize: 14,
       lineHeight: 1.25,
       scrollback: 10_000,
+      minimumContrastRatio: 7,
       // Pick the palette before xterm paints its first frame to avoid a light
       // flash when a dark workspace opens a terminal.
       theme: resolveDark() ? darkTerminalTheme : lightTerminalTheme,
     });
     const fitAddon = new FitAddon();
+    const webglAddon = new WebglAddon();
     terminal.loadAddon(fitAddon);
+    try {
+      terminal.loadAddon(webglAddon);
+    } catch {
+      webglAddon.dispose();
+    }
     terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;
     terminal.open(container);
@@ -117,8 +128,8 @@ export function TerminalPanel({ locale, workspaceRoot, active = true }: { locale
     const fit = (): void => {
       if (disposed) return;
       try { fitAddon.fit(); } catch { return; }
-      if (!sessionId) return;
-      void fetch(`/api/terminal/session/${encodeURIComponent(sessionId)}/resize`, {
+      if (!sessionId || !threadScope) return;
+      void fetch(`/api/terminal/session/${encodeURIComponent(sessionId)}/resize?threadId=${encodeURIComponent(threadScope)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cols: terminal.cols, rows: terminal.rows }),
@@ -141,7 +152,7 @@ export function TerminalPanel({ locale, workspaceRoot, active = true }: { locale
       pendingInput = '';
       inputSending = true;
       try {
-        await fetch(`/api/terminal/session/${encodeURIComponent(currentSessionId)}/input`, {
+        await fetch(`/api/terminal/session/${encodeURIComponent(currentSessionId)}/input?threadId=${encodeURIComponent(threadScope)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ data }),
@@ -157,7 +168,7 @@ export function TerminalPanel({ locale, workspaceRoot, active = true }: { locale
     };
 
     const sendInput = (data: string): void => {
-      if (!sessionId || disposed || !data) return;
+      if (!sessionId || !threadScope || disposed || !data) return;
       pendingInput += data;
       if (inputTimer === null && !inputSending) {
         inputTimer = window.setTimeout(() => void flushInput(), INPUT_BATCH_MS);
@@ -185,8 +196,8 @@ export function TerminalPanel({ locale, workspaceRoot, active = true }: { locale
     };
     const dataDisposable = terminal.onData(sendInput);
     const resizeDisposable = terminal.onResize(({ cols, rows }) => {
-      if (!sessionId || disposed) return;
-      void fetch(`/api/terminal/session/${encodeURIComponent(sessionId)}/resize`, {
+      if (!sessionId || !threadScope || disposed) return;
+      void fetch(`/api/terminal/session/${encodeURIComponent(sessionId)}/resize?threadId=${encodeURIComponent(threadScope)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cols, rows }),
@@ -198,9 +209,9 @@ export function TerminalPanel({ locale, workspaceRoot, active = true }: { locale
     container.addEventListener('keydown', handleKeyDown);
 
     const poll = async (): Promise<void> => {
-      if (disposed || !sessionId) return;
+      if (disposed || !sessionId || !threadScope) return;
       try {
-        const response = await fetch(`/api/terminal/session/${encodeURIComponent(sessionId)}/output?cursor=${cursor}&waitMs=${OUTPUT_WAIT_MS}`);
+        const response = await fetch(`/api/terminal/session/${encodeURIComponent(sessionId)}/output?cursor=${cursor}&waitMs=${OUTPUT_WAIT_MS}&threadId=${encodeURIComponent(threadScope)}`);
         if (!response.ok) throw new Error('terminal output unavailable');
         const payload = await response.json() as TerminalOutputResponse;
         if (payload.output) terminal.write(payload.output);
@@ -212,7 +223,7 @@ export function TerminalPanel({ locale, workspaceRoot, active = true }: { locale
     };
 
     const start = async (): Promise<void> => {
-      if (!root) {
+      if (!root || !threadScope) {
         terminal.write(locale === 'zh' ? '未选择项目根目录。\r\n' : 'No project root selected.\r\n');
         return;
       }
@@ -220,7 +231,7 @@ export function TerminalPanel({ locale, workspaceRoot, active = true }: { locale
         const response = await fetch('/api/terminal/session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ root, cols: terminal.cols, rows: terminal.rows }),
+          body: JSON.stringify({ root, threadId: threadScope, cols: terminal.cols, rows: terminal.rows }),
         });
         const payload = await response.json() as Partial<TerminalSessionResponse> & { error?: string };
         if (!response.ok || typeof payload.sessionId !== 'string') {
@@ -229,14 +240,15 @@ export function TerminalPanel({ locale, workspaceRoot, active = true }: { locale
             : 'Failed to start terminal'));
         }
         if (disposed) {
-          await fetch(`/api/terminal/session/${encodeURIComponent(payload.sessionId)}`, { method: 'DELETE' }).catch(() => undefined);
+          await fetch(`/api/terminal/session/${encodeURIComponent(payload.sessionId)}?threadId=${encodeURIComponent(threadScope)}`, { method: 'DELETE' }).catch(() => undefined);
           return;
         }
         sessionId = payload.sessionId;
         fit();
         void poll();
       } catch (error) {
-        terminal.write(`\r\n${error instanceof Error ? error.message : String(error)}\r\n`);
+        const message = error instanceof Error ? error.message : String(error);
+        terminal.write(`\r\n${formatSuanliziErrorMessage(undefined, message, locale)}\r\n`);
       }
     };
     void start();
@@ -254,12 +266,12 @@ export function TerminalPanel({ locale, workspaceRoot, active = true }: { locale
       container.removeEventListener('keydown', handleKeyDown);
       dataDisposable.dispose();
       resizeDisposable.dispose();
-      if (sessionId) void fetch(`/api/terminal/session/${encodeURIComponent(sessionId)}`, { method: 'DELETE' }).catch(() => undefined);
+      if (sessionId && threadScope) void fetch(`/api/terminal/session/${encodeURIComponent(sessionId)}?threadId=${encodeURIComponent(threadScope)}`, { method: 'DELETE' }).catch(() => undefined);
       terminal.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [locale, root]);
+  }, [locale, root, threadScope]);
 
   return (
     <section className="terminalPanel" aria-label={locale === 'zh' ? '终端' : 'Terminal'}>
@@ -274,6 +286,22 @@ const lightTerminalTheme = {
   cursor: '#1d1d1f',
   cursorAccent: '#ffffff',
   selectionBackground: '#b9d7ff',
+  black: '#26292e',
+  red: '#b42318',
+  green: '#116932',
+  yellow: '#8a5a00',
+  blue: '#0b5cad',
+  magenta: '#8a3a8a',
+  cyan: '#046a73',
+  white: '#3d4249',
+  brightBlack: '#565c64',
+  brightRed: '#c62f24',
+  brightGreen: '#217a3c',
+  brightYellow: '#9c6b10',
+  brightBlue: '#176fb3',
+  brightMagenta: '#9d479d',
+  brightCyan: '#0b7c86',
+  brightWhite: '#1d1d1f',
 };
 
 const darkTerminalTheme = {

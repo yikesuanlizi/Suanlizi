@@ -4,14 +4,34 @@ import type { McpServerStatus, ModelPreset, ModelPresetConfig, ProviderEntry } f
 import type { DropdownOption } from '../DropdownSelect.js';
 import type { IconName } from '../Icon.js';
 import type { RecommendedMcp, RecommendedSkill } from '../../features/settings/pluginCatalog.js';
+import type React from 'react';
+import { ProviderBrandIcon } from './ProviderBrandIcon.js';
 import { t } from '../../shared/i18n.js';
 
-export type ModelConfigDraft = Pick<RunConfig, 'provider' | 'model' | 'baseUrl'>;
+export type ModelConfigDraft = Pick<RunConfig, 'provider' | 'model' | 'baseUrl' | 'modelContextTokens' | 'modelMaxOutputTokens'>;
+
+export type ModelPresetSaveResult = { id?: string; config: ModelPresetConfig };
 
 // 用 preset 匹配当前 RunConfig，用于标识当前正在使用的预设
 export function modelPresetMatchesRunConfig(preset: ModelPreset, config: RunConfig): boolean {
   const entries = Object.entries(preset.config) as Array<[keyof RunConfig, RunConfig[keyof RunConfig] | undefined]>;
-  return entries.length > 0 && entries.every(([key, value]) => value === undefined || config[key] === value);
+  return entries.length > 0 && entries.every(([key, value]) => {
+    // 旧版手填窗口不再决定“使用中”标记；重新选择时会清掉它。
+    if (key === 'modelContextTokens') return true;
+    if (key === 'modelMaxOutputTokens') {
+      return config[key] === value;
+    }
+    return value === undefined || config[key] === value;
+  });
+}
+
+// 预设显示名：始终由真实厂商名与模型名推导，绝不暴露 openai_compatible 之类的协议名。
+// 历史预设即使存储名过时，也会显示成当前厂商名。
+export function modelPresetDisplayName(preset: ModelPreset, providers: ProviderEntry[]): string {
+  const provider = providers.find((item) => item.id === preset.config.provider);
+  const providerName = provider?.name
+    ?? preset.config.provider.replace(/^custom_/, '').replace(/_/g, '.');
+  return [providerName, preset.config.model].filter(Boolean).join(' / ');
 }
 
 // 从 RunConfig 初始化模型草稿
@@ -20,7 +40,31 @@ export function modelConfigDraftFromConfig(config: RunConfig): ModelConfigDraft 
     provider: config.provider,
     model: config.model,
     baseUrl: config.baseUrl,
+    modelContextTokens: config.modelContextTokens,
+    modelMaxOutputTokens: config.modelMaxOutputTokens,
   };
+}
+
+/** 删除后的编辑器不能再指向已移除的模型或厂商。 */
+export function modelDraftAfterDeletion(
+  current: ModelConfigDraft,
+  providers: ProviderEntry[],
+  presets: ModelPreset[],
+  deleted?: { providerId: string; model?: string },
+): ModelConfigDraft {
+  const isDeleted = (providerId: string, model: string) => deleted?.providerId === providerId
+    && (deleted.model === undefined || deleted.model === model);
+  const exists = (providerId: string) => providers.some((provider) => provider.id === providerId);
+  if (exists(current.provider) && !isDeleted(current.provider, current.model)) return current;
+  const fallback = presets.find((preset) => exists(preset.config.provider)
+    && !isDeleted(preset.config.provider, preset.config.model))?.config;
+  return fallback ? {
+    provider: fallback.provider,
+    model: fallback.model,
+    baseUrl: fallback.baseUrl,
+    modelContextTokens: fallback.modelContextTokens,
+    modelMaxOutputTokens: fallback.modelMaxOutputTokens,
+  } : { provider: 'ollama', model: 'qwen2.5-coder:7b', baseUrl: '' };
 }
 
 export function normalizeModelConfigDraftForSettings(
@@ -37,6 +81,8 @@ export function normalizeModelConfigDraftForSettings(
       provider: 'openai_compatible',
       model: draft.model,
       baseUrl: draft.baseUrl || provider?.baseUrl || '',
+      modelContextTokens: draft.modelContextTokens,
+      modelMaxOutputTokens: draft.modelMaxOutputTokens,
     },
     keyProviderId: draft.provider,
   };
@@ -65,6 +111,7 @@ const DEFAULT_MODEL_BY_PROVIDER: Record<string, string> = {
   ollama: 'llama3.1',
   lmstudio: 'local-model',
   vllm: 'local-model',
+  llama_cpp: 'local-model',
 };
 
 export function defaultModelForProvider(provider: ProviderEntry | undefined, currentModel: string): string {
@@ -73,8 +120,25 @@ export function defaultModelForProvider(provider: ProviderEntry | undefined, cur
   return DEFAULT_MODEL_BY_PROVIDER[provider.id] ?? currentModel;
 }
 
-// Provider 下拉分组：本地 / 中国 / 国际 / 通用。OpenAI-compatible 内部填写厂商名称，不再把 custom_* 展示为顶层 provider。
+// 「运行参数」页可保存的字段。压缩阈值支持线程覆盖，其余是进程级上限，只能写全局配置。
+// — English: runtime-settings fields persisted by the Runtime page save action.
+export const RUNTIME_SETTING_KEYS = [
+  'maxIterations',
+  'maxActiveTasks',
+  'maxParallelReadonlyTools',
+  'maxSubagentDepth',
+  'toolTimeoutSeconds',
+  'modelTimeoutSeconds',
+  'compactionThreshold',
+] as const satisfies ReadonlyArray<keyof RunConfig>;
+// Provider 下拉分组：自定义 / 本地 / 中国 / 国际 / 通用。已注册的 custom_* 作为独立厂商展示。
+// 自定义厂商图标通过独立 tsx 组件渲染，保持 shared.ts 无 JSX。
+// English: custom provider icons are rendered by a separate tsx component.
+const customProviderIcon = (provider: ProviderEntry): React.ReactNode =>
+  ProviderBrandIcon({ provider });
+
 export function providerDropdownOptions(providers: ProviderEntry[], locale: Locale): Array<DropdownOption<string>> {
+  const custom = providers.filter((provider) => provider.id.startsWith('custom_'));
   const local = providers.filter((provider) => provider.isLocal && provider.id !== 'openai_compatible' && !provider.id.startsWith('custom_'));
   const generic = providers.filter((provider) => provider.id === 'openai_compatible');
   const chinaIds = new Set(['deepseek', 'zhipu', 'kimi', 'qwen', 'baidu', 'volcengine', 'siliconflow', 'minimax']);
@@ -84,12 +148,22 @@ export function providerDropdownOptions(providers: ProviderEntry[], locale: Loca
     group,
     value: provider.id,
     label: provider.name,
+    icon: customProviderIcon(provider),
   });
+  // 通用 OpenAI 兼容项在界面上表达为“新建自定义厂商”的动作入口，
+  // 不再把协议名 OpenAI-compatible 暴露给用户。
+  const customEntry: DropdownOption<string> = {
+    group: t(locale, 'customProvider'),
+    value: 'openai_compatible',
+    label: t(locale, 'newCustomVendor'),
+    icon: customProviderIcon(generic[0] ?? { id: 'openai_compatible' } as ProviderEntry),
+  };
   return [
+    ...custom.map((provider) => map(t(locale, 'customProvider'), provider)),
     ...local.map((provider) => map(t(locale, 'localProvider'), provider)),
     ...china.map((provider) => map(t(locale, 'remoteChina'), provider)),
     ...global.map((provider) => map(t(locale, 'remoteGlobal'), provider)),
-    ...generic.map((provider) => map(t(locale, 'genericProvider'), provider)),
+    ...(generic.length > 0 ? [customEntry] : []),
   ];
 }
 
@@ -99,23 +173,28 @@ export async function saveModelPresetDraft(input: {
   ensureProvider: () => Promise<string | null>;
   saveProviderKey: (providerId?: string) => Promise<void>;
   saveProviderEnvVar: (providerId?: string) => Promise<void>;
-  savePreset: (name: string, config: ModelPresetConfig, presetId?: string, status?: 'draft' | 'published') => Promise<void>;
+  savePreset: (name: string, config: ModelPresetConfig, presetId?: string) => Promise<string | ModelPreset | void>;
   presetConfig: ModelPresetConfig;
   presetId?: string;
   status?: 'draft' | 'published';
-}): Promise<boolean> {
+}): Promise<ModelPresetSaveResult | null> {
   const name = await input.requestName();
-  if (name === null) return false;
+  if (name === null) return null;
   const targetProviderId = await input.ensureProvider();
   const resolvedProviderId = targetProviderId ?? input.presetConfig.provider;
   await input.saveProviderKey(resolvedProviderId);
   await input.saveProviderEnvVar(resolvedProviderId);
-  await input.savePreset(name, {
+  const resolvedConfig: ModelPresetConfig = {
     provider: resolvedProviderId,
-    model: input.presetConfig.model,
-    baseUrl: input.presetConfig.baseUrl || '',
-  }, input.presetId, input.status ?? 'published');
-  return true;
+    model: input.presetConfig.model.trim(),
+    baseUrl: input.presetConfig.baseUrl.trim(),
+    modelContextTokens: input.presetConfig.modelContextTokens,
+    modelMaxOutputTokens: input.presetConfig.modelMaxOutputTokens,
+  };
+  const savedId = await input.savePreset(name, resolvedConfig, input.presetId);
+  if (typeof savedId === 'string') return { id: savedId, config: resolvedConfig };
+  if (savedId && typeof savedId === 'object') return { id: savedId.id, config: savedId.config ?? resolvedConfig };
+  return { config: resolvedConfig };
 }
 
 // 插件中心顶部 tab 图标

@@ -9,6 +9,8 @@ export type SlashCommand =
   | { kind: 'web_search.mode'; mode: WebSearchMode }
   | { kind: 'compact' }
   | { kind: 'ops'; preset: 'ops'; args: string }
+  | { kind: 'goal'; args: string }
+  | { kind: 'workflow'; args: string }
   | { kind: 'task.mode'; mode: 'plan' | 'review' | 'debug' | 'frontend'; args: string };
 
 export interface SlashCommandOption {
@@ -56,6 +58,18 @@ export const slashCommandOptions: SlashCommandOption[] = [
     detail: '只规划，不改文件',
   },
   {
+    id: 'goal',
+    command: '/goal ',
+    title: 'Goal',
+    detail: '创建带验收与证据追踪的目标任务',
+  },
+  {
+    id: 'workflow',
+    command: '/workflow ',
+    title: 'Dynamic Workflow',
+    detail: '创建待审阅的受限脚本工作流',
+  },
+  {
     id: 'review',
     command: '/review ',
     title: 'Review',
@@ -95,6 +109,8 @@ const localizedSlashDetails: Record<Locale, Record<string, Pick<SlashCommandOpti
     'mcp-add': { title: 'MCP add', detail: '添加 MCP server 配置' },
     'web-search': { title: 'Web search', detail: '切换联网搜索模式：auto/on/off' },
     plan: { title: '计划', detail: '只规划，不改文件' },
+    goal: { title: '目标任务', detail: '创建带验收与证据追踪的目标任务' },
+    workflow: { title: '动态工作流', detail: '创建待审阅的受限脚本工作流' },
     review: { title: '代码审查', detail: '优先列问题、风险和缺失测试' },
     debug: { title: '调试', detail: '系统化定位问题，再给出修复' },
     frontend: { title: '前端优化', detail: '按产品界面标准打磨 UI' },
@@ -108,6 +124,8 @@ const localizedSlashDetails: Record<Locale, Record<string, Pick<SlashCommandOpti
     'mcp-add': { title: 'MCP add', detail: 'Add an MCP server configuration' },
     'web-search': { title: 'Web search', detail: 'Switch web search mode: auto/on/off' },
     plan: { title: 'Plan', detail: 'Plan only, do not edit files' },
+    goal: { title: 'Goal', detail: 'Create a goal with verification and evidence tracking' },
+    workflow: { title: 'Dynamic Workflow', detail: 'Create a restricted script workflow for review' },
     review: { title: 'Review', detail: 'Review code and list risks first' },
     debug: { title: 'Debug', detail: 'Reproduce, diagnose, then fix' },
     frontend: { title: 'Frontend', detail: 'Polish UI with product-grade standards' },
@@ -151,6 +169,14 @@ export function parseSlashCommand(input: string): SlashCommand {
 
   if (command === '/compact') {
     return { kind: 'compact' };
+  }
+
+  if (command === '/goal') {
+    return { kind: 'goal', args: stripCommandPrefix(normalized, rawCommand) };
+  }
+
+  if (command === '/workflow') {
+    return { kind: 'workflow', args: stripCommandPrefix(normalized, rawCommand) };
   }
 
   if (command === '/ops') {

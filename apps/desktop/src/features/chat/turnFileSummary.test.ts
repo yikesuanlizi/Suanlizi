@@ -9,7 +9,7 @@ describe('buildTurnFileSummary', () => {
         type: 'tool_call',
         toolName: 'read_file',
         arguments: { filePath: 'apps/web/src/main.tsx' },
-        result: { path: 'E:\\langchain\\Nexus\\apps\\web\\src\\main.tsx' },
+        result: { path: 'E:\\langchain\\Suanlizi\\apps\\web\\src\\main.tsx' },
         status: 'completed',
       },
       {
@@ -20,13 +20,13 @@ describe('buildTurnFileSummary', () => {
         ],
         status: 'completed',
       },
-    ], 'E:\\langchain\\Nexus');
+    ], 'E:\\langchain\\Suanlizi');
 
     expect(summary.readFiles).toEqual([
-      { path: 'E:\\langchain\\Nexus\\apps\\web\\src\\main.tsx' },
+      { path: 'E:\\langchain\\Suanlizi\\apps\\web\\src\\main.tsx' },
     ]);
     expect(summary.changedFiles).toEqual([
-      { path: 'E:\\langchain\\Nexus\\apps\\web\\src\\components\\ItemView.tsx', addedLines: 5, removedLines: 2 },
+      { path: 'E:\\langchain\\Suanlizi\\apps\\web\\src\\components\\ItemView.tsx', addedLines: 5, removedLines: 2 },
     ]);
   });
 
@@ -45,7 +45,7 @@ describe('buildTurnFileSummary', () => {
         changes: [{ path: '.codex/tmp-script.ts', kind: 'add', addedLines: 1, removedLines: 0 }],
         status: 'completed',
       },
-    ], 'E:\\langchain\\Nexus');
+    ], 'E:\\langchain\\Suanlizi');
 
     expect(summary.readFiles).toEqual([]);
     expect(summary.changedFiles).toEqual([]);
@@ -95,7 +95,7 @@ describe('buildTurnFileSummary', () => {
             sizeBytes: 10,
           },
           artifact: {
-            path: 'E:\\langchain\\dexin-agent\\.nexus\\documents\\brief.txt',
+            path: 'E:\\langchain\\dexin-agent\\.suanlizi\\documents\\brief.txt',
             sha256: 'artifact-hash',
           },
         },

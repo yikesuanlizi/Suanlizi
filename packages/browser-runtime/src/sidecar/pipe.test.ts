@@ -21,7 +21,7 @@
 import { describe, expect, it } from 'vitest';
 import { once } from 'node:events';
 import { PassThrough } from 'node:stream';
-import type { ActionIntent, PageGraph } from '@nexus/protocol';
+import type { ActionIntent, PageGraph } from '@suanlizi/protocol';
 import type { ActionResult, BrowserRuntimePort, BrowserSessionHandle } from '../port.js';
 import type { FakeSiteDefinition } from '../fakeRuntime.js';
 import { FakeBrowserRuntime } from '../fakeRuntime.js';

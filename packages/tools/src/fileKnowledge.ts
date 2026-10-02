@@ -1,7 +1,8 @@
 import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { createHash } from 'node:crypto';
-import type { FileFingerprint } from '@nexus/protocol';
+import type { FileFingerprint } from '@suanlizi/protocol';
 
 const DOCX_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -63,12 +64,19 @@ export function isDocumentFile(filePath: string): boolean {
   return ['.docx', '.pdf', '.xlsx', '.pptx'].includes(path.extname(filePath).toLowerCase());
 }
 
+export function artifactRoot(workspaceRoot: string): string {
+  const configured = process.env.SUANLIZI_DATA_DIR?.trim();
+  return configured
+    ? path.join(configured, 'artifacts', path.basename(path.resolve(workspaceRoot)) || 'default')
+    : path.join(os.tmpdir(), 'suanlizi', path.basename(path.resolve(workspaceRoot)) || 'default', 'artifacts');
+}
+
 export function artifactDocumentsDir(workspaceRoot: string): string {
-  return path.join(path.resolve(workspaceRoot), '.nexus', 'artifacts', 'documents');
+  return path.join(artifactRoot(workspaceRoot), 'documents');
 }
 
 export function artifactIndexPath(workspaceRoot: string): string {
-  return path.join(path.resolve(workspaceRoot), '.nexus', 'artifacts', 'index.json');
+  return path.join(artifactRoot(workspaceRoot), 'index.json');
 }
 
 export function relativeToWorkspace(workspaceRoot: string, absolutePath: string): string | undefined {

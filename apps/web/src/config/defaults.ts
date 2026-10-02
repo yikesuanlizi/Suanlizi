@@ -23,6 +23,7 @@ export const defaultConfig: RunConfig = {
   maxActiveTasks: 4,
   maxParallelReadonlyTools: 2,
   maxSubagentDepth: 1,
+  modelTimeoutSeconds: 120,
   runProfile: 'runtime_os',
   memoryEnabled: true,
   autoExtractMemories: true,

@@ -233,6 +233,7 @@ export const reasoningItemSchema = z.object({
   text: z.string(),
   providerFrameRef: z.string().optional(),
   timestamp: z.string().optional(),
+  completedAt: z.string().optional(),
   harnessRunId: z.string().optional(),
   harnessIteration: z.number().int().min(0).optional(),
 });
@@ -247,6 +248,7 @@ export const commandExecutionItemSchema = z.object({
   exitCode: z.number().nullable(),
   status: commandStatusSchema,
   timestamp: z.string().optional(),
+  completedAt: z.string().optional(),
   harnessRunId: z.string().optional(),
   harnessIteration: z.number().int().min(0).optional(),
 });
@@ -261,6 +263,7 @@ export const fileChangeItemSchema = z.object({
   summary: z.string().optional(),
   status: patchApplyStatusSchema,
   timestamp: z.string().optional(),
+  completedAt: z.string().optional(),
   harnessRunId: z.string().optional(),
   harnessIteration: z.number().int().min(0).optional(),
 });
@@ -362,8 +365,9 @@ export const contextCompactionItemSchema = z.object({
   summary: compactionSummarySchema.optional(),
   tokensBefore: z.number().int().min(0),
   tokensAfter: z.number().int().min(0),
-  error: z.object({ message: z.string() }).optional(),
+  error: z.object({ message: z.string(), code: z.string().optional() }).optional(),
   timestamp: z.string().optional(),
+  completedAt: z.string().optional(),
   harnessRunId: z.string().optional(),
   harnessIteration: z.number().int().min(0).optional(),
 });
@@ -379,9 +383,10 @@ export const toolCallItemSchema = z.object({
   modelToolName: z.string().optional(),
   providerToolCall: providerToolCallFrameSchema.optional(),
   result: z.unknown().optional(),
-  error: z.object({ message: z.string() }).optional(),
+  error: z.object({ message: z.string(), code: z.string().optional() }).optional(),
   status: commandStatusSchema,
   timestamp: z.string().optional(),
+  completedAt: z.string().optional(),
   harnessRunId: z.string().optional(),
   harnessIteration: z.number().int().min(0).optional(),
 });
@@ -412,8 +417,9 @@ export const collabToolCallItemSchema = z.object({
   prompt: z.string().optional(),
   agentStatus: z.string().optional(),
   result: z.unknown().optional(),
-  error: z.object({ message: z.string() }).optional(),
+  error: z.object({ message: z.string(), code: z.string().optional() }).optional(),
   timestamp: z.string().optional(),
+  completedAt: z.string().optional(),
   harnessRunId: z.string().optional(),
   harnessIteration: z.number().int().min(0).optional(),
 });
@@ -435,9 +441,10 @@ export const mcpToolCallItemSchema = z.object({
       structuredContent: z.unknown(),
     })
     .optional(),
-  error: z.object({ message: z.string() }).optional(),
+  error: z.object({ message: z.string(), code: z.string().optional() }).optional(),
   status: commandStatusSchema,
   timestamp: z.string().optional(),
+  completedAt: z.string().optional(),
   harnessRunId: z.string().optional(),
   harnessIteration: z.number().int().min(0).optional(),
 });
@@ -470,7 +477,8 @@ export const errorItemSchema = z.object({
   type: z.literal('error'),
   turnId: turnIdSchema,
   message: z.string(),
-  info: z.lazy(() => nexusErrorInfoSchema).optional(),
+  info: z.lazy(() => suanliziErrorInfoSchema).optional(),
+  detail: z.string().optional(),
   recoverable: z.boolean().optional(),
   timestamp: z.string().optional(),
   harnessRunId: z.string().optional(),
@@ -544,8 +552,8 @@ export const threadItemSchema = z.discriminatedUnion('type', [
 ]);
 
 // ─── Events ──────────────────────────────────────────────────────────────────
-// Nexus 错误信息 schema
-export const nexusErrorInfoSchema = z.object({
+// Suanlizi 错误信息 schema
+export const suanliziErrorInfoSchema = z.object({
   kind: z.enum([
     'ContextWindowExceeded',
     'UsageLimitExceeded',
@@ -564,12 +572,16 @@ export const nexusErrorInfoSchema = z.object({
   ]),
   httpStatusCode: z.number().int().optional(),
   turnKind: z.string().optional(),
+  reason: z.enum(['timeout', 'cancelled', 'network', 'provider', 'protocol']).optional(),
+  timeoutMs: z.number().int().positive().optional(),
 });
 
 // 单回合 token 用量 schema
 export const usageSchema = z.object({
   inputTokens: z.number().int().min(0),
   cachedInputTokens: z.number().int().min(0),
+  cacheReported: z.boolean().optional(),
+  cacheWriteTokens: z.number().int().min(0).optional(),
   outputTokens: z.number().int().min(0),
   reasoningOutputTokens: z.number().int().min(0),
   cacheStrategy: z
@@ -652,7 +664,7 @@ export const turnFailedEventSchema = z.object({
   threadId: threadIdSchema,
   turnId: turnIdSchema,
   runId: z.string(),
-  error: z.object({ message: z.string(), info: nexusErrorInfoSchema.optional() }),
+  error: z.object({ message: z.string(), info: suanliziErrorInfoSchema.optional() }),
 });
 
 // 警告事件 schema
@@ -661,7 +673,7 @@ export const warningEventSchema = z.object({
   threadId: threadIdSchema.optional(),
   turnId: turnIdSchema.optional(),
   message: z.string(),
-  info: nexusErrorInfoSchema.optional(),
+  info: suanliziErrorInfoSchema.optional(),
 });
 
 // 流式错误事件 schema
@@ -671,7 +683,7 @@ export const streamErrorEventSchema = z.object({
   turnId: turnIdSchema,
   message: z.string(),
   recoverable: z.boolean(),
-  error: z.object({ message: z.string(), info: nexusErrorInfoSchema.optional() }),
+  error: z.object({ message: z.string(), info: suanliziErrorInfoSchema.optional() }),
   additionalDetails: z.string().optional(),
 });
 
@@ -681,7 +693,7 @@ export const modelOutputRejectedEventSchema = z.object({
   threadId: threadIdSchema,
   turnId: turnIdSchema,
   message: z.string(),
-  error: z.object({ message: z.string(), info: nexusErrorInfoSchema.optional() }),
+  error: z.object({ message: z.string(), info: suanliziErrorInfoSchema.optional() }),
 });
 
 // 条目开始/更新/完成事件 schema
@@ -806,6 +818,7 @@ export const contextCompactionPressureEventSchema = z.object({
     softThreshold: z.number().nonnegative(),
     hardThreshold: z.number().nonnegative(),
     ratio: z.number().nonnegative(),
+    windowKnown: z.boolean().optional(),
     status: z.enum(['ok', 'soft', 'hard']),
     window: z
       .object({
@@ -878,7 +891,7 @@ export const contextCompactedV2EventSchema = z.object({
   tokensBefore: z.number().int().min(0).optional(),
   tokensAfter: z.number().int().min(0).optional(),
   item: z.object({ id: itemIdSchema }).passthrough().optional(),
-  error: z.object({ message: z.string(), info: nexusErrorInfoSchema.optional() }).optional(),
+  error: z.object({ message: z.string(), info: suanliziErrorInfoSchema.optional() }).optional(),
 });
 
 // 线程回滚完成事件 schema
@@ -894,7 +907,7 @@ export const threadRollbackFailedEventSchema = z.object({
   type: z.literal('thread.rollback.failed'),
   threadId: threadIdSchema,
   turnId: turnIdSchema.optional(),
-  error: z.object({ message: z.string(), info: nexusErrorInfoSchema.optional() }),
+  error: z.object({ message: z.string(), info: suanliziErrorInfoSchema.optional() }),
 });
 
 // 线程恢复事件 schema
@@ -933,6 +946,7 @@ export const taskRuntimeUpdatedEventSchema = z.object({
   phase: z.enum(['before_turn', 'model', 'tool', 'compact', 'after_turn', 'idle']),
   status: z.enum(['running', 'completed', 'failed', 'interrupted']),
   runProfile: z.enum(['cache_first', 'runtime_os']),
+  compactionThreshold: z.number().min(0.3).max(0.95).optional(),
   checkpoint: z.boolean().optional(),
   resumable: z.boolean().optional(),
   timestamp: z.string(),

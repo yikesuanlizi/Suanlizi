@@ -10,7 +10,7 @@
 .settingsLayer .presetDecisionLayer {
   position: fixed;
   inset: 0;
-  z-index: 40;
+  z-index: 1001;
   display: grid;
   place-items: center;
 }
@@ -136,28 +136,39 @@
 }
 
 .settingsLayer .settingsDrawer .modelPresetManagementCard > .modelPresetEditorRow {
-  display: grid !important;
-  grid-column: auto !important;
-  grid-template-columns: minmax(0, 1fr) auto !important;
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  overflow-x: auto !important;
+  scrollbar-width: none;
   align-items: center !important;
   width: 100% !important;
   min-width: 0 !important;
-  gap: 12px !important;
+  gap: 7px !important;
+}
+
+.settingsLayer .settingsDrawer .modelPresetManagementCard > .modelPresetEditorRow::-webkit-scrollbar {
+  display: none;
 }
 
 .settingsLayer .settingsDrawer .modelPresetManagementCard .wideField,
 .settingsLayer .settingsDrawer .modelPresetManagementCard .modelPresetSelect,
 .settingsLayer .settingsDrawer .modelPresetManagementCard .modelPresetSelect .dropdownButton {
-  width: 100% !important;
+  width: 300px !important;
   min-width: 0 !important;
+}
+
+.settingsLayer .settingsDrawer .modelPresetManagementCard > .modelPresetEditorRow > .wideField {
+  flex: 0 1 300px !important;
+  min-width: 180px !important;
+  max-width: 300px !important;
 }
 
 .settingsLayer .settingsDrawer .modelPresetManagementCard .modelPresetActionRow {
   display: flex !important;
-  grid-column: auto !important;
+  flex: 0 0 auto !important;
   min-width: 0 !important;
   min-height: 0 !important;
-  flex-wrap: wrap;
+  flex-wrap: nowrap !important;
   justify-content: flex-end;
   gap: 8px;
   align-items: center !important;
@@ -165,6 +176,20 @@
   border: 0 !important;
   background: transparent !important;
   box-shadow: none !important;
+}
+
+.settingsLayer .settingsDrawer .modelPresetManagementCard .modelPresetActionRow :is(.textButton, .solidButton) {
+  min-width: 0 !important;
+  min-height: 30px !important;
+  height: 30px !important;
+  padding: 0 9px !important;
+  padding-inline: 9px !important;
+  white-space: nowrap !important;
+}
+
+main.appShell .settingsLayer .settingsDrawer .modelPresetManagementCard .modelPresetActionRow :is(.textButton, .solidButton) {
+  padding-inline-start: 9px !important;
+  padding-inline-end: 9px !important;
 }
 
 .settingsLayer .settingsDrawer .modelPresetManagementCard > .settingsCardHeader .modelPresetCount {
@@ -235,5 +260,102 @@
 
   .settingsLayer .settingsDrawer .modelPresetManagementCard .modelPresetActionRow {
     justify-content: flex-start;
+  }
+}
+
+/* Keep the preset controls aligned after the legacy settings rules are loaded. */
+.settingsLayer .settingsDrawer .modelPresetManagementCard > .modelPresetEditorRow {
+  display: grid !important;
+  grid-template-columns: auto minmax(180px, 1fr) auto !important;
+  align-items: center !important;
+  gap: 8px !important;
+  overflow: visible !important;
+}
+
+.settingsLayer .settingsDrawer .modelPresetManagementCard > .modelPresetEditorRow > .settingsInlineFieldLabel {
+  grid-column: 1 !important;
+  min-width: max-content !important;
+}
+
+.settingsLayer .settingsDrawer .modelPresetManagementCard > .modelPresetEditorRow > .wideField {
+  grid-column: 2 !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 360px !important;
+  flex: none !important;
+}
+
+.settingsLayer .settingsDrawer .modelPresetManagementCard .modelPresetSelect,
+.settingsLayer .settingsDrawer .modelPresetManagementCard .modelPresetSelect .dropdownButton {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+
+.settingsLayer .settingsDrawer .modelPresetManagementCard .modelPresetActionRow {
+  grid-column: 3 !important;
+  justify-self: end !important;
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 6px !important;
+  width: max-content !important;
+  max-width: 100% !important;
+}
+
+@media (max-width: 760px) {
+  .settingsLayer .settingsDrawer .modelPresetManagementCard > .modelPresetEditorRow {
+    grid-template-columns: auto minmax(0, 1fr) !important;
+  }
+
+  .settingsLayer .settingsDrawer .modelPresetManagementCard > .modelPresetEditorRow > .wideField {
+    max-width: none !important;
+  }
+
+  .settingsLayer .settingsDrawer .modelPresetManagementCard .modelPresetActionRow {
+    grid-column: 1 / -1 !important;
+    justify-self: start !important;
+    width: 100% !important;
+  }
+}
+
+/* Keep the endpoint and explicit context limit together without a wide empty
+   control. The API field flexes; the context field stays compact beside it. */
+.settingsLayer .settingsDrawer .modelBaseUrlRow {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(132px, 176px) auto !important;
+  align-items: end !important;
+  gap: 8px !important;
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+}
+
+.settingsLayer .settingsDrawer .modelBaseUrlRow > .wideField,
+.settingsLayer .settingsDrawer .modelBaseUrlRow > .modelContextField {
+  min-width: 0 !important;
+  width: auto !important;
+}
+
+.settingsLayer .settingsDrawer .modelBaseUrlRow .modelContextField {
+  grid-column: auto !important;
+}
+
+.settingsLayer .settingsDrawer .modelBaseUrlRow .modelApplyButton {
+  width: auto !important;
+  min-width: 0 !important;
+  white-space: nowrap !important;
+}
+
+@media (max-width: 760px) {
+  .settingsLayer .settingsDrawer .modelBaseUrlRow {
+    grid-template-columns: minmax(0, 1fr) auto !important;
+  }
+
+  .settingsLayer .settingsDrawer .modelBaseUrlRow > .wideField {
+    grid-column: 1 / -1 !important;
+  }
+
+  .settingsLayer .settingsDrawer .modelBaseUrlRow > .modelContextField {
+    grid-column: 1 !important;
   }
 }

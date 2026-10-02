@@ -1,4 +1,4 @@
-import type { RunTraceCategory } from '@nexus/protocol';
+import type { RunTraceCategory } from '@suanlizi/protocol';
 import { traceCategoryLabel, traceIcon } from '../../features/monitor/traceFormatters.js';
 
 interface TraceFiltersProps {

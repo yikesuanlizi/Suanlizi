@@ -1,6 +1,6 @@
 import * as path from 'node:path';
-import type { FileFreshnessReason, ThreadItem } from '@nexus/protocol';
-import { assessArtifactFreshness, loadDocumentArtifactLedger, registerExternalDocumentArtifactsFromText } from '@nexus/tools';
+import type { FileFreshnessReason, ThreadItem } from '@suanlizi/protocol';
+import { assessArtifactFreshness, loadDocumentArtifactLedger, registerExternalDocumentArtifactsFromText } from '@suanlizi/tools';
 
 export interface StaleArtifactNotice {
   artifactPath: string;

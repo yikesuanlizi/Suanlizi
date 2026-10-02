@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import { createRequire } from 'node:module';
 import { DEFAULT_TENANT_ID, LocalThreadStore, safeTenantId } from './store.js';
 import type { ThreadStore } from './store.js';
+import { SqliteTaskStore } from './taskStore.js';
 export type { RunTraceQuery, RunTraceStore } from './runTraceStore.js';
 
 export { DEFAULT_TENANT_ID, LocalThreadStore, safeTenantId };
@@ -17,6 +18,16 @@ export type {
   ThreadStore,
   KnowledgeSqlitePort,
 } from './store.js';
+
+// Goal-task workflow store (plan §6.2 / §11.2 / §14.6). SqliteTaskStore implements the
+// @suanlizi/protocol TaskStorePort contract; ensureTaskStoreSchema is the idempotent migration.
+export {
+  SqliteTaskStore,
+  ensureTaskStoreSchema,
+  TASK_STORE_MIGRATION_VERSION,
+  TASK_STORE_MIGRATION_NAME,
+} from './taskStore.js';
+export type { SqliteTaskStoreOptions } from './taskStore.js';
 
 export type StorageBackend = 'sqlite';
 
@@ -42,7 +53,7 @@ export function createStore(
   dataDir: string,
   db?: unknown,
   _env: Record<string, string | undefined> = process.env,
-): { store: ThreadStore; db: unknown } {
+): { store: ThreadStore; db: unknown; taskStore: SqliteTaskStore } {
   fs.mkdirSync(dataDir, { recursive: true });
   if (!db) {
     try {
@@ -54,14 +65,16 @@ export function createStore(
       console.warn(
         '[storage] better-sqlite3 unavailable, falling back to JSON file backend.\n' +
           '  Install better-sqlite3 for better concurrent-write safety:\n' +
-          '  npm install --workspace @nexus/storage better-sqlite3',
+          '  npm install --workspace @suanlizi/storage better-sqlite3',
       );
       db = createFileBackedDb(dataDir);
     }
   }
   const store = new LocalThreadStore(db as never, dataDir);
   recoverMissingMetadataFromRollouts(db as DbLike, dataDir);
-  return { store, db };
+  // 同一 db 句柄上的目标任务存储（计划 §6.2）：复用 ThreadStore 的 checkpoint 读取入口。
+  const taskStore = new SqliteTaskStore(db as never, { threadStore: store });
+  return { store, db, taskStore };
 }
 
 export function resolveStorageOptions(

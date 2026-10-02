@@ -1,13 +1,13 @@
-# Nexus v1.5.0 配置与架构指南
+# Suanlizi v1.5.0 配置与架构指南
 
-本文档详细说明 Nexus 的目录结构、配置层级、上下文治理机制和完整的配置方式。
+本文档详细说明 Suanlizi 的目录结构、配置层级、上下文治理机制和完整的配置方式。
 
 ---
 
 ## 一、目录结构总览
 
 ```
-Nexus/
+Suanlizi/
 ├── apps/                          # 应用层（可运行的终端产品）
 │   ├── api/                       # 本地 Node.js API 服务
 │   │   ├── src/
@@ -146,7 +146,7 @@ Nexus/
 
 ## 二、配置层级总览
 
-Nexus 采用**四层配置叠加**模型，从底层到顶层依次合并，顶层覆盖底层：
+Suanlizi 采用**四层配置叠加**模型，从底层到顶层依次合并，顶层覆盖底层：
 
 ```
 ┌─────────────────────────────────────────────────────┐
@@ -164,7 +164,7 @@ Nexus 采用**四层配置叠加**模型，从底层到顶层依次合并，顶�
 
 #### Layer 1：系统默认值（代码内置）
 
-定义于 [config.ts](file:///e:/langchain/Nexus/apps/api/src/config/config.ts#L200-L229) 的 `defaultConfig`：
+定义于 [config.ts](file:///e:/langchain/Suanlizi/apps/api/src/config/config.ts#L200-L229) 的 `defaultConfig`：
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
@@ -172,8 +172,8 @@ Nexus 采用**四层配置叠加**模型，从底层到顶层依次合并，顶�
 | `provider` | `'ollama'` | 模型提供商 |
 | `model` | `'qwen2.5-coder:7b'` | 默认模型 |
 | `permissions` | `'workspace'` | 权限预设 |
-| `dataDir` | `<cwd>/.nexus` | 数据目录 |
-| `skillsRoot` | `<home>/.nexus/skills` | Skill 目录 |
+| `dataDir` | `<cwd>/.suanlizi` | 数据目录 |
+| `skillsRoot` | `<home>/.suanlizi/skills` | Skill 目录 |
 | `webSearchMode` | `'auto'` | 网页搜索模式 |
 | `webProvider` | `'native_fetch'` | 网页抓取后端 |
 | `reasoningEffort` | `'medium'` | 推理力度 |
@@ -201,11 +201,11 @@ API 调用时通过 `TurnRequest.config` 传入，仅影响当前 turn，不持�
 
 ## 三、数据目录结构
 
-首次启动后，`<dataDir>`（默认 `.nexus/`）会生成以下结构：
+首次启动后，`<dataDir>`（默认 `.suanlizi/`）会生成以下结构：
 
 ```
-.nexus/
-├── nexus.sqlite                   # SQLite 主数据库
+.suanlizi/
+├── suanlizi.sqlite                   # SQLite 主数据库
 │   ├── threads                    # 线程表
 │   ├── turns                      # Turn 表
 │   ├── items                      # 消息/工具调用/结果表
@@ -226,7 +226,7 @@ API 调用时通过 `TurnRequest.config` 传入，仅影响当前 turn，不持�
 全局 Skill 目录位于用户 home 下：
 
 ```
-~/.nexus/skills/
+~/.suanlizi/skills/
 └── <skill-name>/
     ├── SKILL.md                   # Skill 描述文档（必须）
     ├── index.ts                   # 可执行入口（可选，对应 entryPath）
@@ -257,7 +257,7 @@ interface AgentRunConfig {
 
 ### 4.2 权限预设（Sandbox）
 
-三档内置预设定义于 [presets.ts](file:///e:/langchain/Nexus/packages/sandbox/src/presets.ts#L55-L94)：
+三档内置预设定义于 [presets.ts](file:///e:/langchain/Suanlizi/packages/sandbox/src/presets.ts#L55-L94)：
 
 | 预设 ID | 中文名 | 审批策略 | 沙箱等级 | 网络 | 适用场景 |
 |---------|--------|----------|----------|------|----------|
@@ -449,7 +449,7 @@ Provider 是上下文的生产单元，每个 Provider 负责一类信息的注�
 | `TaskContextProvider` | `before_turn` | 30 | Task Cognition（目标/约束/风险） |
 | `ExperienceContextProvider` | `before_turn` | 5 | 检索相关历史经验 |
 
-**Provider 接口定义**（[types.ts](file:///e:/langchain/Nexus/packages/context/src/types.ts#L87-L97)）：
+**Provider 接口定义**（[types.ts](file:///e:/langchain/Suanlizi/packages/context/src/types.ts#L87-L97)）：
 
 ```typescript
 interface ContextProvider {
@@ -541,7 +541,7 @@ TaskContextProvider 内部：
 | `gotcha` | 特定陷阱/注意事项 | 手动记录或自动提取 |
 | `environment_fact` | 环境发现 | fact、toolNames |
 
-**自动错误分类**（[experienceEngine.ts](file:///e:/langchain/Nexus/packages/context/src/experience/experienceEngine.ts#L48-L61)）：
+**自动错误分类**（[experienceEngine.ts](file:///e:/langchain/Suanlizi/packages/context/src/experience/experienceEngine.ts#L48-L61)）：
 引擎内置 12 种错误模式正则，自动匹配并打标签：
 - `MODULE_NOT_FOUND` → `deps`/`npm`
 - `EACCES`/`EPERM` → `permissions`
@@ -706,7 +706,7 @@ const effectiveConfig = resolveConfig({
 
 ### 场景 4：安装 Skill
 
-1. 将 Skill 放入 `~/.nexus/skills/<skill-name>/` 目录
+1. 将 Skill 放入 `~/.suanlizi/skills/<skill-name>/` 目录
 2. 确保包含 `SKILL.md`，可执行 Skill 需包含 `index.ts` 导出 `execute`
 3. 重启服务后 Skill 自动加载
 4. 或在 UI 设置面板 → Skills 中通过 GitHub URL 一键安装

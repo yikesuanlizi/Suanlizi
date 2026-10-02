@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { URL } from 'node:url';
-import type { ThreadStore } from '@nexus/storage';
+import type { ThreadStore } from '@suanlizi/storage';
 import { readJson, sendJson } from '../shared/http.js';
 import type { TenantContext } from '../shared/tenant.js';
 import {
@@ -22,6 +22,7 @@ import {
   getKnowledgeJob,
   startKnowledgeBaseCreateJob,
   startKnowledgeBaseSyncJob,
+  recoverKnowledgeCompileJobs,
 } from '../services/knowledgeCompileJob.js';
 import { pickWorkspaceDirectory } from './workspacePicker.js';
 
@@ -35,6 +36,7 @@ export async function handleKnowledgeRoute(options: {
 }): Promise<boolean> {
   const { req, res, segments, store, tenantContext } = options;
   if (segments[0] !== 'api') return false;
+  await recoverKnowledgeCompileJobs(store, tenantContext.tenantId);
 
   if (req.method === 'GET' && segments[1] === 'knowledge-jobs' && segments.length === 3) {
     const job = await getKnowledgeJob(store, decodeURIComponent(segments[2]), tenantContext.tenantId);

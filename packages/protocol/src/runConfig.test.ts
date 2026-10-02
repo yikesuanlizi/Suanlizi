@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   modelPresetConfigFrom,
+  normalizeReasoningEffort,
   threadRunConfigOverridesFrom,
   activeRunConfig,
   parseCompositeConfigSnapshot,
@@ -10,11 +11,13 @@ import {
 } from './runConfig.js';
 
 describe('modelPresetConfigFrom', () => {
-  it('keeps only provider, model, and baseUrl', () => {
+  it('keeps model routing and explicit capability overrides only', () => {
     expect(modelPresetConfigFrom({
       provider: ' openai ',
       model: '\tgpt-5 ',
       baseUrl: ' https://example.test/v1 ',
+      modelContextTokens: 16_384,
+      modelMaxOutputTokens: 4_096,
       permissions: 'danger_full_access',
       workspaceRoot: 'E:/secret',
       memoryEnabled: false,
@@ -22,6 +25,8 @@ describe('modelPresetConfigFrom', () => {
       provider: 'openai',
       model: 'gpt-5',
       baseUrl: 'https://example.test/v1',
+      modelContextTokens: 16_384,
+      modelMaxOutputTokens: 4_096,
     });
   });
 
@@ -31,6 +36,8 @@ describe('modelPresetConfigFrom', () => {
       provider: ' openai ',
       model: '\tgpt-5 ',
       baseUrl: ' ',
+      modelContextTokens: 16_384,
+      modelMaxOutputTokens: 4_096,
       permissions: 'workspace',
       webSearchMode: 'auto',
       reasoningEffort: 'high',
@@ -42,6 +49,8 @@ describe('modelPresetConfigFrom', () => {
       provider: 'openai',
       model: 'gpt-5',
       baseUrl: '',
+      modelContextTokens: 16_384,
+      modelMaxOutputTokens: 4_096,
       permissions: 'workspace',
       webSearchMode: 'auto',
       reasoningEffort: 'high',
@@ -52,6 +61,15 @@ describe('modelPresetConfigFrom', () => {
   it('rejects a preset without provider or model', () => {
     expect(() => modelPresetConfigFrom({ provider: '', model: '' }))
       .toThrow('provider and model are required');
+  });
+
+  it('rejects an output limit larger than the context window', () => {
+    expect(() => modelPresetConfigFrom({
+      provider: 'llama_cpp',
+      model: 'local-model',
+      modelContextTokens: 16_384,
+      modelMaxOutputTokens: 32_768,
+    })).toThrow('modelMaxOutputTokens cannot exceed modelContextTokens');
   });
 });
 
@@ -145,5 +163,15 @@ describe('parseCompositeConfigSnapshot', () => {
   it('produces a valid default composite snapshot', () => {
     const parsed = parseCompositeConfigSnapshot({});
     expect(parsed).toEqual(defaultCompositeConfigSnapshot);
+  });
+});
+
+describe('normalizeReasoningEffort', () => {
+  it('maps legacy and new reasoning presets without treating low as enabled', () => {
+    expect(normalizeReasoningEffort(' low ')).toBe('no');
+    expect(normalizeReasoningEffort('NONE')).toBe('no');
+    expect(normalizeReasoningEffort('ultra')).toBe('max');
+    expect(normalizeReasoningEffort('x-high')).toBe('xhigh');
+    expect(normalizeReasoningEffort('unknown')).toBeUndefined();
   });
 });

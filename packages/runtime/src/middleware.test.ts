@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RuntimeMiddleware, RuntimeModelRequest, RuntimeToolRequest, RuntimeTurnContext } from './middleware.js';
-import { composeRuntimeMiddleware, createStabilityMiddleware } from './middleware.js';
+import { composeRuntimeMiddleware, createDynamicContextMiddleware, createStabilityMiddleware } from './middleware.js';
 
 function runtimeContext(overrides: Partial<RuntimeTurnContext> = {}): RuntimeTurnContext {
   return {
@@ -168,6 +168,41 @@ describe('composeRuntimeMiddleware', () => {
   });
 });
 
+describe('createDynamicContextMiddleware', () => {
+  it('merges dynamic context into the first system message for llama.cpp-compatible templates', async () => {
+    const middleware = createDynamicContextMiddleware();
+    const ctx = runtimeContext({ turnId: 'turn-dynamic-system' });
+    await middleware.beforeTurn?.(ctx);
+
+    const request: RuntimeModelRequest = {
+      messages: [
+        { role: 'system', content: 'base instructions' },
+        { role: 'user', content: 'hello' },
+      ],
+    };
+    await middleware.beforeModel?.(ctx, request);
+
+    expect(request.messages[0]?.role).toBe('system');
+    expect(request.messages.filter((message) => message.role === 'system')).toHaveLength(1);
+    expect(String(request.messages[0]?.content)).toContain('base instructions');
+    expect(String(request.messages[0]?.content)).toContain('<dynamic_context>');
+    expect(request.messages[1]).toMatchObject({ role: 'user', content: 'hello' });
+  });
+
+  it('moves dynamic context to index zero when a request has no system message', async () => {
+    const middleware = createDynamicContextMiddleware();
+    const ctx = runtimeContext({ turnId: 'turn-dynamic-system-no-base' });
+    await middleware.beforeTurn?.(ctx);
+
+    const request: RuntimeModelRequest = { messages: [{ role: 'user', content: 'hello' }] };
+    await middleware.beforeModel?.(ctx, request);
+
+    expect(request.messages[0]?.role).toBe('system');
+    expect(request.messages.filter((message) => message.role === 'system')).toHaveLength(1);
+    expect(request.messages[1]).toMatchObject({ role: 'user', content: 'hello' });
+  });
+});
+
 describe('createStabilityMiddleware', () => {
   it('normalizes repeated web_search queries and resets web budget after the turn', async () => {
     const middleware = createStabilityMiddleware({
@@ -179,15 +214,15 @@ describe('createStabilityMiddleware', () => {
     const ctx = runtimeContext({ turnId: 'turn-web-budget' });
 
     expect(await middleware.beforeTool?.(ctx, toolRequest('web_search', { action: 'open_page', url: 'https://example.com' }))).toBeUndefined();
-    expect(await middleware.beforeTool?.(ctx, toolRequest('web_search', { query: ' Nexus   Runtime ' }))).toBeUndefined();
-    expect(await middleware.beforeTool?.(ctx, toolRequest('web_search', { query: 'nexus runtime' }))).toMatchObject({
+    expect(await middleware.beforeTool?.(ctx, toolRequest('web_search', { query: ' Suanlizi   Runtime ' }))).toBeUndefined();
+    expect(await middleware.beforeTool?.(ctx, toolRequest('web_search', { query: 'suanlizi runtime' }))).toMatchObject({
       status: 'failed',
       error: { code: 'WEB_SEARCH_LIMIT_REACHED' },
       disableWebSearch: true,
     });
     await middleware.afterTurn?.(ctx, { status: 'completed', usage: null });
 
-    expect(await middleware.beforeTool?.(runtimeContext({ turnId: 'turn-web-budget-next' }), toolRequest('web_search', { query: 'nexus runtime' }))).toBeUndefined();
+    expect(await middleware.beforeTool?.(runtimeContext({ turnId: 'turn-web-budget-next' }), toolRequest('web_search', { query: 'suanlizi runtime' }))).toBeUndefined();
   });
 
   it('allows closed child edges and rejects only open subagent descendants at the limit', async () => {

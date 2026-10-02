@@ -22,11 +22,16 @@ export {
   saveRuntimeEnvironmentVariables,
   removeApiKey,
   addCustomProvider,
+  removeCustomProvider,
   apiKeySummary,
 } from './providers.js';
 export type { ProviderEntry } from './providers.js';
 export * from './providerProfiles.js';
 export * from './providerFrames.js';
+export * from './llamaSlotLease.js';
+export * from './llamaClient.js';
+export * from './responsesClient.js';
+export * from './errors.js';
 
 // model-gateway 包协议版本；英文说明：Package protocol version
 export const MODEL_GATEWAY_VERSION = '0.1.0';

@@ -14,15 +14,15 @@
  *  - runProfile 不被事件触碰（仍是 runtime_os）
  */
 import { describe, expect, it, vi } from 'vitest';
-import type { ThreadEvent, ThreadId } from '@nexus/protocol';
+import type { ThreadEvent, ThreadId } from '@suanlizi/protocol';
 import { AgentLoop } from './agent.js';
 import { ThreadStateManager } from './state.js';
 import { createDynamicContextMiddleware, type RuntimeTurnContext } from './middleware.js';
-import type { ThreadStore } from '@nexus/storage';
-import type { ThreadMeta, TurnMeta, Checkpoint } from '@nexus/protocol';
+import type { ThreadStore } from '@suanlizi/storage';
+import type { ThreadMeta, TurnMeta, Checkpoint } from '@suanlizi/protocol';
 import { TaskHarnessEngine, type HarnessStateChangeCallback } from './harness/taskHarness.js';
 import { DEFAULT_HARNESS_CONFIG } from './harness/types.js';
-import type { ContextEngine, AssembledContext, ProviderContext, AgentContext } from '@nexus/context';
+import type { ContextEngine, AssembledContext, ProviderContext, AgentContext } from '@suanlizi/context';
 
 // —— 复用 agent.test.ts 的 fake 工具，但本文件需要自包含以避免循环依赖 —— //
 

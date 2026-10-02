@@ -2,15 +2,15 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { statSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { sendError, sendJson, readJson } from '../shared/http.js';
-import { McpRuntimeManager, McpServerConfig, normalizeMcpServerId, type McpCallToolResult } from '@nexus/runtime';
+import { McpRuntimeManager, McpServerConfig, normalizeMcpServerId, type McpCallToolResult } from '@suanlizi/runtime';
 import { getGitNexusService } from '../services/gitNexusService.js';
 
-const GITNEXUS_DEFAULT_ID = 'gitnexus';
-const GITNEXUS_DEFAULT_NAME = 'gitnexus';
+const GITSUANLIZI_DEFAULT_ID = 'gitnexus';
+const GITSUANLIZI_DEFAULT_NAME = 'gitnexus';
 
-const DEFAULT_GITNEXUS_CONFIG: McpServerConfig = {
-  id: GITNEXUS_DEFAULT_ID,
-  name: GITNEXUS_DEFAULT_NAME,
+const DEFAULT_GITSUANLIZI_CONFIG: McpServerConfig = {
+  id: GITSUANLIZI_DEFAULT_ID,
+  name: GITSUANLIZI_DEFAULT_NAME,
   command: 'gitnexus',
   args: 'mcp',
   enabled: true,
@@ -63,10 +63,10 @@ export async function handleGitNexusRoute(options: GitNexusRouteOptions): Promis
     let servers = await listMcpServers();
     const existingId = findGitNexusServerId(servers);
     if (!existingId) {
-      servers = [...servers, DEFAULT_GITNEXUS_CONFIG];
+      servers = [...servers, DEFAULT_GITSUANLIZI_CONFIG];
     }
     await mcpManager.configure(servers, { startEnabled: false });
-    const serverId = findGitNexusServerId(servers) ?? GITNEXUS_DEFAULT_ID;
+    const serverId = findGitNexusServerId(servers) ?? GITSUANLIZI_DEFAULT_ID;
 
     if (req.method === 'GET' && url.pathname === '/api/gitnexus/health') {
       const serveStatus = await gitNexusService.getStatus();

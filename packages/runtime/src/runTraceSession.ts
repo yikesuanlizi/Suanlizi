@@ -6,7 +6,7 @@ import type {
   RunTraceSummary,
   ThreadId,
   TurnId,
-} from '@nexus/protocol';
+} from '@suanlizi/protocol';
 import { projectRunTrace } from './runTraceProjector.js';
 import { redactTracePayload, type TraceRedactionOptions } from './runTraceRedaction.js';
 

@@ -1,6 +1,6 @@
 {
-  "name": "@nexus/wiki-core",
-  "version": "1.7.0",
+  "name": "@suanlizi/wiki-core",
+  "version": "1.8.0",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
@@ -14,5 +14,8 @@
   },
   "dependencies": {
     "js-yaml": "^4.1.1"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9"
   }
 }

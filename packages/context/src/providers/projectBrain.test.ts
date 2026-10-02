@@ -9,7 +9,7 @@ import type { ProviderContext } from '../types.js';
 import type { ProjectBrainEnricher, ArchitectureSummary, ProjectChangeDelta } from './projectBrainTypes.js';
 
 function makeTempProject(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'nexus-pb-'));
+  const dir = mkdtempSync(join(tmpdir(), 'suanlizi-pb-'));
   writeFileSync(join(dir, 'package.json'), JSON.stringify({
     name: 'test-project',
     version: '1.0.0',

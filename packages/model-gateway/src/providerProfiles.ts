@@ -47,10 +47,10 @@ const KNOWN_PROFILES: Record<string, Omit<ProviderProfile, 'baseUrl' | 'apiKeyEn
   openai: {
     id: 'openai',
     displayName: 'OpenAI',
-    endpointFormat: 'chat_completions',
-    transport: 'openai_chat_completions',
-    toolHistoryMode: 'openai_chat',
-    reasoningMode: 'none',
+    endpointFormat: 'responses',
+    transport: 'openai_responses',
+    toolHistoryMode: 'openai_responses',
+    reasoningMode: 'openai_responses_items',
     cacheMode: 'openai_prompt_details',
   },
   deepseek: {
@@ -89,6 +89,33 @@ const KNOWN_PROFILES: Record<string, Omit<ProviderProfile, 'baseUrl' | 'apiKeyEn
     reasoningMode: 'none',
     cacheMode: 'openai_prompt_details',
   },
+  ollama: {
+    id: 'ollama',
+    displayName: 'Ollama',
+    endpointFormat: 'responses',
+    transport: 'openai_responses',
+    toolHistoryMode: 'openai_responses',
+    reasoningMode: 'openai_responses_items',
+    cacheMode: 'openai_prompt_details',
+  },
+  lmstudio: {
+    id: 'lmstudio',
+    displayName: 'LM Studio',
+    endpointFormat: 'responses',
+    transport: 'openai_responses',
+    toolHistoryMode: 'openai_responses',
+    reasoningMode: 'openai_responses_items',
+    cacheMode: 'openai_prompt_details',
+  },
+  vllm: {
+    id: 'vllm',
+    displayName: 'vLLM',
+    endpointFormat: 'responses',
+    transport: 'openai_responses',
+    toolHistoryMode: 'openai_responses',
+    reasoningMode: 'openai_responses_items',
+    cacheMode: 'openai_prompt_details',
+  },
   mistral: {
     id: 'mistral',
     displayName: 'Mistral AI',
@@ -110,10 +137,10 @@ const KNOWN_PROFILES: Record<string, Omit<ProviderProfile, 'baseUrl' | 'apiKeyEn
   xai: {
     id: 'xai',
     displayName: 'xAI',
-    endpointFormat: 'chat_completions',
-    transport: 'openai_chat_completions',
-    toolHistoryMode: 'openai_chat',
-    reasoningMode: 'none',
+    endpointFormat: 'responses',
+    transport: 'openai_responses',
+    toolHistoryMode: 'openai_responses',
+    reasoningMode: 'openai_responses_items',
     cacheMode: 'openai_prompt_details',
   },
   qwen: {
@@ -182,10 +209,10 @@ const KNOWN_PROFILES: Record<string, Omit<ProviderProfile, 'baseUrl' | 'apiKeyEn
   groq: {
     id: 'groq',
     displayName: 'Groq',
-    endpointFormat: 'chat_completions',
-    transport: 'openai_chat_completions',
-    toolHistoryMode: 'openai_chat',
-    reasoningMode: 'none',
+    endpointFormat: 'responses',
+    transport: 'openai_responses',
+    toolHistoryMode: 'openai_responses',
+    reasoningMode: 'openai_responses_items',
     cacheMode: 'openai_prompt_details',
   },
   together: {
@@ -200,19 +227,19 @@ const KNOWN_PROFILES: Record<string, Omit<ProviderProfile, 'baseUrl' | 'apiKeyEn
   openrouter: {
     id: 'openrouter',
     displayName: 'OpenRouter',
-    endpointFormat: 'chat_completions',
-    transport: 'openai_chat_completions',
-    toolHistoryMode: 'openai_chat',
-    reasoningMode: 'none',
+    endpointFormat: 'responses',
+    transport: 'openai_responses',
+    toolHistoryMode: 'openai_responses',
+    reasoningMode: 'openai_responses_items',
     cacheMode: 'openai_prompt_details',
   },
   huggingface: {
     id: 'huggingface',
     displayName: 'Hugging Face',
-    endpointFormat: 'chat_completions',
-    transport: 'openai_chat_completions',
-    toolHistoryMode: 'openai_chat',
-    reasoningMode: 'none',
+    endpointFormat: 'responses',
+    transport: 'openai_responses',
+    toolHistoryMode: 'openai_responses',
+    reasoningMode: 'openai_responses_items',
     cacheMode: 'openai_prompt_details',
   },
   nvidia: {
@@ -222,6 +249,15 @@ const KNOWN_PROFILES: Record<string, Omit<ProviderProfile, 'baseUrl' | 'apiKeyEn
     transport: 'openai_chat_completions',
     toolHistoryMode: 'openai_chat',
     reasoningMode: 'none',
+    cacheMode: 'openai_prompt_details',
+  },
+  llama_cpp: {
+    id: 'llama_cpp',
+    displayName: 'llama.cpp',
+    endpointFormat: 'responses',
+    transport: 'openai_responses',
+    toolHistoryMode: 'openai_responses',
+    reasoningMode: 'openai_responses_items',
     cacheMode: 'openai_prompt_details',
   },
 };
@@ -241,10 +277,11 @@ export function getProviderProfile(providerId: string): ProviderProfile | undefi
 export function resolveProviderProfile(config: Pick<ModelConfig, 'provider' | 'baseUrl' | 'model'>): ProviderProfile {
   const known = getProviderProfile(config.provider);
   if (known) {
-    return {
+    const profile = {
       ...known,
       baseUrl: config.baseUrl?.trim() || known.baseUrl,
     };
+    return applyModelTransport(profile, config.model);
   }
   const provider = getProvider(config.provider);
   const baseUrl = config.baseUrl?.trim() || provider?.baseUrl || '';
@@ -261,4 +298,37 @@ export function resolveProviderProfile(config: Pick<ModelConfig, 'provider' | 'b
     reasoningMode: 'none',
     cacheMode: anthropic ? 'anthropic_cache_control' : 'openai_prompt_details',
   };
+}
+
+/** DeepSeek and Kimi expose Responses only for selected model families. */
+function applyModelTransport(profile: ProviderProfile, model: string): ProviderProfile {
+  const normalizedModel = model.trim().toLowerCase();
+  const responsesSupported = profile.id === 'deepseek'
+    ? isDeepSeekResponsesModel(normalizedModel)
+    : profile.id === 'kimi'
+      ? normalizedModel === 'kimi-k3'
+      : true;
+  if (!['deepseek', 'kimi'].includes(profile.id)) return profile;
+  if (responsesSupported) {
+    return {
+      ...profile,
+      endpointFormat: 'responses',
+      transport: 'openai_responses',
+      toolHistoryMode: 'openai_responses',
+      reasoningMode: 'openai_responses_items',
+    };
+  }
+  return {
+    ...profile,
+    endpointFormat: 'chat_completions',
+    transport: 'openai_chat_completions',
+    toolHistoryMode: 'openai_chat',
+    reasoningMode: profile.id === 'deepseek' ? 'deepseek_reasoning_content' : 'none',
+  };
+}
+
+/** DeepSeek Responses is limited to the published v4 model aliases. */
+function isDeepSeekResponsesModel(model: string): boolean {
+  const match = /^(deepseek-v4-(?:flash|pro|flash-vision-exp))(?:[-_.:]v?\d+(?:[.-]\d+)*)?$/.exec(model);
+  return match !== null;
 }

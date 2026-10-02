@@ -1,4 +1,4 @@
-# Nexus
+# Suanlizi
 
 **本地 Agent OS** — 一个用 TypeScript 和 React 构建的多智能体全能工作台。
 
@@ -65,10 +65,10 @@ npm run desktop:dev
 
 ```bash
 npm start                                              # API 服务
-npm --workspace @nexus/desktop run dev:ui              # 打开 http://127.0.0.1:5178
+npm --workspace @suanlizi/desktop run dev:ui              # 打开 http://127.0.0.1:5178
 ```
 
-> 注意：浏览器预览模式没有 `nexusDesktop` 桥，浏览器工作台会显示「桌面浏览器不可用」——这是 strict 模式的预期行为，生产环境不会静默降级为 mock。真实浏览器功能必须通过 Electron 桌面窗口使用。
+> 注意：浏览器预览模式没有 `suanliziDesktop` 桥，浏览器工作台会显示「桌面浏览器不可用」——这是 strict 模式的预期行为，生产环境不会静默降级为 mock。真实浏览器功能必须通过 Electron 桌面窗口使用。
 
 ### 生产构建
 
@@ -83,7 +83,7 @@ npm run desktop:build        # 构建 Electron 可执行产物（安装包打包
 ```text
 React Desktop UI → Electron Main（BrowserViewManager + CDP Adapter）
   → Agent Runtime（BrowserTaskOrchestrator 在 Main 进程：策略/预算/账本/审批）
-  → 同一 WebContentsView（用户可见页面，单一持久化会话 persist:nexus-browser）
+  → 同一 WebContentsView（用户可见页面，单一持久化会话 persist:suanlizi-browser）
 ```
 
 策略执行点位于 Main 进程的 orchestrator：所有动作强制经过 `BrowserTaskOrchestrator`（AccessPolicy / ApprovalRequest / 预算 / checkpoint），外部副作用动作会先弹出审批请求。Agent 的导航/点击/输入在用户可见的真实页面上实时发生。
@@ -127,13 +127,16 @@ React Desktop UI → Electron Main（BrowserViewManager + CDP Adapter）
   - severe：仅允许只读工具，全串行，禁止新子 Agent
 - **主动通知**：限流等级变化时主动告知 Agent，自动调整执行策略
 
-### IM 平台接入
-- **微信远程助手**：桌面端个人微信桥接，消息进入绑定的 Nexus 对话
+### 模型厂商注册
+- **OpenAI-compatible 自定义 API**：设置页填写厂商名称、Base URL 和 API Key 后应用；保存时会创建独立厂商条目，并在桌面端浏览器当前 tab 可用时自动取其 favicon 作为厂商图标
+- **厂商下拉展示**：已注册的自定义厂商出现在厂商下拉“自定义”分组，输入栏模型预设选项也会使用对应图标；未提供 favicon 的自定义/兼容端点显示中性连接图标，不根据模型名猜测厂商品牌
+
+### IM 平台接入- **微信远程助手**：桌面端个人微信桥接，消息进入绑定的 Suanlizi 对话
 - **钉钉机器人**：Stream 模式长连接 + AI Card 流式回复 + 企业数据操作（详见下方）
 
 ## Work 与 Code 两种工作模式
 
-Nexus 把"做什么"（**会话类型**）和"怎么跑"（**runProfile**）分成两个独立的维度。它们的组合决定了 Agent 在当前对话中的能力水平。
+Suanlizi 把"做什么"（**会话类型**）和"怎么跑"（**runProfile**）分成两个独立的维度。它们的组合决定了 Agent 在当前对话中的能力水平。
 
 ### 维度一：会话类型（What）
 
@@ -197,7 +200,7 @@ Nexus 把"做什么"（**会话类型**）和"怎么跑"（**runProfile**）分�
 
 ## 微信远程助手
 
-桌面端支持个人微信桥接，把微信消息接入 Nexus 对话：
+桌面端支持个人微信桥接，把微信消息接入 Suanlizi 对话：
 
 - 扫码登录一次即可，切换对话不需要重新扫码
 - 消息进入当前绑定的对话，可随时改绑
@@ -206,7 +209,7 @@ Nexus 把"做什么"（**会话类型**）和"怎么跑"（**runProfile**）分�
 
 ## 钉钉机器人
 
-Nexus 深度集成钉钉平台，支持消息收发、AI Card 流式回复、企业数据操作等完整能力。
+Suanlizi 深度集成钉钉平台，支持消息收发、AI Card 流式回复、企业数据操作等完整能力。
 
 ### 接入方式
 
@@ -259,7 +262,7 @@ Nexus 深度集成钉钉平台，支持消息收发、AI Card 流式回复、企
 
 ## GitNexus 三层架构（v1.1+）
 
-GitNexus 是 Nexus 内置的代码仓库分析能力，通过三层降级保证可用性：
+GitNexus 是 Suanlizi 内置的代码仓库分析能力，通过三层降级保证可用性：
 
 | 层 | 名称 | 作用 | 触发条件 |
 |----|------|------|----------|

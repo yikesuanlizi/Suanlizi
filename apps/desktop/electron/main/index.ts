@@ -1,10 +1,10 @@
 // Electron Main 入口（Phase 1）：生命周期 + 安全默认 + 窗口状态恢复 + 浏览器管理
-// + 桌面服务 IPC。Render 层通过 NEXUS_ELECTRON_LOAD 控制：
+// + 桌面服务 IPC。Render 层通过 SUANLIZI_ELECTRON_LOAD 控制：
 //   dev  → http://127.0.0.1:5178（Vite dev server，复用 start-desktop.mjs）
 //   file → apps/desktop/dist/index.html（构建产物）
 // — English: Electron main entry (Phase 1) — lifecycle, security defaults, window
 //   state restore, browser management and desktop-service IPC. The render layer is
-//   selected via NEXUS_ELECTRON_LOAD: dev → the 5178 Vite dev server; file → the
+//   selected via SUANLIZI_ELECTRON_LOAD: dev → the 5178 Vite dev server; file → the
 //   built UI (dist/index.html).
 import { app, BrowserWindow, nativeTheme, protocol } from 'electron';
 import { extname } from 'node:path';
@@ -29,6 +29,9 @@ const MIME: Record<string, string> = {
   '.json': 'application/json',
 };
 const APP_ROOT = join(__dirname, '../..');
+const APP_ICON_PATH = app.isPackaged
+  ? join(process.resourcesPath, 'icon.ico')
+  : join(APP_ROOT, 'build/icon.ico');
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } },
@@ -41,15 +44,51 @@ import { startBrowserCommandServer, type BrowserServerHandle } from './browserSe
 import { applyWindowState, loadWindowState, persistWindowState, registerShutdownCleanup } from './lifecycle.js';
 import type { BrowserDesktopEvent } from '../contracts/browserTypes.js';
 
-const LOAD_MODE = process.env.NEXUS_ELECTRON_LOAD ?? 'file';
-// dev 模式 UI 地址（测试用随机端口时经 NEXUS_UI_URL 注入，避免 5178 竞争）。
-// — English: dev-mode UI URL (tests inject a random port via NEXUS_UI_URL to
+const LOAD_MODE = process.env.SUANLIZI_ELECTRON_LOAD ?? 'file';
+// 仅在本地集成验收时开启 Chromium DevTools 端口；默认不暴露调试端口。
+// — English: expose a Chromium DevTools port only for local integration checks.
+const REMOTE_DEBUG_PORT = process.env.SUANLIZI_REMOTE_DEBUG_PORT?.trim();
+if (REMOTE_DEBUG_PORT) {
+  app.commandLine.appendSwitch('remote-debugging-port', REMOTE_DEBUG_PORT);
+}
+// 所有窗口级运行数据统一进入应用数据目录，dev/prod 和不同项目工作区一致。
+// English: keep window-owned runtime data in the application data directory.
+app.setName('Suanlizi');
+app.setAppUserModelId('com.suanlizi.desktop');
+app.setPath('userData', process.env.SUANLIZI_PORTABLE_DATA_DIR
+  ? join(process.env.SUANLIZI_PORTABLE_DATA_DIR, 'electron-user-data')
+  : join(__dirname, '../../../app-data/electron-user-data'));
+
+// dev 模式 UI 地址（测试用随机端口时经 SUANLIZI_UI_URL 注入，避免 5178 竞争）。
+// — English: dev-mode UI URL (tests inject a random port via SUANLIZI_UI_URL to
 //   avoid 5178 contention).
-const DEV_UI_URL = process.env.NEXUS_UI_URL ?? 'http://127.0.0.1:5178';
+const DEV_UI_URL = process.env.SUANLIZI_UI_URL ?? 'http://127.0.0.1:5178';
 
 // 测试探测入口：Playwright 集成测试读取本文件判断应用是否就绪。
 // — English: probe entry for integration tests.
-const READY_FILE = process.env.NEXUS_READY_FILE ?? '';
+const READY_FILE = process.env.SUANLIZI_READY_FILE ?? '';
+
+function isDevToolsShortcut(input: Electron.Input): boolean {
+  if (input.type !== 'keyDown') return false;
+  const key = String(input.key ?? '').toLowerCase();
+  const code = String((input as Electron.Input & { code?: string }).code ?? '').toLowerCase();
+  const modifier = input.control === true || input.meta === true;
+  return key === 'f12' || code === 'f12' || (modifier && input.shift === true && key === 'i');
+}
+
+function toggleDevTools(target: Electron.WebContents, scope: string): void {
+  try {
+    const opened = target.isDevToolsOpened();
+    if (opened) {
+      target.closeDevTools();
+    } else {
+      target.openDevTools({ mode: 'detach', activate: true, title: `Suanlizi ${scope} console` });
+    }
+    console.log(`[desktop] DevTools ${opened ? 'closed' : 'opened'} for ${scope}`);
+  } catch (error) {
+    console.error(`[desktop] DevTools toggle failed for ${scope}:`, error);
+  }
+}
 
 function markReady(): void {
   if (READY_FILE === '') return;
@@ -76,18 +115,19 @@ app.whenReady().then(() => {
   // 污染断言（isMaximized 等）。
   // — English: test mode (single-instance bypass) skips window-state restore
   //   and save so the user's last geometry cannot pollute assertions.
-  const restored = process.env.NEXUS_DISABLE_SINGLE_INSTANCE === '1'
+  const restored = process.env.SUANLIZI_DISABLE_SINGLE_INSTANCE === '1'
     ? null
     : loadWindowState();
   const windowBounds = restored?.bounds ?? { width: 1200, height: 800, x: 0, y: 0 };
-  // 主窗口：承载 Nexus UI Renderer，同时是 WebContentsView 的宿主。
-  // — English: the main window hosts the Nexus UI renderer AND the WebContentsView host.
+  // 主窗口：承载 Suanlizi UI Renderer，同时是 WebContentsView 的宿主。
+  // — English: the main window hosts the Suanlizi UI renderer AND the WebContentsView host.
   const host = new BrowserWindow({
     width: windowBounds.width,
     height: windowBounds.height,
     x: windowBounds.x,
     y: windowBounds.y,
-    title: 'Nexus',
+    title: 'Suanlizi',
+    icon: APP_ICON_PATH,
     autoHideMenuBar: true,
     // 延迟显示：等 React 挂载后再 show（见 showWhenReady），避免空白窗口。
     // — English: keep the window hidden until React mounts (see showWhenReady),
@@ -111,6 +151,30 @@ app.whenReady().then(() => {
     }
   };
   const browserManager = new BrowserViewManager({ host, emit });
+  // F12/Ctrl+Shift+I must also work when focus is on Suanlizi itself rather than
+  // an embedded browser page. Keep this handler on the host WebContents so the
+  // desktop UI can always open its console, and mirror renderer logs to the
+  // terminal for cases where DevTools is unavailable.
+  host.webContents.on('before-input-event', (event, input) => {
+    if (!isDevToolsShortcut(input)) return;
+    event.preventDefault();
+    toggleDevTools(host.webContents, 'host renderer');
+  });
+  host.webContents.on('console-message', (event) => {
+    const params = event as unknown as {
+      level?: number | string;
+      message?: string;
+      lineNumber?: number;
+      sourceId?: string;
+    };
+    const level = typeof params.level === 'number'
+      ? (params.level >= 3 ? 'error' : params.level === 2 ? 'warning' : 'info')
+      : (params.level === 'error' || params.level === 'warning' ? params.level : 'info');
+    const message = params.message ?? '';
+    const line = params.lineNumber ?? 0;
+    const sourceId = params.sourceId ?? '';
+    console.log(`[renderer:${level}] ${message} (${sourceId}:${line})`);
+  });
   // 首次 Agent 请求可能早于 Renderer 的事件订阅。主窗口加载完成后重发仍待
   // 处理的请求，确保工作台会自动展开而不会让 Agent 卡在无标签页状态。
   host.webContents.on('did-finish-load', () => {
@@ -253,7 +317,7 @@ app.on('window-all-closed', () => {
 
 // Phase 0/1 调试辅助：无头集成测试可通过环境变量让 Main 在 N 秒后自动退出。
 // — English: Phase 0/1 helper — headless integration tests may auto-quit via env.
-const autoExitMs = Number(process.env.NEXUS_AUTO_EXIT_MS ?? '0');
+const autoExitMs = Number(process.env.SUANLIZI_AUTO_EXIT_MS ?? '0');
 if (autoExitMs > 0) {
   setTimeout(() => {
     console.log('[electron] auto-exit after', autoExitMs, 'ms');

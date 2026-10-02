@@ -1,8 +1,8 @@
 import { Readable } from 'node:stream';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { describe, expect, it, vi } from 'vitest';
-import type { ThreadId, ThreadMeta } from '@nexus/protocol';
-import type { ThreadStore } from '@nexus/storage';
+import type { ThreadId, ThreadMeta } from '@suanlizi/protocol';
+import type { ThreadStore } from '@suanlizi/storage';
 import { createConfigRepository } from '../config/config.js';
 import { handleSettingsRoute } from './settingsRoute.js';
 import { handleThreadRoutes } from './threadRoutes.js';
@@ -78,7 +78,7 @@ describe('access policy routes', () => {
       req: req('PATCH', '/api/settings/access-policy', {
         accessPolicy: {
           mode: 'workspace',
-          workspaceRoot: 'E:\\langchain\\Nexus',
+          workspaceRoot: 'E:\\langchain\\Suanlizi',
           persistentRules: [
             {
               id: 'allow-docs',
@@ -151,7 +151,7 @@ describe('access policy routes', () => {
       req('PATCH', parsed.pathname, {
         accessPolicy: {
           mode: 'workspace',
-          workspaceRoot: 'E:\\langchain\\Nexus',
+          workspaceRoot: 'E:\\langchain\\Suanlizi',
           persistentRules: [
             {
               id: 'deny-outside-write',

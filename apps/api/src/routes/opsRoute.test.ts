@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PassThrough } from 'node:stream';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { ThreadStore } from '@nexus/storage';
+import type { ThreadStore } from '@suanlizi/storage';
 import type { TenantContext } from '../shared/tenant.js';
 import { handleOpsRoute, recoverOpsTasks } from './opsRoute.js';
 
@@ -18,7 +18,7 @@ class FakeStore implements Partial<ThreadStore> {
   }
 
   async getThread(threadId: string): Promise<any> {
-    return this.threads.get(threadId) ?? { threadId, workspaceRoot: 'D:\\nexus' };
+    return this.threads.get(threadId) ?? { threadId, workspaceRoot: 'D:\\suanlizi' };
   }
 }
 
@@ -68,7 +68,7 @@ const tenantContext: TenantContext = { tenantId: 'ops-test' };
 const spec = {
   threadId: 'thread-1',
   presetId: 'ops',
-  workspaceRoot: 'D:\\nexus',
+  workspaceRoot: 'D:\\suanlizi',
   environmentId: 'local',
   target: { hostIds: [] },
   policyProfile: 'ops_readonly',
@@ -130,7 +130,7 @@ describe('Ops task route', () => {
             taskId: 'ops-sse-close',
             threadId: 'thread-1',
             presetId: 'ops',
-            workspaceRoot: 'D:\\nexus',
+            workspaceRoot: 'D:\\suanlizi',
             environmentId: 'replay:test',
             target: { hostIds: [] },
             policyProfile: 'ops_readonly',
@@ -495,7 +495,7 @@ describe('Ops task route', () => {
         contentHash: 'hash-1',
         summary: 'redacted summary',
         observedAt: new Date().toISOString(),
-        detectorVersion: 'nexus-secret-rules-v1',
+        detectorVersion: 'suanlizi-secret-rules-v1',
       }],
       finalConclusion: {
         summary: 'Healthy replay',

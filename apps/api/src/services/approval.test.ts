@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { ApprovalRequest } from '@nexus/protocol';
+import type { ApprovalRequest } from '@suanlizi/protocol';
 import { WebApprovalBroker } from './approval.js';
 
 function approvalRequest(requestId = 'approval-1'): ApprovalRequest {

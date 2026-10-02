@@ -28,9 +28,9 @@ const here = dirname(fileURLToPath(import.meta.url));
 const MAIN_JS = join(here, '../apps/desktop/dist-electron/main/index.js');
 const BROWSER_PORT = 19231;
 
-process.env.NEXUS_BROWSER_PORT = String(BROWSER_PORT);
+process.env.SUANLIZI_BROWSER_PORT = String(BROWSER_PORT);
 const BROWSER_TOKEN = 'test-browser-token-0123456789abcdef';
-process.env.NEXUS_BROWSER_TOKEN = BROWSER_TOKEN;
+process.env.SUANLIZI_BROWSER_TOKEN = BROWSER_TOKEN;
 
 let viteServer: ChildProcess | null = null;
 let viteUiUrl = 'http://127.0.0.1:5178';
@@ -80,11 +80,11 @@ function launchElectronDev() {
     args: [MAIN_JS, '--disable-gpu'],
     env: {
       ...process.env,
-      NEXUS_ELECTRON_LOAD: 'dev',
-      NEXUS_DISABLE_SINGLE_INSTANCE: '1',
-      NEXUS_BROWSER_PORT: String(BROWSER_PORT),
-      NEXUS_BROWSER_TOKEN: BROWSER_TOKEN,
-      NEXUS_UI_URL: viteUiUrl,
+      SUANLIZI_ELECTRON_LOAD: 'dev',
+      SUANLIZI_DISABLE_SINGLE_INSTANCE: '1',
+      SUANLIZI_BROWSER_PORT: String(BROWSER_PORT),
+      SUANLIZI_BROWSER_TOKEN: BROWSER_TOKEN,
+      SUANLIZI_UI_URL: viteUiUrl,
     },
   });
 }
@@ -162,7 +162,7 @@ describe('BrowserTool 端到端（真实 Electron View）', () => {
       // 操作会恢复工作台并继续同一标签。
       await win.locator('button[aria-label*="显示/隐藏右侧栏"], button[aria-label*="Show/hide right panel"]').click();
       await expect.poll(async () => win.evaluate(() => {
-        const browser = (window as unknown as { nexusDesktop?: { browser?: { listTabs(): Promise<unknown> } } }).nexusDesktop?.browser;
+        const browser = (window as unknown as { suanliziDesktop?: { browser?: { listTabs(): Promise<unknown> } } }).suanliziDesktop?.browser;
         return browser?.listTabs();
       })).toEqual([
         expect.objectContaining({ visible: false, url: 'about:blank' }),
@@ -176,14 +176,14 @@ describe('BrowserTool 端到端（真实 Electron View）', () => {
       // 原生窗口层，切回时恢复同一标签而非留下覆盖画面或重建 about:blank。
       await win.locator('.workbenchPrimaryTabs button').first().click();
       await expect.poll(async () => win.evaluate(() => {
-        const browser = (window as unknown as { nexusDesktop?: { browser?: { listTabs(): Promise<unknown> } } }).nexusDesktop?.browser;
+        const browser = (window as unknown as { suanliziDesktop?: { browser?: { listTabs(): Promise<unknown> } } }).suanliziDesktop?.browser;
         return browser?.listTabs();
       })).toEqual([
         expect.objectContaining({ visible: false, url: 'about:blank' }),
       ]);
       await win.locator('.workbenchDynamicTab button').first().click();
       await expect.poll(async () => win.evaluate(() => {
-        const browser = (window as unknown as { nexusDesktop?: { browser?: { listTabs(): Promise<unknown> } } }).nexusDesktop?.browser;
+        const browser = (window as unknown as { suanliziDesktop?: { browser?: { listTabs(): Promise<unknown> } } }).suanliziDesktop?.browser;
         return browser?.listTabs();
       })).toEqual([
         expect.objectContaining({ visible: true, url: 'about:blank' }),
@@ -257,7 +257,7 @@ describe('BrowserTool 端到端（真实 Electron View）', () => {
       // 5) 未授权连接被拒（评审 P0-3：capability token 握手）。
       // — English: an unauthenticated connection is rejected (review P0-3:
       //   capability-token handshake).
-      const { createTcpSidecarTransport } = await import('@nexus/browser-runtime');
+      const { createTcpSidecarTransport } = await import('@suanlizi/browser-runtime');
       const bad = createTcpSidecarTransport({ port: BROWSER_PORT, authToken: 'wrong-token', taskId: 'thread-bad-auth' });
       await expect(bad.ready).rejects.toThrow(/auth/i);
       bad.close();
@@ -280,7 +280,7 @@ describe('BrowserTool 端到端（真实 Electron View）', () => {
 
       const fresh = createTcpSidecarTransport({ port: BROWSER_PORT, authToken: BROWSER_TOKEN, taskId: 'thread-fresh' });
       await fresh.ready;
-      const { createSidecarClient } = await import('@nexus/browser-runtime');
+      const { createSidecarClient } = await import('@suanlizi/browser-runtime');
       const freshSession = await createSidecarClient({ taskId: 'thread-fresh', transport: fresh.transport as never }) as unknown as {
         observe(input?: { signal?: AbortSignal }): Promise<{ url: string }>;
         close(reason?: string): Promise<void>;

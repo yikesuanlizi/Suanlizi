@@ -3,8 +3,8 @@
 //
 // 借鉴 DeerFlow GoalState + Reasonix goalMachine。
 
-import type { ThreadId, ThreadMeta } from '@nexus/protocol';
-import type { GoalEvaluation } from '@nexus/protocol';
+import type { ThreadId, ThreadMeta } from '@suanlizi/protocol';
+import type { GoalEvaluation } from '@suanlizi/protocol';
 import type {
   HarnessPlanNode,
   HarnessState,

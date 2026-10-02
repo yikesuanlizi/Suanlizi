@@ -38,7 +38,7 @@ describe('workspace files layout', () => {
   });
 
   it('loads every ancestor directory needed to reveal an externally previewed file', () => {
-    expect(workspaceRelativePathForTree('E:\\langchain\\Nexus\\apps\\web\\src\\main.tsx', 'E:\\langchain\\Nexus')).toBe('apps/web/src/main.tsx');
+    expect(workspaceRelativePathForTree('E:\\langchain\\Suanlizi\\apps\\web\\src\\main.tsx', 'E:\\langchain\\Suanlizi')).toBe('apps/web/src/main.tsx');
     expect(workspaceDirectoryChainForTarget('apps/web/src/main.tsx', 'file')).toEqual(['', 'apps', 'apps/web', 'apps/web/src']);
     expect(workspaceDirectoryChainForTarget('apps/web/src', 'directory')).toEqual(['', 'apps', 'apps/web', 'apps/web/src']);
   });
@@ -56,8 +56,8 @@ describe('workspace files layout', () => {
   it('shows the full path when hovering file and directory rows', () => {
     const component = readFileSync(join(here, 'components', 'WorkspaceFilesPanel.tsx'), 'utf-8');
 
-    expect(workspaceFileRowTitle({ name: 'src', path: 'apps/web/src' }, 'E:\\langchain\\Nexus')).toBe('E:\\langchain\\Nexus\\apps\\web\\src');
-    expect(workspaceFileRowTitle({ name: 'main.tsx', path: 'apps/web/src/main.tsx' }, 'E:\\langchain\\Nexus')).toBe('E:\\langchain\\Nexus\\apps\\web\\src\\main.tsx');
+    expect(workspaceFileRowTitle({ name: 'src', path: 'apps/web/src' }, 'E:\\langchain\\Suanlizi')).toBe('E:\\langchain\\Suanlizi\\apps\\web\\src');
+    expect(workspaceFileRowTitle({ name: 'main.tsx', path: 'apps/web/src/main.tsx' }, 'E:\\langchain\\Suanlizi')).toBe('E:\\langchain\\Suanlizi\\apps\\web\\src\\main.tsx');
     expect(component).toContain('title={workspaceFileRowTitle(entry, workspaceRoot)}');
   });
 

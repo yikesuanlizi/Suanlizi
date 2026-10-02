@@ -1,19 +1,19 @@
 // BrowserViewManager：管理 WebContentsView 生命周期（创建/布局/显示/隐藏/销毁）。
-// 用户与 Agent 操作的是同一个 View——远程页面绝不挂载 Nexus preload，也不获得
-// 任何 Nexus IPC（架构文档 §3.3 / 迁移计划 §3.1）。
+// 用户与 Agent 操作的是同一个 View——远程页面绝不挂载 Suanlizi preload，也不获得
+// 任何 Suanlizi IPC（架构文档 §3.3 / 迁移计划 §3.1）。
 // — English: BrowserViewManager owns WebContentsView lifecycle
 //   (create/layout/show/hide/destroy). Users and the agent operate the SAME view;
-//   remote pages never get the Nexus preload or any Nexus IPC.
+//   remote pages never get the Suanlizi preload or any Suanlizi IPC.
 import { app, BaseWindow, session, WebContentsView } from 'electron';
 import { mkdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import type { PageGraph } from '@nexus/protocol';
+import { pageDeclaredIconUrl, validProviderIconUrl, type PageGraph } from '@suanlizi/protocol';
 import type { BrowserDesktopEvent, BrowserTabState, CreateBrowserTabInput, BrowserViewBounds } from '../contracts/browserTypes.js';
 import { BrowserEngineAdapter } from './BrowserEngineAdapter.js';
 
 // 独立 session partition：不复用用户日常 Chrome profile（迁移计划 §3.3）。
 // — English: a dedicated session partition — never reuses the user's daily Chrome profile.
-const SESSION_PARTITION = 'persist:nexus-browser';
+const SESSION_PARTITION = 'persist:suanlizi-browser';
 
 interface ManagedView {
   tabId: string;
@@ -23,7 +23,9 @@ interface ManagedView {
   visible: boolean;
   loading: boolean;
   openedBy: 'user' | 'agent';
+  threadId?: string;
   favicon?: string;
+  faviconFromPageLink?: boolean;
   navigationEpoch: number;
   containerBounds: BrowserViewBounds;
 }
@@ -40,8 +42,31 @@ interface BrowserDownloadWaiter {
 }
 
 interface BrowserTabWaiter {
+  taskId: string;
   resolve: () => void;
   reject: (reason: Error) => void;
+}
+
+function isDevToolsShortcut(input: Electron.Input): boolean {
+  if (input.type !== 'keyDown') return false;
+  const key = String(input.key ?? '').toLowerCase();
+  const code = String((input as Electron.Input & { code?: string }).code ?? '').toLowerCase();
+  const modifier = input.control === true || input.meta === true;
+  return key === 'f12' || code === 'f12' || (modifier && input.shift === true && key === 'i');
+}
+
+function toggleDevTools(target: Electron.WebContents, scope: string): void {
+  try {
+    const opened = target.isDevToolsOpened();
+    if (opened) {
+      target.closeDevTools();
+    } else {
+      target.openDevTools({ mode: 'detach', activate: true, title: `Suanlizi ${scope} console` });
+    }
+    console.log(`[browser:${scope}] DevTools ${opened ? 'closed' : 'opened'}`);
+  } catch (error) {
+    console.error(`[browser:${scope}] DevTools toggle failed:`, error);
+  }
 }
 
 export class BrowserViewManager {
@@ -95,7 +120,7 @@ export class BrowserViewManager {
       const filename = basename(item.getFilename()) || 'download';
       const ownerTaskId = this.agentTaskByTab.get(tabId);
       const safeTaskId = ownerTaskId?.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 96) || 'manual';
-      const downloadDir = join(app.getPath('downloads'), 'Nexus', safeTaskId);
+      const downloadDir = join(app.getPath('downloads'), 'Suanlizi', safeTaskId);
       mkdirSync(downloadDir, { recursive: true });
       const savePath = join(downloadDir, `${Date.now()}-${filename}`);
       this.emit({ type: 'download-started', tabId, filename });
@@ -187,8 +212,8 @@ export class BrowserViewManager {
         sandbox: true,
         contextIsolation: true,
         nodeIntegration: false,
-        // 关键：远程页面不挂载 Nexus preload（架构文档 §3.3）。
-        // — English: critical — remote pages never mount the Nexus preload.
+        // 关键：远程页面不挂载 Suanlizi preload（架构文档 §3.3）。
+        // — English: critical — remote pages never mount the Suanlizi preload.
         preload: undefined,
       },
     });
@@ -200,6 +225,7 @@ export class BrowserViewManager {
       visible: true,
       loading: true,
       openedBy: source,
+      threadId: input.threadId,
       navigationEpoch: 0,
       containerBounds: input.bounds,
     };
@@ -207,41 +233,47 @@ export class BrowserViewManager {
     this.activeTabId = tabId;
     this.host.contentView.addChildView(view);
     this.setBounds(tabId, input.bounds);
-    this.resolveBrowserTabWaiters();
+    this.resolveBrowserTabWaiters(managed.threadId);
 
     // 页面生命周期事件 → Renderer（Phase 2 子集：loading/title/favicon/navigation/crash）。
     // — English: page lifecycle events → Renderer (Phase 2 subset).
     view.webContents.on('did-start-loading', () => {
       managed.loading = true;
-      this.emit({ type: 'loading', tabId, loading: true });
+      this.emit({ type: 'loading', tabId, loading: true, threadId: managed.threadId });
     });
     view.webContents.on('did-stop-loading', () => {
       managed.loading = false;
-      this.emit({ type: 'loading', tabId, loading: false });
+      this.emit({ type: 'loading', tabId, loading: false, threadId: managed.threadId });
     });
     view.webContents.on('did-navigate', (_event, url) => {
       managed.url = url;
       managed.navigationEpoch += 1;
-      this.emit({ type: 'did-navigate', tabId, url });
+      managed.favicon = undefined;
+      managed.faviconFromPageLink = false;
+      this.emit({ type: 'favicon', tabId, favicon: undefined });
+      this.emit({ type: 'did-navigate', tabId, url, threadId: managed.threadId });
     });
     view.webContents.on('page-title-updated', (_event, title) => {
       managed.title = title;
-      this.emit({ type: 'page-title', tabId, title });
+      this.emit({ type: 'page-title', tabId, title, threadId: managed.threadId });
     });
     view.webContents.on('page-favicon-updated', (_event, favicons: string[]) => {
-      managed.favicon = favicons[0];
-      this.emit({ type: 'favicon', tabId, favicon: favicons[0] });
+      // Chromium 的事件作为备选；DOM 中实际声明的图标 link 更可靠。
+      const favicon = favicons.find(validProviderIconUrl);
+      if (!managed.faviconFromPageLink && favicon) {
+        managed.favicon = favicon;
+        this.emit({ type: 'favicon', tabId, favicon });
+      }
+      // SPA 在初始加载之后也可能切换 icon；事件到达时再读取一次 link。
+      void this.refreshDeclaredFavicon(managed);
     });
+    view.webContents.on('did-finish-load', () => { void this.refreshDeclaredFavicon(managed); });
     // F12 → DevTools（用户可见网页的调试入口；与 Chrome 习惯一致）。
     // — English: F12 toggles DevTools for the user-visible page (Chrome habit).
     view.webContents.on('before-input-event', (event, input) => {
-      if (input.type === 'keyDown' && input.key === 'F12') {
+      if (isDevToolsShortcut(input)) {
         event.preventDefault();
-        if (view.webContents.isDevToolsOpened()) {
-          view.webContents.closeDevTools();
-        } else {
-          view.webContents.openDevTools({ mode: 'detach' });
-        }
+        toggleDevTools(view.webContents, `tab ${tabId}`);
       }
     });
     // 页面 console 日志 → Renderer 事件（BrowserWorkbench 可展示）+ Main 终端。
@@ -275,7 +307,7 @@ export class BrowserViewManager {
     // popup：在新标签打开（禁止独立窗口）。
     // — English: popups open as new tabs (standalone windows are blocked).
     view.webContents.setWindowOpenHandler(({ url }) => {
-      const popup = this.createTab({ url, bounds: managed.containerBounds }, managed.openedBy);
+      const popup = this.createTab({ url, bounds: managed.containerBounds, threadId: managed.threadId }, managed.openedBy);
       const ownerTaskId = this.agentTaskByTab.get(tabId);
       if (ownerTaskId !== undefined) {
         this.agentTaskByTab.set(popup.tabId, ownerTaskId);
@@ -292,8 +324,37 @@ export class BrowserViewManager {
       // — English: load failures surface via did-fail-load; log here only.
       console.error(`[browser] loadURL failed for ${tabId}: ${String(err)}`);
     });
-    this.emit({ type: 'tab-created', tabId, url: input.url, openedBy: source });
+    this.emit({ type: 'tab-created', tabId, url: input.url, openedBy: source, threadId: managed.threadId });
     return this.stateOf(managed);
+  }
+
+  private async refreshDeclaredFavicon(managed: ManagedView): Promise<void> {
+    const epoch = managed.navigationEpoch;
+    const pageUrl = managed.url;
+    try {
+      // 仅读取远程页面的 link 元数据；不在远程页面注入 Suanlizi preload/IPC。
+      const result = await managed.view.webContents.executeJavaScript(`({
+        baseUri: document.baseURI,
+        links: Array.from(document.querySelectorAll('link[rel]')).filter(link => /icon/i.test(link.rel)).slice(0, 64).map(link => ({
+          rel: link.rel, href: link.getAttribute('href') || '', type: link.type
+        }))
+      })`) as { baseUri?: unknown; links?: unknown };
+      if (this.views.get(managed.tabId) !== managed || managed.navigationEpoch !== epoch || managed.url !== pageUrl) return;
+      if (typeof result?.baseUri !== 'string' || !Array.isArray(result.links)) return;
+      const links = result.links.filter((link): link is { rel: string; href: string; type?: string } =>
+        typeof link === 'object' && link !== null
+        && typeof link.rel === 'string' && link.rel.length < 128
+        && typeof link.href === 'string' && link.href.length < 2048
+        && (link.type === undefined || typeof link.type === 'string'));
+      const favicon = pageDeclaredIconUrl(pageUrl, result.baseUri, links);
+      if (favicon) {
+        managed.favicon = favicon;
+        managed.faviconFromPageLink = true;
+        this.emit({ type: 'favicon', tabId: managed.tabId, favicon });
+      }
+    } catch {
+      // CSP / navigation / destroyed tab: preserve a valid Electron favicon, never guess /favicon.ico.
+    }
   }
 
   // 网页四周留边距 + 圆角（视觉上与 Electron 窗口融合更好看）。
@@ -302,7 +363,8 @@ export class BrowserViewManager {
   private static readonly VIEW_INSET = 16;
   private static readonly VIEW_RADIUS = 16;
 
-  setBounds(tabId: string, bounds: BrowserViewBounds): void {
+  setBounds(tabId: string, bounds: BrowserViewBounds, threadId?: string): void {
+    if (threadId !== undefined) this.assertTabScope(tabId, threadId);
     const managed = this.views.get(tabId);
     if (managed === undefined) throw new Error(`unknown tab: ${tabId}`);
     const inset = BrowserViewManager.VIEW_INSET;
@@ -326,7 +388,18 @@ export class BrowserViewManager {
     return this.views.has(tabId);
   }
 
-  setVisible(tabId: string, visible: boolean): void {
+  /** Renderer-driven operations must provide the owning thread scope. */
+  assertTabScope(tabId: string, threadId?: string): void {
+    const managed = this.views.get(tabId);
+    if (managed === undefined) throw new Error(`unknown tab: ${tabId}`);
+    const scope = threadId?.trim();
+    if (!scope || !managed.threadId || managed.threadId !== scope) {
+      throw new Error(`browser tab is outside thread scope: ${tabId}`);
+    }
+  }
+
+  setVisible(tabId: string, visible: boolean, threadId?: string): void {
+    if (threadId !== undefined) this.assertTabScope(tabId, threadId);
     const managed = this.views.get(tabId);
     if (managed === undefined) throw new Error(`unknown tab: ${tabId}`);
     managed.visible = visible;
@@ -335,10 +408,11 @@ export class BrowserViewManager {
     } else {
       this.host.contentView.removeChildView(managed.view);
     }
-    this.emit({ type: 'tab-visible', tabId, visible });
+    this.emit({ type: 'tab-visible', tabId, visible, threadId: managed.threadId });
   }
 
-  navigate(tabId: string, url: string): void {
+  navigate(tabId: string, url: string, threadId?: string): void {
+    if (threadId !== undefined) this.assertTabScope(tabId, threadId);
     const managed = this.views.get(tabId);
     if (managed === undefined) throw new Error(`unknown tab: ${tabId}`);
     // 底层兜底规范化：无协议时 localhost/回环/IP 补 http://（与 UI/BrowserTool 一致）。
@@ -356,9 +430,11 @@ export class BrowserViewManager {
   // 激活标签：隐藏其余 View，目标保持可见并置于最前（不抢其它面板焦点）。
   // — English: activate a tab — hide the others, keep the target visible and on
   //   top (no focus stealing from other panels).
-  activateTab(tabId: string): void {
+  activateTab(tabId: string, threadId?: string): void {
     const target = this.views.get(tabId);
     if (target === undefined) throw new Error(`unknown tab: ${tabId}`);
+    const scope = threadId?.trim();
+    if (threadId !== undefined) this.assertTabScope(tabId, scope);
     this.activeTabId = tabId;
     for (const managed of this.views.values()) {
       const visible = managed.tabId === tabId;
@@ -369,14 +445,15 @@ export class BrowserViewManager {
         } else {
           this.host.contentView.removeChildView(managed.view);
         }
-        this.emit({ type: 'tab-visible', tabId: managed.tabId, visible });
+        this.emit({ type: 'tab-visible', tabId: managed.tabId, visible, threadId: managed.threadId });
       }
     }
   }
 
   // 前进/后退：返回是否成功（导航历史可用）。
   // — English: back/forward — returns whether the navigation happened.
-  back(tabId: string): boolean {
+  back(tabId: string, threadId?: string): boolean {
+    if (threadId !== undefined) this.assertTabScope(tabId, threadId);
     const managed = this.views.get(tabId);
     if (managed === undefined) throw new Error(`unknown tab: ${tabId}`);
     if (!managed.view.webContents.navigationHistory.canGoBack()) return false;
@@ -384,7 +461,8 @@ export class BrowserViewManager {
     return true;
   }
 
-  forward(tabId: string): boolean {
+  forward(tabId: string, threadId?: string): boolean {
+    if (threadId !== undefined) this.assertTabScope(tabId, threadId);
     const managed = this.views.get(tabId);
     if (managed === undefined) throw new Error(`unknown tab: ${tabId}`);
     if (!managed.view.webContents.navigationHistory.canGoForward()) return false;
@@ -392,32 +470,32 @@ export class BrowserViewManager {
     return true;
   }
 
-  reload(tabId: string): void {
+  reload(tabId: string, threadId?: string): void {
+    if (threadId !== undefined) this.assertTabScope(tabId, threadId);
     const managed = this.views.get(tabId);
     if (managed === undefined) throw new Error(`unknown tab: ${tabId}`);
     managed.view.webContents.reload();
   }
 
-  stop(tabId: string): void {
+  stop(tabId: string, threadId?: string): void {
+    if (threadId !== undefined) this.assertTabScope(tabId, threadId);
     const managed = this.views.get(tabId);
     if (managed === undefined) throw new Error(`unknown tab: ${tabId}`);
     managed.view.webContents.stop();
   }
 
-  focus(tabId: string): void {
+  focus(tabId: string, threadId?: string): void {
+    if (threadId !== undefined) this.assertTabScope(tabId, threadId);
     const managed = this.views.get(tabId);
     if (managed === undefined) throw new Error(`unknown tab: ${tabId}`);
     managed.view.webContents.focus();
   }
 
-  toggleDevTools(tabId: string): void {
+  toggleDevTools(tabId: string, threadId?: string): void {
+    if (threadId !== undefined) this.assertTabScope(tabId, threadId);
     const managed = this.views.get(tabId);
     if (managed === undefined) throw new Error(`unknown tab: ${tabId}`);
-    if (managed.view.webContents.isDevToolsOpened()) {
-      managed.view.webContents.closeDevTools();
-    } else {
-      managed.view.webContents.openDevTools({ mode: 'detach' });
-    }
+    toggleDevTools(managed.view.webContents, `tab ${tabId}`);
   }
 
   viewFor(tabId: string): WebContentsView {
@@ -444,26 +522,32 @@ export class BrowserViewManager {
   // — English: release the CDP adapter when the tab closes.
   private readonly adapters = new Map<number, BrowserEngineAdapter>();
 
-  listTabs(): BrowserTabState[] {
-    return [...this.views.values()].map((m) => this.stateOf(m));
+  listTabs(threadId?: string): BrowserTabState[] {
+    const scope = threadId?.trim();
+    return [...this.views.values()]
+      .filter((managed) => !scope || managed.threadId === scope)
+      .map((m) => this.stateOf(m));
   }
 
   // 隐藏工作台只移除原生 View，不销毁标签或 Agent 的 pageId 绑定。
   // 这样用户可以收起右侧栏，Agent 后续仍能继续操作同一页面。
-  hideAll(): void {
+  hideAll(threadId?: string): void {
+    const scope = threadId?.trim();
     for (const managed of this.views.values()) {
+      if (scope && managed.threadId !== scope) continue;
       if (!managed.visible) continue;
       managed.visible = false;
       this.host.contentView.removeChildView(managed.view);
-      this.emit({ type: 'tab-visible', tabId: managed.tabId, visible: false });
+      this.emit({ type: 'tab-visible', tabId: managed.tabId, visible: false, threadId: managed.threadId });
     }
   }
 
   // 关闭标签立即回收 View；不存在不可见页面持续占用。
   // — English: closing a tab recycles its view immediately.
-  destroy(tabId: string): void {
+  destroy(tabId: string, threadId?: string): void {
     const managed = this.views.get(tabId);
     if (managed === undefined) return;
+    if (threadId !== undefined) this.assertTabScope(tabId, threadId);
     this.rejectDownloadWaiter(tabId, new Error('browser tab closed'));
     const ownerTaskId = this.agentTaskByTab.get(tabId);
     if (ownerTaskId !== undefined) {
@@ -513,12 +597,20 @@ export class BrowserViewManager {
     return { tabId, view: this.viewFor(tabId) };
   }
 
+  private tabsForTask(taskId: string): ManagedView[] {
+    // A browser page is never implicitly claimed across threads. Older tabs
+    // without a scope remain user-visible legacy state, but cannot become an
+    // agent target until the renderer recreates them with an explicit scope.
+    return [...this.views.values()].filter((managed) => managed.threadId === taskId);
+  }
+
   private waitForBrowserTab(taskId: string, input: { signal?: AbortSignal } = {}): Promise<void> {
-    if (this.views.size > 0) return Promise.resolve();
+    if (this.tabsForTask(taskId).length > 0) return Promise.resolve();
     return new Promise<void>((resolve, reject) => {
       let settled = false;
       let finish: (reason?: Error) => void = () => undefined;
       const waiter: BrowserTabWaiter = {
+        taskId,
         resolve: () => finish(),
         reject: (reason) => finish(reason),
       };
@@ -534,8 +626,8 @@ export class BrowserViewManager {
         if (settled) return;
         settled = true;
         cleanup();
+        this.pendingBrowserRequestTasks.delete(taskId);
         if (reason !== undefined) {
-          this.pendingBrowserRequestTasks.delete(taskId);
           reject(reason);
         } else resolve();
       };
@@ -554,9 +646,15 @@ export class BrowserViewManager {
     return this.pendingBrowserRequestTasks.size > 0;
   }
 
-  private resolveBrowserTabWaiters(): void {
-    this.pendingBrowserRequestTasks.clear();
+  pendingAgentBrowserRequestTaskIds(): string[] {
+    return [...this.pendingBrowserRequestTasks];
+  }
+
+  private resolveBrowserTabWaiters(threadId?: string): void {
+    const scope = threadId?.trim();
+    if (!scope) return;
     for (const waiter of [...this.browserTabWaiters]) {
+      if (waiter.taskId !== scope) continue;
       waiter.resolve();
     }
   }
@@ -575,17 +673,20 @@ export class BrowserViewManager {
     }
 
     await this.waitForBrowserTab(taskId, input);
-    const active = this.activeTabOrFirst();
+    const candidates = this.tabsForTask(taskId);
+    if (candidates.length === 0) throw new Error(`no browser tab open for task: ${taskId}`);
+    const activeState = candidates.find((tab) => tab.tabId === this.activeTabId) ?? candidates[0];
+    const active = { tabId: activeState.tabId, view: this.viewFor(activeState.tabId) };
+    const activeManaged = this.views.get(active.tabId);
+    if (activeManaged === undefined) throw new Error(`unknown tab: ${active.tabId}`);
     if (!this.agentTaskByTab.has(active.tabId)) {
       this.agentTabByTask.set(taskId, active.tabId);
       this.agentTaskByTab.set(active.tabId, taskId);
       return active;
     }
 
-    const activeManaged = this.views.get(active.tabId);
-    if (activeManaged === undefined) throw new Error(`unknown tab: ${active.tabId}`);
-    const tab = this.createTab({ url: 'about:blank', bounds: activeManaged.containerBounds }, 'agent');
-    this.activateTab(tab.tabId);
+    const tab = this.createTab({ url: 'about:blank', bounds: activeManaged.containerBounds, threadId: taskId }, 'agent');
+    this.activateTab(tab.tabId, taskId);
     this.agentTabByTask.set(taskId, tab.tabId);
     this.agentTaskByTab.set(tab.tabId, taskId);
     return { tabId: tab.tabId, view: this.viewFor(tab.tabId) };
@@ -646,7 +747,7 @@ export class BrowserViewManager {
         // 收起的工作台不会终止会话；下一次 Agent 操作会请求 Renderer 恢复它。
         this.emit({ type: 'agent-browser-requested', taskId });
       }
-      this.activateTab(page.tabId);
+      this.activateTab(page.tabId, taskId);
       return await operation();
     } finally {
       release();
@@ -660,6 +761,14 @@ export class BrowserViewManager {
     this.dispose();
   }
 
+  destroyThreadTabs(threadId: string): void {
+    const scope = threadId.trim();
+    if (!scope) return;
+    for (const [tabId, managed] of this.views) {
+      if (managed.threadId === scope) this.destroy(tabId, scope);
+    }
+  }
+
   private stateOf(managed: ManagedView): BrowserTabState {
     return {
       tabId: managed.tabId,
@@ -668,6 +777,7 @@ export class BrowserViewManager {
       visible: managed.visible,
       loading: managed.loading,
       openedBy: managed.openedBy,
+      threadId: managed.threadId,
       favicon: managed.favicon,
     };
   }

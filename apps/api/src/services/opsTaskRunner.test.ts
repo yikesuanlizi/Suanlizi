@@ -6,7 +6,7 @@ import {
   transitionOpsTask,
   type OpsTaskSession,
   type OpsTaskState,
-} from '@nexus/protocol';
+} from '@suanlizi/protocol';
 import {
   LocalAdapter,
   LocalCommandAdapter,
@@ -111,7 +111,7 @@ describe('OpsTaskRunner', () => {
     process.env.OPENAI_API_KEY = 'should-not-leak';
     try {
       const environment = buildLocalTestEnvironment('workspace.typecheck');
-      expect(environment.NEXUS_OPS_TEST).toBe('workspace.typecheck');
+      expect(environment.SUANLIZI_OPS_TEST).toBe('workspace.typecheck');
       expect(environment.OPENAI_API_KEY).toBeUndefined();
     } finally {
       if (previous === undefined) delete process.env.OPENAI_API_KEY;
@@ -126,7 +126,7 @@ describe('OpsTaskRunner', () => {
   });
 
   it('does not pretend a missing workspace test executable is available', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'nexus-ops-test-unavailable-'));
+    const root = await mkdtemp(join(tmpdir(), 'suanlizi-ops-test-unavailable-'));
     try {
       await expect(new LocalCommandAdapter().runTest({
         workspaceRoot: root,
@@ -164,7 +164,7 @@ describe('OpsTaskRunner', () => {
   });
 
   it('reads local workspace without executing a command', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'nexus-ops-local-'));
+    const root = await mkdtemp(join(tmpdir(), 'suanlizi-ops-local-'));
     try {
       const task = makeTask({ spec: { ...makeTask().spec, workspaceRoot: root, environmentId: 'local' } });
       const observation = await new LocalAdapter().observe(task, new AbortController().signal);

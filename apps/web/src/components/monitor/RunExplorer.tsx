@@ -8,6 +8,7 @@ interface RunExplorerProps {
   selectedRunId: string;
   expandedThreadId: string;
   loading: boolean;
+  loadError: string | null;
   threadId: string;
   zh: boolean;
   onSelectRun(runId: string): void;
@@ -21,6 +22,7 @@ export function RunExplorer({
   selectedRunId,
   expandedThreadId,
   loading,
+  loadError,
   threadId,
   zh,
   onSelectRun,
@@ -122,7 +124,15 @@ export function RunExplorer({
         </button>
       </div>
       <div className="runExplorer__body">
-        {showEmpty ? (
+        {showEmpty && loadError ? (
+          <div className="runExplorer__empty">
+            <p>{zh ? '监控数据加载失败' : 'Failed to load runs'}</p>
+            <p className="runExplorer__emptyHint">
+              {zh ? '请检查 API 是否在运行' : 'Check that the API is running'}
+            </p>
+            <button type="button" className="runExplorer__retry" onClick={onRefresh}>{zh ? '重试' : 'Retry'}</button>
+          </div>
+        ) : showEmpty ? (
           <div className="runExplorer__empty">
             <p>{zh ? '暂无运行记录' : 'No runs yet'}</p>
             <p className="runExplorer__emptyHint">

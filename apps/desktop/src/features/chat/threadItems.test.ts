@@ -83,6 +83,16 @@ describe('transcript item merging', () => {
     expect(merged.map((item) => item.id)).toEqual(['pending_user_1', 'agent-1']);
   });
 
+  it('keeps live assistant output when a reconnect snapshot is missing it', () => {
+    const merged = mergeIncomingItems(
+      [{ id: 'agent-live', type: 'agent_message', turnId: 'turn-1', status: 'in_progress', text: '流式回复的一半' } as never],
+      [{ id: 'tool-1', type: 'tool_call', turnId: 'turn-1', status: 'completed', toolName: 'list_files' } as never],
+    );
+
+    expect(merged.map((item) => item.id)).toEqual(['agent-live', 'tool-1']);
+    expect(merged[0]).toMatchObject({ text: '流式回复的一半', status: 'in_progress' });
+  });
+
   it('removes local skill install placeholders before merging persisted install items', () => {
     const local = createLocalSkillDraftItems('https://github.com/anthropics/skills/tree/main/skills/pdf', 'zh');
     const current = [

@@ -1,7 +1,7 @@
-// Phase 5 打包验证：electron-builder --dir 产物（release/win-unpacked/Nexus.exe）
+// Phase 5 打包验证：electron-builder --dir 产物（release/win-unpacked/Suanlizi.exe）
 // 能启动，React 工作台（file 模式加载 dist，相对 base）挂载成功。
 // — English: Phase 5 packaging verification — the electron-builder --dir
-//   artifact (release/win-unpacked/Nexus.exe) launches and mounts the React
+//   artifact (release/win-unpacked/Suanlizi.exe) launches and mounts the React
 //   workbench (file mode loads dist with a relative base).
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -10,17 +10,17 @@ import { describe, expect, it } from 'vitest';
 import { _electron as electron } from 'playwright';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const EXE = join(here, '../apps/desktop/release/win-unpacked/Nexus.exe');
+const EXE = join(here, '../apps/desktop/release/win-unpacked/Suanlizi.exe');
 
 describe('Phase 5 · 打包产物', () => {
-  it('win-unpacked/Nexus.exe 存在', () => {
+  it('win-unpacked/Suanlizi.exe 存在', () => {
     expect(existsSync(EXE)).toBe(true);
   });
 
-  it('打包产物启动：React 工作台挂载 + nexusDesktop API 可用（file 模式）', async () => {
+  it('打包产物启动：React 工作台挂载 + suanliziDesktop API 可用（file 模式）', async () => {
     const app = await electron.launch({
       executablePath: EXE,
-      env: { ...process.env, NEXUS_ELECTRON_LOAD: 'file', NEXUS_DISABLE_SINGLE_INSTANCE: '1' },
+      env: { ...process.env, SUANLIZI_ELECTRON_LOAD: 'file', SUANLIZI_DISABLE_SINGLE_INSTANCE: '1' },
       args: [],
     });
     try {
@@ -40,7 +40,7 @@ describe('Phase 5 · 打包产物', () => {
 
       // 桌面桥可用（preload typed API）。
       // — English: the desktop bridge is present (typed preload API).
-      const hasBridge = await win.evaluate(() => typeof (window as unknown as { nexusDesktop?: unknown }).nexusDesktop === 'object');
+      const hasBridge = await win.evaluate(() => typeof (window as unknown as { suanliziDesktop?: unknown }).suanliziDesktop === 'object');
       expect(hasBridge).toBe(true);
     } finally {
       await app.close();

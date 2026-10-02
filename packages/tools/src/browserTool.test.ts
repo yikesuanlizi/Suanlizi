@@ -26,7 +26,7 @@ describe('browser tools', () => {
     expect(navigate?.description).toContain('打开 URL 的唯一浏览器工具');
 
     const result = await memory!.execute({}, {
-      workspaceRoot: 'D:\\nexus',
+      workspaceRoot: 'D:\\suanlizi',
       threadId: 'browser-tool-empty-memory',
       turnId: 'turn-1',
       approved: false,
@@ -40,7 +40,7 @@ describe('browser tools', () => {
 
     const act = browserTools.find((tool) => tool.name === 'browser_act');
     const unsafeResult = await act!.execute({ kind: 'type', value: 'unscoped input' }, {
-      workspaceRoot: 'D:\\nexus',
+      workspaceRoot: 'D:\\suanlizi',
       threadId: 'browser-tool-empty-memory',
       turnId: 'turn-2',
       approved: true,
@@ -52,7 +52,7 @@ describe('browser tools', () => {
 
     const download = browserTools.find((tool) => tool.name === 'browser_download');
     const invalidDownload = await download!.execute({ url: 'file:///C:/secret.txt' }, {
-      workspaceRoot: 'D:\\nexus',
+      workspaceRoot: 'D:\\suanlizi',
       threadId: 'browser-tool-empty-memory',
       turnId: 'turn-3',
       approved: true,

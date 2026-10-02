@@ -18,7 +18,7 @@ import type {
   BrowserTaskEvent,
   ClassifiedError,
   Observation,
-} from '@nexus/protocol';
+} from '@suanlizi/protocol';
 import { stripSensitiveUrl } from './urlSafe.js';
 
 // 默认容量：元素引用表 30、内容块 10、单块 200 字符

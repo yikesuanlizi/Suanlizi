@@ -1,9 +1,9 @@
-import type { MemoryRecord, MemoryRecordScope, MemoryRecordType, ThreadId, TurnId } from '@nexus/protocol';
-import type { ThreadStore } from '@nexus/storage';
+import type { MemoryRecord, MemoryRecordScope, MemoryRecordType, ThreadId, TurnId } from '@suanlizi/protocol';
+import type { ThreadStore } from '@suanlizi/storage';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
-export type { MemoryRecord } from '@nexus/protocol';
+export type { MemoryRecord } from '@suanlizi/protocol';
 
 export interface MemorySettings {
   memoryEnabled: boolean;
@@ -98,7 +98,7 @@ export function extractMemoryCandidates(input: ExtractMemoryCandidateInput): Mem
     candidates.push(candidate(input, 'preference', compactSentence(userText), 'global', ['preference'], 0.86, now));
   }
 
-  if (/(只允许|必须|项目|目录|路径|配置|命令|工具链|测试命令|workspace|repo|repository|AGENTS\.md|Nexus\/|codex\/|pnpm|npm|yarn|bun|vitest|pytest|eslint|prettier)/i.test(userText)) {
+  if (/(只允许|必须|项目|目录|路径|配置|命令|工具链|测试命令|workspace|repo|repository|AGENTS\.md|Suanlizi\/|codex\/|pnpm|npm|yarn|bun|vitest|pytest|eslint|prettier)/i.test(userText)) {
     candidates.push(candidate(input, 'project_fact', compactSentence(userText), 'workspace', ['project'], 0.84, now));
   }
 
@@ -290,7 +290,7 @@ function isRelevantMemoryResult(result: MemorySearchResult): boolean {
 }
 
 function renderMemoryIndex(records: MemoryRecord[]): string {
-  return ['# Nexus Memory', '', ...records.map((record) => `- [${record.type}] ${record.text} (${record.id})`), ''].join('\n');
+  return ['# Suanlizi Memory', '', ...records.map((record) => `- [${record.type}] ${record.text} (${record.id})`), ''].join('\n');
 }
 
 function renderRawMemories(records: MemoryRecord[]): string {

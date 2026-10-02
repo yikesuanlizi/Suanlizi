@@ -33,7 +33,7 @@ describe('workspace preview types', () => {
   it('keeps rendered html constrained inside the preview viewport', () => {
     const html = workspaceHtmlPreviewDocument('<main style="width: 2000px"><img src="/hero.png"></main>');
 
-    expect(html).toContain('data-nexus-preview-style');
+    expect(html).toContain('data-suanlizi-preview-style');
     expect(html).toContain('max-width: 100% !important;');
     expect(html).toContain('overflow: auto !important;');
     expect(html).toContain('<main style="width: 2000px"><img src="/hero.png"></main>');
@@ -43,12 +43,12 @@ describe('workspace preview types', () => {
     const component = readFileSync(join(here, 'components', 'WorkspaceFilesPanel.tsx'), 'utf-8');
     const styles = readFileSync(join(here, 'styles.css'), 'utf-8');
     const preview = {
-      name: 'nexus111.html',
-      path: 'Nexus/nexus111.html',
+      name: 'suanlizi111.html',
+      path: 'Suanlizi/suanlizi111.html',
     };
 
-    expect(workspacePreviewBreadcrumb(preview, 'E:\\langchain')).toBe('langchain > Nexus > nexus111.html');
-    expect(workspacePreviewCopyPath(preview, 'E:\\langchain')).toBe('E:\\langchain\\Nexus\\nexus111.html');
+    expect(workspacePreviewBreadcrumb(preview, 'E:\\langchain')).toBe('langchain > Suanlizi > suanlizi111.html');
+    expect(workspacePreviewCopyPath(preview, 'E:\\langchain')).toBe('E:\\langchain\\Suanlizi\\suanlizi111.html');
     expect(component).toContain('workspacePreviewPathButton');
     expect(component).not.toContain('当前工作目录：');
     expect(component).not.toContain('Current workspace: ');

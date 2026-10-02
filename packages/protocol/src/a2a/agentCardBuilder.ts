@@ -1,5 +1,5 @@
-// A2A AgentCard 构建器：根据 Nexus 配置生成符合 SDK AgentCard 接口的描述对象
-// 英文说明：A2A AgentCard builder — produces an SDK-compliant AgentCard from Nexus config
+// A2A AgentCard 构建器：根据 Suanlizi 配置生成符合 SDK AgentCard 接口的描述对象
+// 英文说明：A2A AgentCard builder — produces an SDK-compliant AgentCard from Suanlizi config
 
 import type { AgentCard, AgentCapabilities, AgentSkill, HTTPAuthSecurityScheme, SecurityScheme } from '@a2a-js/sdk';
 
@@ -17,16 +17,16 @@ const DEFAULT_OUTPUT_MODES = ['text/plain'];
  * 用于在 AgentCard 中声明调用方必须遵守的认证方式。
  */
 // — Chinese: security scheme kind: 'bearer' = HTTP Bearer JWT; 'none' = no auth required
-export type NexusSecuritySchemeKind = 'bearer' | 'none';
+export type SuanliziSecuritySchemeKind = 'bearer' | 'none';
 
 /**
- * NexusAgentCardConfig — 构建 AgentCard 所需的配置。
+ * SuanliziAgentCardConfig — 构建 AgentCard 所需的配置。
  *
  * url 指向 A2A HTTP 端点（例如 https://host/api/a2a）。
  * skills 描述 Agent 可执行的能力（可选，默认提供一个通用对话 skill）。
  */
-// — Chinese: NexusAgentCardConfig — configuration for building an AgentCard.
-export interface NexusAgentCardConfig {
+// — Chinese: SuanliziAgentCardConfig — configuration for building an AgentCard.
+export interface SuanliziAgentCardConfig {
   /** Agent 的显示名称。 */
   name: string;
   /** Agent 的简短描述。 */
@@ -53,12 +53,12 @@ export interface NexusAgentCardConfig {
   preferredTransport?: string;
   /**
    * 可选：声明 Agent 的认证要求。
-   * - 'bearer'：声明调用方必须使用 HTTP Bearer JWT（Nexus token 模式下的默认）。
-   * - 'none'：声明无需认证（Nexus auth=off 模式）。
+   * - 'bearer'：声明调用方必须使用 HTTP Bearer JWT（Suanlizi token 模式下的默认）。
+   * - 'none'：声明无需认证（Suanlizi auth=off 模式）。
    * - undefined：不在 AgentCard 中声明 security（保持向后兼容）。
    */
   // — Chinese: declare auth requirement. 'bearer' = JWT required; 'none' = no auth; undefined = omit
-  securityScheme?: NexusSecuritySchemeKind;
+  securityScheme?: SuanliziSecuritySchemeKind;
 }
 
 // 构造 HTTP Bearer JWT 安全方案 — Chinese: build HTTP Bearer JWT security scheme
@@ -78,7 +78,7 @@ function buildBearerSecurityScheme(): HTTPAuthSecurityScheme {
  * 表示该 Agent 可处理通用对话请求。
  */
 // — Chinese: build an A2A AgentCard. Falls back to a default conversation skill.
-export function buildAgentCard(config: NexusAgentCardConfig): AgentCard {
+export function buildAgentCard(config: SuanliziAgentCardConfig): AgentCard {
   const capabilities: AgentCapabilities = {
     streaming: config.streaming ?? true,
     pushNotifications: config.pushNotifications ?? false,
@@ -91,8 +91,8 @@ export function buildAgentCard(config: NexusAgentCardConfig): AgentCard {
           {
             id: 'conversation',
             name: 'Conversation',
-            description: 'General-purpose conversational agent powered by Nexus runtime',
-            tags: ['conversation', 'chat', 'nexus'],
+            description: 'General-purpose conversational agent powered by Suanlizi runtime',
+            tags: ['conversation', 'chat', 'suanlizi'],
             inputModes: DEFAULT_INPUT_MODES,
             outputModes: DEFAULT_OUTPUT_MODES,
           },
@@ -124,7 +124,7 @@ export function buildAgentCard(config: NexusAgentCardConfig): AgentCard {
   // 根据配置声明安全方案（A2A 规范遵循 OpenAPI 3.0 Security Scheme Object）
   // — Chinese: declare security scheme per A2A spec (OpenAPI 3.0 Security Scheme Object)
   if (config.securityScheme === 'bearer') {
-    const schemeName = 'nexusBearerJwt';
+    const schemeName = 'suanliziBearerJwt';
     const scheme: SecurityScheme = buildBearerSecurityScheme();
     card.securitySchemes = { [schemeName]: scheme };
     // security 字段为 OR 关系的方案列表，此处仅声明一个方案

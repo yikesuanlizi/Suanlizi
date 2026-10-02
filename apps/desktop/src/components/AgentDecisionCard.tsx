@@ -1,5 +1,5 @@
 import React from 'react';
-import type { AgentDecisionAction, AgentDecisionRequest, AgentDecisionResponse } from '@nexus/protocol';
+import type { AgentDecisionAction, AgentDecisionRequest, AgentDecisionResponse } from '@suanlizi/protocol';
 
 export interface AgentDecisionCardProps {
   request: AgentDecisionRequest;

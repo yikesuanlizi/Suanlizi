@@ -44,7 +44,7 @@ describe('LocalSkillRegistry', () => {
 
 describe('LocalSkillRegistryCache', () => {
   it('reuses a cached directory scan until forceReload is requested', async () => {
-    const root = path.join(tmpdir(), `nexus-skills-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    const root = path.join(tmpdir(), `suanlizi-skills-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     const skillDir = path.join(root, 'alpha');
 
     try {

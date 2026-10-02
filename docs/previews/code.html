@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Suanlizi - Idle</title>
+    <style>
+        :root {
+            --bg-color: #0d1117;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --particle-color: #58a6ff;
+            --btn-bg: rgba(255,255,255,0.05);
+            --btn-border: rgba(255,255,255,0.1);
+        }
+        [data-theme="light"] {
+            --bg-color: #f6f8fa;
+            --text-primary: #1f2328;
+            --text-secondary: #656d76;
+            --particle-color: #0969da;
+            --btn-bg: rgba(0,0,0,0.03);
+            --btn-border: rgba(0,0,0,0.08);
+        }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: var(--bg-color); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; transition: background-color 0.8s ease; cursor: default; }
+        
+        #canvas-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; opacity: 0.65; transition: opacity 0.8s; }
+        body:hover #canvas-container { opacity: 0.85; }
+        #idle-copy { position: fixed; inset: 0; z-index: 2; display: grid; place-content: center; justify-items: center; gap: 10px; pointer-events: none; user-select: none; text-align: center; }
+        #idle-copy strong { color: var(--text-primary); font-size: clamp(20px, 2.3vw, 30px); font-weight: 650; letter-spacing: .08em; text-shadow: 0 0 24px color-mix(in srgb, var(--particle-color) 24%, transparent); }
+        #idle-copy span { color: var(--text-secondary); font-size: 12px; letter-spacing: .04em; opacity: .88; }
+    </style>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+    <div id="idle-copy" aria-hidden="true">
+        <strong>Suanlizi</strong>
+        <span>等待新的对话</span>
+    </div>
+
+    <script type="importmap">
+        { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        let scene, camera, renderer, group;
+        let particles, lines;
+        let currentTheme = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        let time = 0; 
+        let animationId;
+        let isDestroying = false;
+        
+        let mouse = new THREE.Vector2(0, 0);
+        let isDragging = false;
+        let pointerMoved = false;
+        let previousMousePosition = { x: 0, y: 0 };
+        let morphTimer = null;
+        let restoreTimer = null;
+        
+        const config = {
+            dark: { bg: 0x0d1117, particle: 0x58a6ff, line: 0x58a6ff, blending: THREE.AdditiveBlending, opacity: 0.6 },
+            light: { bg: 0xf6f8fa, particle: 0x0969da, line: 0x0969da, blending: THREE.NormalBlending, opacity: 0.4 }
+        };
+
+        const particleData = []; 
+        const COUNT = 100; 
+        const LINE_DIST_SQ = 10000;
+
+        init();
+        animate();
+
+        function init() {
+            document.body.setAttribute('data-theme', currentTheme);
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(config[currentTheme].bg);
+            scene.fog = new THREE.FogExp2(config[currentTheme].bg, 0.0015); 
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 2000);
+            camera.position.z = 500;
+
+            const container = document.getElementById('canvas-container');
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            container.appendChild(renderer.domElement);
+
+            group = new THREE.Group();
+            scene.add(group);
+
+            createNetwork();
+            scheduleNextMorph();
+
+            window.addEventListener('resize', onWindowResize);
+            renderer.domElement.addEventListener('pointerdown', onPointerDown);
+            renderer.domElement.addEventListener('pointermove', onPointerMove);
+            renderer.domElement.addEventListener('pointerup', onPointerUp);
+        }
+
+        // === 形状生成器 (优化：强制舒展，避免聚合) ===
+        
+        // 1. 球体：保持空心，半径较大
+        function getSpherePosition() { 
+            const radius = 200 + Math.random() * 100; // 最小200，保证舒展
+            const theta = Math.random() * Math.PI * 2; 
+            const phi = Math.acos(2 * Math.random() - 1); 
+            return new THREE.Vector3(radius * Math.sin(phi) * Math.cos(theta), radius * Math.sin(phi) * Math.sin(theta), radius * Math.cos(phi)); 
+        }
+
+        // 2. 环形：本身就是空心的
+        function getTorusPosition() { 
+            const torusRadius = 200; // 大半径
+            const tubeRadius = 60;   // 管粗细
+            const theta = Math.random() * Math.PI * 2; 
+            const phi = Math.random() * Math.PI * 2; 
+            
+            const x = (torusRadius + tubeRadius * Math.cos(phi)) * Math.cos(theta); 
+            const y = (torusRadius + tubeRadius * Math.cos(phi)) * Math.sin(theta); 
+            const z = tubeRadius * Math.sin(phi); 
+            return new THREE.Vector3(x, z, y); 
+        }
+
+        // 3. 螺旋星系：修改为舒展型
+        function getGalaxyPosition() { 
+            // 关键修正：增加最小半径 (80)，避免粒子堆积在中心
+            const radius = 80 + Math.random() * 200; 
+            const spinAngle = radius * 0.5; // 增大扭曲，让臂展开
+            const armOffset = (Math.floor(Math.random() * 2) / 2) * Math.PI * 2; 
+            
+            // 随机扩散，让臂看起来有厚度而不只是一条线
+            const randomX = (Math.random() - 0.5) * 30;
+            const randomY = (Math.random() - 0.5) * 30;
+
+            const x = Math.cos(spinAngle + armOffset) * radius + randomX; 
+            const z = Math.sin(spinAngle + armOffset) * radius + randomY; 
+            const y = (Math.random() - 0.5) * 30; // 压扁高度
+            
+            return new THREE.Vector3(x, y, z); 
+        }
+        
+        function getRandomShapePosition() {
+            const r = Math.random();
+            if (r < 0.4) return getSpherePosition();   // 40% 球体
+            if (r < 0.7) return getTorusPosition();    // 30% 环形
+            return getGalaxyPosition();                // 30% 螺旋
+        }
+        
+        function scheduleNextMorph() {
+            if (isDestroying) return;
+            const delay = 10000 + Math.random() * 15000; 
+            morphTimer = setTimeout(() => { triggerMorph(); scheduleNextMorph(); }, delay);
+        }
+
+        function triggerMorph() {
+            for (let i = 0; i < COUNT; i++) {
+                const p = particleData[i];
+                const newPos = getRandomShapePosition();
+                p.target.copy(newPos);
+                p.originalPos.copy(newPos);
+            }
+        }
+
+        function createNetwork() {
+            const positions = new Float32Array(COUNT * 3);
+            for (let i = 0; i < COUNT; i++) {
+                const pos = getSpherePosition();
+                positions[i * 3] = pos.x; positions[i * 3 + 1] = pos.y; positions[i * 3 + 2] = pos.z;
+                particleData[i] = { 
+                    pos: new THREE.Vector3(pos.x, pos.y, pos.z), 
+                    target: new THREE.Vector3(pos.x, pos.y, pos.z), 
+                    originalPos: new THREE.Vector3(pos.x, pos.y, pos.z),
+                    phase: Math.random() * Math.PI * 2
+                };
+            }
+
+            const pointsGeo = new THREE.BufferGeometry();
+            pointsGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            
+            const sprite = createGlowTexture();
+            const conf = config[currentTheme];
+            const pointsMat = new THREE.PointsMaterial({ size: 20, map: sprite, transparent: true, opacity: conf.opacity, color: conf.particle, blending: conf.blending, depthWrite: false });
+            particles = new THREE.Points(pointsGeo, pointsMat);
+            group.add(particles);
+
+            const linePositions = new Float32Array(COUNT * COUNT * 3);
+            const lineGeo = new THREE.BufferGeometry();
+            lineGeo.setAttribute('position', new THREE.BufferAttribute(linePositions, 3));
+            lineGeo.setDrawRange(0, 0);
+            const lineMat = new THREE.LineBasicMaterial({ color: conf.line, transparent: true, opacity: 0.2, blending: conf.blending, depthWrite: false });
+            lines = new THREE.LineSegments(lineGeo, lineMat);
+            group.add(lines);
+        }
+
+        function createGlowTexture() {
+            const canvas = document.createElement('canvas'); canvas.width = 64; canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+            gradient.addColorStop(0, 'rgba(255,255,255,1)');
+            gradient.addColorStop(0.2, 'rgba(255,255,255,0.8)');
+            gradient.addColorStop(0.5, 'rgba(255,255,255,0.2)');
+            gradient.addColorStop(1, 'rgba(255,255,255,0)');
+            ctx.fillStyle = gradient; ctx.fillRect(0, 0, 64, 64);
+            const texture = new THREE.Texture(canvas); texture.needsUpdate = true; return texture;
+        }
+
+        function onPointerDown(event) {
+            if (isDestroying) return;
+            isDragging = true;
+            pointerMoved = false;
+            previousMousePosition.x = event.clientX;
+            previousMousePosition.y = event.clientY;
+        }
+        function onPointerMove(event) {
+            if (isDestroying) return;
+            if (isDragging) {
+                const deltaX = event.clientX - previousMousePosition.x;
+                const deltaY = event.clientY - previousMousePosition.y;
+                if (Math.abs(deltaX) + Math.abs(deltaY) > 3) pointerMoved = true;
+                group.rotation.y += deltaX * 0.003;
+                group.rotation.x += deltaY * 0.003;
+                previousMousePosition.x = event.clientX;
+                previousMousePosition.y = event.clientY;
+            }
+        }
+        function onPointerUp() {
+            isDragging = false;
+            if (pointerMoved || isDestroying) return;
+            isDestroying = true;
+            clearTimeout(restoreTimer);
+            restoreTimer = setTimeout(() => {
+                isDestroying = false;
+                camera.position.z = 500;
+                particles.material.opacity = config[currentTheme].opacity;
+                lines.material.opacity = 0.2;
+            }, 900);
+        }
+
+        function animate() {
+            animationId = requestAnimationFrame(animate);
+            time += 0.01;
+
+            if (isDestroying) {
+                camera.position.z = THREE.MathUtils.lerp(camera.position.z, -100, 0.08);
+                group.rotation.y += 0.05;
+                particles.material.opacity *= 0.95;
+                lines.material.opacity *= 0.95;
+            } else {
+                if (!isDragging) group.rotation.y += 0.001; 
+            }
+
+            const positions = particles.geometry.attributes.position.array;
+            const linePositions = lines.geometry.attributes.position.array;
+            let lineIndex = 0;
+
+            for (let i = 0; i < COUNT; i++) {
+                const p = particleData[i];
+                
+                // 核心平滑逻辑：线性插值
+                p.pos.lerp(p.target, 0.02); 
+
+                // 微小的呼吸感
+                const dist = p.pos.distanceTo(p.target);
+                if (dist < 10) {
+                    const floatX = Math.sin(time * 1.5 + p.phase) * 0.3;
+                    const floatY = Math.cos(time * 1.2 + p.phase) * 0.3;
+                    positions[i * 3] = p.pos.x + floatX;
+                    positions[i * 3 + 1] = p.pos.y + floatY;
+                } else {
+                    positions[i * 3] = p.pos.x;
+                    positions[i * 3 + 1] = p.pos.y;
+                }
+                positions[i * 3 + 2] = p.pos.z;
+            }
+            particles.geometry.attributes.position.needsUpdate = true;
+
+            for (let i = 0; i < COUNT; i++) {
+                for (let j = i + 1; j < COUNT; j++) {
+                    const p1 = particleData[i].pos; const p2 = particleData[j].pos;
+                    if (p1.distanceToSquared(p2) < LINE_DIST_SQ) {
+                        linePositions[lineIndex++] = p1.x; linePositions[lineIndex++] = p1.y; linePositions[lineIndex++] = p1.z;
+                        linePositions[lineIndex++] = p2.x; linePositions[lineIndex++] = p2.y; linePositions[lineIndex++] = p2.z;
+                    }
+                }
+            }
+            lines.geometry.setDrawRange(0, lineIndex / 3);
+            lines.geometry.attributes.position.needsUpdate = true;
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); }
+
+        window.toggleTheme = function() {
+            currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            const newConf = config[currentTheme];
+            document.body.setAttribute('data-theme', currentTheme);
+            scene.background.setHex(newConf.bg);
+            scene.fog.color.setHex(newConf.bg);
+            particles.material.color.setHex(newConf.particle);
+            particles.material.blending = newConf.blending;
+            particles.material.opacity = newConf.opacity;
+            lines.material.color.setHex(newConf.line);
+            lines.material.blending = newConf.blending;
+        };
+
+    </script>
+</body>
+</html>

@@ -1,11 +1,11 @@
 // Sidecar 进程宿主测试：spawn 真实 Node 子进程（sidecarEntry + ts-js-resolver loader），
 // 经真实 JSONL stdin/stdout 管道跑完整浏览器任务闭环。这是「进程级」验证——不再是
 // 内存对聊，而是操作系统级子进程 + 管道。
-// 前置条件：@nexus/protocol 的 dist 已构建（workspace 别名指向 dist；npm run build）。
+// 前置条件：@suanlizi/protocol 的 dist 已构建（workspace 别名指向 dist；npm run build）。
 // — English: sidecar process-host tests — spawns a real Node child process
 //   (sidecarEntry + ts-js-resolver loader) and drives a full browser task over a
 //   real JSONL stdin/stdout pipe. This is process-level verification, not an
-//   in-memory conversation. Prerequisite: @nexus/protocol dist built (npm run build).
+//   in-memory conversation. Prerequisite: @suanlizi/protocol dist built (npm run build).
 import { accessSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,7 +16,7 @@ import { BrowserTaskOrchestrator } from '../orchestrator.js';
 import { BrowserPolicyEngine } from '../policy.js';
 import { BrowserTaskMachine } from '../taskMachine.js';
 import { BrowserTraceRecorder } from '../trace.js';
-import { normalizeAccessPolicyConfig } from '@nexus/protocol';
+import { normalizeAccessPolicyConfig } from '@suanlizi/protocol';
 import { spawnSidecarProcess } from './sidecarProcessHost.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -26,11 +26,11 @@ const here = dirname(fileURLToPath(import.meta.url));
 //   do not depend on dist build timing.
 const SRC_ENTRY = join(here, 'sidecarEntry.ts');
 
-// 构建产物存在才跑（workspace 别名 @nexus/protocol → dist）。
+// 构建产物存在才跑（workspace 别名 @suanlizi/protocol → dist）。
 // — English: only run when the workspace dist exists (alias → dist).
 function protocolDistAvailable(): boolean {
   try {
-    accessSync(join(here, '../../../../node_modules/@nexus/protocol/dist/index.js'));
+    accessSync(join(here, '../../../../node_modules/@suanlizi/protocol/dist/index.js'));
     return true;
   } catch {
     return false;
@@ -131,7 +131,7 @@ run('Sidecar 进程宿主（真实子进程 + JSONL 管道）', () => {
       };
       const policyEngine = new BrowserPolicyEngine({
         policy: normalizeAccessPolicyConfig({}),
-        evaluateAccess: (request: import('@nexus/protocol').AccessRequest) => ({ decision: 'allow' as const, request, source: 'temporary_grant', justification: '进程级测试' }),
+        evaluateAccess: (request: import('@suanlizi/protocol').AccessRequest) => ({ decision: 'allow' as const, request, source: 'temporary_grant', justification: '进程级测试' }),
         threadId: 'proc-thread',
         turnId: 'proc-turn',
       });

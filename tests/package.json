@@ -1,18 +1,18 @@
 {
-  "name": "@nexus/tests",
-  "version": "1.7.0",
+  "name": "@suanlizi/tests",
+  "version": "1.8.0",
   "private": true,
   "devDependencies": {
-    "@nexus/protocol": "1.7.0",
-    "@nexus/model-gateway": "1.7.0",
-    "@nexus/tools": "1.7.0",
-    "@nexus/sandbox": "1.7.0",
-    "@nexus/storage": "1.7.0",
-    "@nexus/runtime": "1.7.0",
-    "@nexus/browser-runtime": "1.7.0",
-    "@nexus/memory": "1.7.0",
-    "@nexus/extensions": "1.7.0",
-    "@nexus/i18n": "1.7.0",
+    "@suanlizi/protocol": "1.8.0",
+    "@suanlizi/model-gateway": "1.8.0",
+    "@suanlizi/tools": "1.8.0",
+    "@suanlizi/sandbox": "1.8.0",
+    "@suanlizi/storage": "1.8.0",
+    "@suanlizi/runtime": "1.8.0",
+    "@suanlizi/browser-runtime": "1.8.0",
+    "@suanlizi/memory": "1.8.0",
+    "@suanlizi/extensions": "1.8.0",
+    "@suanlizi/i18n": "1.8.0",
     "vitest": "^3.0.0"
   }
 }

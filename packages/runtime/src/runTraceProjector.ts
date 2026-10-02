@@ -1,4 +1,4 @@
-import type { RunTraceEnvelope, RunTraceSummary } from '@nexus/protocol';
+import type { RunTraceEnvelope, RunTraceSummary } from '@suanlizi/protocol';
 
 export function projectRunTrace(input: RunTraceEnvelope[]): RunTraceSummary {
   const seen = new Set<string>();

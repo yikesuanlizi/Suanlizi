@@ -1,7 +1,7 @@
 // 浏览器运行时 Port：隔离 Agent Runtime 与 Playwright/宿主实现
 // — English: BrowserRuntimePort — decouples the Agent Runtime from Playwright/host implementations
 // 首期为 FakeBrowserRuntime；Phase 1 由 Node Browser Worker（Playwright）实现同一接口。
-import type { ActionIntent, ClassifiedError, Observation, PageGraph } from '@nexus/protocol';
+import type { ActionIntent, ClassifiedError, Observation, PageGraph } from '@suanlizi/protocol';
 
 export type BrowserRuntimeKind = 'fake' | 'playwright' | 'electron' | 'remote';
 

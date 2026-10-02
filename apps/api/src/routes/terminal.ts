@@ -13,6 +13,7 @@ const MAX_OUTPUT_BYTES = 1_024 * 1_024;
 const COMMAND_TIMEOUT_MS = 60_000;
 const MAX_PTY_OUTPUT_BYTES = 2 * 1_024 * 1_024;
 const SESSION_IDLE_TIMEOUT_MS = 30 * 60_000;
+const CLOSED_SESSION_RETENTION_MS = 60_000;
 const DEFAULT_PTY_COLS = 120;
 const DEFAULT_PTY_ROWS = 32;
 const MAX_OUTPUT_WAIT_MS = 1_000;
@@ -33,6 +34,7 @@ type TerminalResult = {
 type TerminalSession = {
   id: string;
   root: string;
+  threadId: string;
   process: pty.IPty;
   output: string;
   outputBase: number;
@@ -40,6 +42,7 @@ type TerminalSession = {
   exited: boolean;
   exitCode: number | null;
   idleTimer: NodeJS.Timeout | null;
+  cleanupTimer: NodeJS.Timeout | null;
   outputWaiters: Set<() => void>;
 };
 
@@ -47,6 +50,7 @@ type TerminalSessionRequest = {
   root?: unknown;
   cols?: unknown;
   rows?: unknown;
+  threadId?: unknown;
 };
 
 type TerminalInputRequest = {
@@ -82,11 +86,22 @@ function ptyShell(): { file: string; args: string[] } {
 }
 
 function touchTerminalSession(session: TerminalSession): void {
+  if (session.exited) return;
   if (session.idleTimer) clearTimeout(session.idleTimer);
   session.idleTimer = setTimeout(() => {
     if (terminalSessions.get(session.id) === session) closeTerminalSession(session.id);
   }, SESSION_IDLE_TIMEOUT_MS);
   session.idleTimer.unref?.();
+}
+
+function scheduleClosedSessionCleanup(session: TerminalSession): void {
+  if (session.cleanupTimer) clearTimeout(session.cleanupTimer);
+  session.cleanupTimer = setTimeout(() => {
+    if (terminalSessions.get(session.id) === session && session.exited) {
+      terminalSessions.delete(session.id);
+    }
+  }, CLOSED_SESSION_RETENTION_MS);
+  session.cleanupTimer.unref?.();
 }
 
 function appendTerminalOutput(session: TerminalSession, data: string): void {
@@ -123,20 +138,21 @@ function waitForTerminalOutput(session: TerminalSession, cursor: number, waitMs:
 function closeTerminalSession(id: string): void {
   const session = terminalSessions.get(id);
   if (!session) return;
-  terminalSessions.delete(id);
+  const wasExited = session.exited;
   if (session.idleTimer) clearTimeout(session.idleTimer);
   session.exited = true;
   notifyTerminalOutput(session);
-  if (!session.exited) {
+  if (!wasExited) {
     if (process.platform === 'win32') {
       execFile('taskkill', ['/PID', String(session.process.pid), '/T', '/F'], { windowsHide: true }, () => undefined);
     } else {
       try { session.process.kill(); } catch { /* process may have exited already */ }
     }
   }
+  scheduleClosedSessionCleanup(session);
 }
 
-function createTerminalSession(root: string, cols: number, rows: number): TerminalSession {
+function createTerminalSession(root: string, threadId: string, cols: number, rows: number): TerminalSession {
   const shell = ptyShell();
   const child = pty.spawn(shell.file, shell.args, {
     name: 'xterm-256color',
@@ -149,6 +165,7 @@ function createTerminalSession(root: string, cols: number, rows: number): Termin
   const session: TerminalSession = {
     id: randomUUID(),
     root,
+    threadId,
     process: child,
     output: '',
     outputBase: 0,
@@ -156,12 +173,15 @@ function createTerminalSession(root: string, cols: number, rows: number): Termin
     exited: false,
     exitCode: null,
     idleTimer: null,
+    cleanupTimer: null,
     outputWaiters: new Set(),
   };
   child.onData((data) => appendTerminalOutput(session, data));
   child.onExit(({ exitCode }) => {
     session.exited = true;
     session.exitCode = exitCode;
+    if (session.idleTimer) clearTimeout(session.idleTimer);
+    scheduleClosedSessionCleanup(session);
     notifyTerminalOutput(session);
   });
   terminalSessions.set(session.id, session);
@@ -182,11 +202,16 @@ async function handleTerminalSessionRoute(options: {
   try {
     if (options.req.method === 'POST' && !sessionId) {
       const body = await readJson<TerminalSessionRequest>(options.req);
+      const threadId = typeof body.threadId === 'string' ? body.threadId.trim() : '';
+      if (!threadId) {
+        sendError(options.res, 400, 'Thread id is required');
+        return true;
+      }
       const root = await resolveTerminalRoot(body.root);
       const cols = clampDimension(body.cols, DEFAULT_PTY_COLS, 20, 400);
       const rows = clampDimension(body.rows, DEFAULT_PTY_ROWS, 4, 200);
-      const session = createTerminalSession(root, cols, rows);
-      sendJson(options.res, 200, { sessionId: session.id, root, cols, rows });
+      const session = createTerminalSession(root, threadId, cols, rows);
+      sendJson(options.res, 200, { sessionId: session.id, root, threadId, cols, rows });
       return true;
     }
     if (!sessionId || (!operation && options.req.method !== 'DELETE')) {
@@ -196,6 +221,11 @@ async function handleTerminalSessionRoute(options: {
     const session = terminalSessions.get(sessionId);
     if (!session) {
       sendError(options.res, 404, 'Terminal session not found');
+      return true;
+    }
+    const requestThreadId = options.url.searchParams.get('threadId')?.trim() ?? '';
+    if (!requestThreadId || requestThreadId !== session.threadId) {
+      sendError(options.res, 403, 'Terminal session is outside thread scope');
       return true;
     }
     touchTerminalSession(session);

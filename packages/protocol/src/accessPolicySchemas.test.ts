@@ -10,9 +10,9 @@ describe('access policy schemas', () => {
   it('parses persistent allow and deny rules', () => {
     const parsed = accessPolicyConfigSchema.parse({
       mode: 'workspace',
-      workspaceRoot: 'E:\\langchain\\Nexus',
+      workspaceRoot: 'E:\\langchain\\Suanlizi',
       persistentRules: [
-        { id: 'deny-temp', effect: 'deny', access: 'write', target: { kind: 'path', path: 'E:\\langchain\\Nexus\\.git' }, scope: 'global' },
+        { id: 'deny-temp', effect: 'deny', access: 'write', target: { kind: 'path', path: 'E:\\langchain\\Suanlizi\\.git' }, scope: 'global' },
         { id: 'allow-docs', effect: 'allow', access: 'read', target: { kind: 'path', path: 'E:\\langchain\\dexin-agent' }, scope: 'thread' },
       ],
       temporaryGrants: [],
@@ -51,7 +51,7 @@ describe('access policy schemas', () => {
   it('redacts temporary grants from public config', () => {
     const publicConfig = redactAccessPolicyForPublicConfig({
       mode: 'workspace',
-      workspaceRoot: 'E:\\langchain\\Nexus',
+      workspaceRoot: 'E:\\langchain\\Suanlizi',
       persistentRules: [],
       temporaryGrants: [
         {
@@ -73,7 +73,7 @@ describe('access policy schemas', () => {
       id: 'grant-1',
       effect: 'allow',
       access: 'write',
-      target: { kind: 'path', path: 'E:\\langchain\\Nexus\\README.md' },
+      target: { kind: 'path', path: 'E:\\langchain\\Suanlizi\\README.md' },
       scope: 'tool_call',
       toolCallId: 'call_1',
       createdAt: '2026-07-27T00:00:00.000Z',

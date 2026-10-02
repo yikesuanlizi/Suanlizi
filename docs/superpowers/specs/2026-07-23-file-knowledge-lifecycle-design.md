@@ -2,11 +2,11 @@
 
 **Date:** 2026-07-23  
 **Status:** Draft for review  
-**Scope:** Nexus runtime/tools/storage/monitor; web + desktop UI only for visibility.
+**Scope:** Suanlizi runtime/tools/storage/monitor; web + desktop UI only for visibility.
 
 ## Problem
 
-Nexus currently treats file reads and extracted text as ordinary tool outputs. A turn can read a stale derived file such as `_v1_decoded.txt` that was generated from `_v1.0.docx`, while the source docx has since changed. The agent then reasons from old extracted content without being forced to refresh it.
+Suanlizi currently treats file reads and extracted text as ordinary tool outputs. A turn can read a stale derived file such as `_v1_decoded.txt` that was generated from `_v1.0.docx`, while the source docx has since changed. The agent then reasons from old extracted content without being forced to refresh it.
 
 Existing mechanisms are not enough:
 
@@ -74,7 +74,7 @@ The tool returns:
 {
   source: FileFingerprint;
   artifact: {
-    path: ".nexus/artifacts/documents/<hash>.md",
+    path: ".suanlizi/artifacts/documents/<hash>.md",
     kind: "document_text",
     sha256: string,
     createdAt: string,
@@ -88,13 +88,13 @@ The tool returns:
 
 Artifact location:
 
-- Use `.nexus/artifacts/documents/` under the active workspace root.
+- Use `.suanlizi/artifacts/documents/` under the active workspace root.
 - Do not generate root-level `_xxx.txt` helper files for normal document extraction.
 - If an old helper file is read, the lifecycle layer can flag it as unmanaged or stale if lineage is unavailable.
 
 ### 3. Artifact lineage ledger
 
-Persist a lightweight JSON/SQLite-backed ledger. The existing storage backend can own this later, but the first cut can live under workspace `.nexus/artifacts/index.json` behind a runtime service.
+Persist a lightweight JSON/SQLite-backed ledger. The existing storage backend can own this later, but the first cut can live under workspace `.suanlizi/artifacts/index.json` behind a runtime service.
 
 ```ts
 export interface DocumentArtifactRecord {
@@ -188,7 +188,7 @@ Rollback behavior:
 
 - Existing file rollback semantics stay unchanged.
 - After rollback, mark affected document artifacts stale if their source hash no longer matches.
-- Do not roll back `.nexus/artifacts` as project source unless explicitly changed by a tool.
+- Do not roll back `.suanlizi/artifacts` as project source unless explicitly changed by a tool.
 
 ### 7. Trace and monitor
 
@@ -294,16 +294,16 @@ Likely files:
 
 The MVP is done when this scenario is impossible:
 
-1. User asks Nexus to analyze `A.docx`.
-2. Nexus extracts it to a text artifact.
+1. User asks Suanlizi to analyze `A.docx`.
+2. Suanlizi extracts it to a text artifact.
 3. User modifies `A.docx`.
-4. User asks Nexus to analyze it again.
-5. Nexus silently reads the old artifact and answers from stale content.
+4. User asks Suanlizi to analyze it again.
+5. Suanlizi silently reads the old artifact and answers from stale content.
 
 Correct behavior:
 
-- Nexus detects source hash changed.
-- Nexus refreshes extraction or warns/fails closed.
+- Suanlizi detects source hash changed.
+- Suanlizi refreshes extraction or warns/fails closed.
 - The involved files summary shows `A.docx`.
 - Monitor shows stale detection and refresh.
 

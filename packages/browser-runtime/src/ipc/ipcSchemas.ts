@@ -7,7 +7,7 @@
 //   matching is handled by the command/event/response schemas, dispatched via
 //   the parseIpc* helpers (null on failure).
 import { z } from 'zod';
-import { actionIntentSchema } from '@nexus/protocol';
+import { actionIntentSchema } from '@suanlizi/protocol';
 import { IPC_VERSION } from './ipcTypes.js';
 import type { IpcCommand, IpcEvent, IpcResponse, ProtocolFrame } from './ipcTypes.js';
 

@@ -4,7 +4,7 @@ import JSZip from 'jszip';
 import mammoth from 'mammoth';
 import { PDFParse } from 'pdf-parse';
 import * as XLSX from 'xlsx';
-import type { DocumentExtractor } from '@nexus/protocol';
+import type { DocumentExtractor } from '@suanlizi/protocol';
 
 export const DOCUMENT_EXTRACTOR_VERSION = '1';
 

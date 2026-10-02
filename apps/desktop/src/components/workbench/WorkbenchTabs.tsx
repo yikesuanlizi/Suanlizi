@@ -137,6 +137,8 @@ export function WorkbenchTabs({
             role="tab"
             className={activeTab === tab.id ? 'active' : ''}
             aria-selected={activeTab === tab.id}
+            aria-label={tab.label}
+            title={tab.label}
             onClick={() => onTabChange(tab.id)}
           >
             <Icon name={tab.icon} />
@@ -167,6 +169,8 @@ export function WorkbenchTabs({
                   type="button"
                   role="tab"
                   aria-selected={activeTab === tab.id}
+                  aria-label={tab.label}
+                  title={tab.label}
                   onClick={() => onTabChange(tab.id)}
                 >
                   <Icon name={tab.icon} />

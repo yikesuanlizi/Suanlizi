@@ -55,21 +55,51 @@ export interface CreateTabInputValidated {
   url: string;
   bounds: BoundsLike;
   openedBy?: 'user' | 'agent';
+  threadId?: string;
 }
 
 export function validateCreateTab(input: unknown): CreateTabInputValidated {
   const record = asRecord(input);
   const openedBy = record.openedBy === 'user' || record.openedBy === 'agent' ? record.openedBy : undefined;
-  return { url: requireString(record, 'url'), bounds: requireBounds(record.bounds), openedBy };
+  const threadId = typeof record.threadId === 'string' && record.threadId.trim() ? record.threadId.trim() : undefined;
+  return { url: requireString(record, 'url'), bounds: requireBounds(record.bounds), openedBy, threadId };
+}
+
+export interface ListTabsInput {
+  threadId?: string;
+}
+
+export function validateListTabs(input: unknown): ListTabsInput {
+  if (input === undefined || input === null) return {};
+  const record = asRecord(input);
+  return { threadId: typeof record.threadId === 'string' && record.threadId.trim() ? record.threadId.trim() : undefined };
 }
 
 export interface TabIdInput {
   tabId: string;
+  threadId?: string;
+}
+
+export interface ScopedTabIdInput extends TabIdInput {
+  threadId?: string;
 }
 
 export function validateTabId(input: unknown): TabIdInput {
   const record = asRecord(input);
-  return { tabId: requireString(record, 'tabId') };
+  const threadId = typeof record.threadId === 'string' && record.threadId.trim() ? record.threadId.trim() : undefined;
+  return { tabId: requireString(record, 'tabId'), threadId };
+}
+
+export function validateScopedTabId(input: unknown): ScopedTabIdInput {
+  const record = asRecord(input);
+  const threadId = typeof record.threadId === 'string' && record.threadId.trim() ? record.threadId.trim() : undefined;
+  return { tabId: requireString(record, 'tabId'), threadId };
+}
+
+export function requireThreadScope(threadId: string | undefined): string {
+  const scope = threadId?.trim();
+  if (!scope) throw new Error('threadId 必须为非空字符串');
+  return scope;
 }
 
 export interface TabBoundsInput extends TabIdInput {
@@ -78,7 +108,8 @@ export interface TabBoundsInput extends TabIdInput {
 
 export function validateTabBounds(input: unknown): TabBoundsInput {
   const record = asRecord(input);
-  return { tabId: requireString(record, 'tabId'), bounds: requireBounds(record.bounds) };
+  const threadId = typeof record.threadId === 'string' && record.threadId.trim() ? record.threadId.trim() : undefined;
+  return { tabId: requireString(record, 'tabId'), threadId, bounds: requireBounds(record.bounds) };
 }
 
 export interface TabVisibleInput extends TabIdInput {
@@ -87,7 +118,8 @@ export interface TabVisibleInput extends TabIdInput {
 
 export function validateTabVisible(input: unknown): TabVisibleInput {
   const record = asRecord(input);
-  return { tabId: requireString(record, 'tabId'), visible: requireBoolean(record, 'visible') };
+  const threadId = typeof record.threadId === 'string' && record.threadId.trim() ? record.threadId.trim() : undefined;
+  return { tabId: requireString(record, 'tabId'), threadId, visible: requireBoolean(record, 'visible') };
 }
 
 export interface NavigateInput extends TabIdInput {
@@ -96,7 +128,8 @@ export interface NavigateInput extends TabIdInput {
 
 export function validateNavigate(input: unknown): NavigateInput {
   const record = asRecord(input);
-  return { tabId: requireString(record, 'tabId'), url: requireString(record, 'url') };
+  const threadId = typeof record.threadId === 'string' && record.threadId.trim() ? record.threadId.trim() : undefined;
+  return { tabId: requireString(record, 'tabId'), threadId, url: requireString(record, 'url') };
 }
 
 export interface EvaluateInput extends TabIdInput {
@@ -105,7 +138,8 @@ export interface EvaluateInput extends TabIdInput {
 
 export function validateEvaluate(input: unknown): EvaluateInput {
   const record = asRecord(input);
-  return { tabId: requireString(record, 'tabId'), expression: requireString(record, 'expression') };
+  const threadId = typeof record.threadId === 'string' && record.threadId.trim() ? record.threadId.trim() : undefined;
+  return { tabId: requireString(record, 'tabId'), threadId, expression: requireString(record, 'expression') };
 }
 
 export interface ClickInput extends TabIdInput {
@@ -115,7 +149,8 @@ export interface ClickInput extends TabIdInput {
 
 export function validateClick(input: unknown): ClickInput {
   const record = asRecord(input);
-  return { tabId: requireString(record, 'tabId'), x: requireNumber(record, 'x'), y: requireNumber(record, 'y') };
+  const threadId = typeof record.threadId === 'string' && record.threadId.trim() ? record.threadId.trim() : undefined;
+  return { tabId: requireString(record, 'tabId'), threadId, x: requireNumber(record, 'x'), y: requireNumber(record, 'y') };
 }
 
 export interface InsertTextInput extends TabIdInput {
@@ -124,5 +159,6 @@ export interface InsertTextInput extends TabIdInput {
 
 export function validateInsertText(input: unknown): InsertTextInput {
   const record = asRecord(input);
-  return { tabId: requireString(record, 'tabId'), text: requireString(record, 'text') };
+  const threadId = typeof record.threadId === 'string' && record.threadId.trim() ? record.threadId.trim() : undefined;
+  return { tabId: requireString(record, 'tabId'), threadId, text: requireString(record, 'text') };
 }

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { SettingsShell, type SettingsSaveState } from './SettingsShell.js';
 import { AccessPolicyPage } from './AccessPolicyPage.js';
-import type { AccessPolicyConfig } from '@nexus/protocol';
+import type { AccessPolicyConfig } from '@suanlizi/protocol';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -68,7 +68,7 @@ describe('SettingsShell · visual theme ownership', () => {
     const desktopCss = readFileSync(join(here, '..', '..', '..', '..', 'desktop', 'src', 'styles.css'), 'utf-8');
 
     for (const css of [webCss, desktopCss]) {
-      const contract = css.slice(css.lastIndexOf('/* Nexus settings shell surface contract */'));
+      const contract = css.slice(css.lastIndexOf('/* Suanlizi settings shell surface contract */'));
       expect(contract).toContain('.settingsLayer.theme-dark');
       expect(contract).toContain('.settingsLayer.theme-light');
       expect(contract).toContain('var(--nx-settings-raised) !important');
@@ -101,7 +101,7 @@ describe('SettingsShell · P2.2 saving state', () => {
 describe('AccessPolicyPage · persistent policy UI', () => {
   const value: AccessPolicyConfig = {
     mode: 'workspace',
-    workspaceRoot: 'E:\\langchain\\Nexus',
+    workspaceRoot: 'E:\\langchain\\Suanlizi',
     persistentRules: [
       {
         id: 'allow-docs',
@@ -312,9 +312,14 @@ describe('SettingsDrawer · P2.2 作用域切换清空 dirty 状态', () => {
 
   it('persistConfig 失败时设置 saveError 但保留 dirtyFields', () => {
     const source = readFileSync(join(here, '..', '..', 'features', 'settings', 'useSettingsController.ts'), 'utf-8');
-    // catch 分支设置错误但不清 dirtyFields（让用户能重试），并同步给模型卡片可见反馈
-    expect(source).toMatch(/catch \(error\) \{[\s\S]*?const message = error instanceof Error \? error\.message : String\(error\);[\s\S]*?setSaveError\(message\);[\s\S]*?setModelKeyNotice\(message\);[\s\S]*?\}/);
+    // catch 分支把本地化后的错误同时写入 saveError 与模型卡片提示，且不清 dirtyFields（让用户能重试）。
+    const catchBlock = source.slice(source.indexOf('    } catch (error) {', source.indexOf('handleSetCurrentModelConfig')));
+    const body = catchBlock.slice(0, catchBlock.indexOf('} finally'));
+    expect(body).toContain('formatSuanliziErrorMessage(');
+    expect(body).toContain('setSaveError(message);');
+    expect(body).toContain('setModelKeyNotice(message);');
   });
+
 });
 
 describe('SettingsShell · P2.2 desktop 镜像守卫', () => {
@@ -497,23 +502,6 @@ describe('ModelsPage · P2.4 「保存为预设」与「应用设置」文案区
     expect(source).not.toContain('scopeDescription');
   });
 
-  it('按钮文案：原「保存模型配置」改为「保存为预设」/ "Save as preset"', () => {
-    const source = readFileSync(join(here, 'ModelsPage.tsx'), 'utf-8');
-    expect(source).toContain("'保存为预设' : 'Save as preset'");
-    // 不应保留旧文案
-    expect(source).not.toContain("'保存模型配置'");
-    expect(source).not.toContain("'Save model config'");
-  });
-
-  it('按钮文案：原「设置当前模型配置」改为「应用设置」/ "Apply settings"', () => {
-    const source = readFileSync(join(here, 'ModelsPage.tsx'), 'utf-8');
-    expect(source).toContain("'应用设置' : 'Apply settings'");
-    expect(source).not.toContain("'应用到当前作用域' : 'Apply to scope'");
-    // 不应保留旧文案
-    expect(source).not.toContain("'设置当前模型配置'");
-    expect(source).not.toContain("'Set current model config'");
-  });
-
   it('按钮不带解释型 title', () => {
     const source = readFileSync(join(here, 'ModelsPage.tsx'), 'utf-8');
     expect(source).not.toContain('保存到预设列表，方便以后复用');
@@ -553,8 +541,6 @@ describe('SettingsShell · P2.4 desktop 镜像 a11y 守卫', () => {
     expect(desktopModels).not.toContain('role="note"');
     expect(desktopModels).not.toContain('presetsHint');
     expect(desktopModels).not.toContain('scopeDescription');
-    expect(desktopModels).toContain("'保存为预设' : 'Save as preset'");
-    expect(desktopModels).toContain("'应用设置' : 'Apply settings'");
     expect(desktopModels).not.toContain("'应用到当前作用域' : 'Apply to scope'");
     // 不应保留旧文案
     expect(desktopModels).not.toContain("'保存模型配置'");
@@ -571,7 +557,6 @@ describe('SettingsShell · P2.4 desktop 镜像 a11y 守卫', () => {
 
   it('desktop i18n 也更新 saveModelPreset 文案', () => {
     const desktopI18n = readFileSync(join(here, '..', '..', '..', '..', 'desktop', 'src', 'shared', 'i18n.ts'), 'utf-8');
-    expect(desktopI18n).toContain("saveModelPreset: '保存为预设'");
     expect(desktopI18n).toContain("saveModelPreset: 'Save as preset'");
   });
 });

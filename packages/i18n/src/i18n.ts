@@ -36,15 +36,15 @@ const zh = {
   'cli.usage_resume': '用法: /resume <threadId>',
   'cli.prompt_hint': '输入消息或 /help 查看命令。/quit 退出。',
   'cli.lang_switched': '语言已切换为: {lang}',
-  'help.title': 'nexus — 本地 Agent OS CLI',
-  'help.usage': '用法: nexus [选项]',
+  'help.title': 'suanlizi — 本地 Agent OS CLI',
+  'help.usage': '用法: suanlizi [选项]',
   'help.opt_workspace': '  工作区根目录 (默认: cwd)',
   'help.opt_model': '  模型名称 (默认: qwen2.5-coder:7b)',
-  'help.opt_provider': '  模型提供方: ollama | lmstudio | vllm | openai_compatible | anthropic',
+  'help.opt_provider': '  模型提供方: ollama | lmstudio | vllm | llama_cpp | openai_compatible | anthropic',
   'help.opt_base_url': '  覆盖 API 基础 URL',
   'help.opt_api_key': '  API 密钥 (远程 provider)',
   'help.opt_permissions': '  权限预设: read_only | workspace | danger_full_access',
-  'help.opt_data_dir': '  数据目录 (默认: .nexus)',
+  'help.opt_data_dir': '  数据目录 (默认: 应用数据目录)',
   'help.opt_lang': '  界面语言: zh | en (默认: zh)',
   'help.opt_resume': '  恢复指定线程',
   'help.opt_help': '  显示此帮助',
@@ -58,7 +58,7 @@ const zh = {
   'help.cmd_help': '  显示交互帮助',
   'help.cmd_quit': '  退出',
   'agent.system_prompt':
-    '你是 Nexus，一个本地运行的全能 Agent OS。你可以使用工具来处理代码、管理文件、执行命令、搜索内容、操作企业数据、调用技能等。\n\n' +
+    '你是 Suanlizi，一个本地运行的全能 Agent OS。你可以使用工具来处理代码、管理文件、执行命令、搜索内容、操作企业数据、调用技能等。\n\n' +
     '规则:\n' +
     '- 编辑文件前先读取。\n' +
     '- 使用绝对路径或工作区相对路径。\n' +
@@ -74,7 +74,7 @@ const zh = {
     '- 优先选择简洁、清晰的解决方案。\n' +
     '- 用中文回答。',
   'agent.system_prompt_en':
-    'You are Nexus, a fully-featured local Agent OS. You can use tools to work with code, manage files, execute commands, search content, operate enterprise data, invoke skills, and more.\n\n' +
+    'You are Suanlizi, a fully-featured local Agent OS. You can use tools to work with code, manage files, execute commands, search content, operate enterprise data, invoke skills, and more.\n\n' +
     'Rules:\n' +
     '- Read files before editing them.\n' +
     '- Use absolute or workspace-relative paths.\n' +
@@ -125,15 +125,15 @@ const en: Record<keyof typeof zh, string> = {
   'cli.usage_resume': 'Usage: /resume <threadId>',
   'cli.prompt_hint': 'Type a message or /help for commands. /quit to exit.',
   'cli.lang_switched': 'Language switched to: {lang}',
-  'help.title': 'nexus — Nexus CLI',
-  'help.usage': 'Usage: nexus [options]',
+  'help.title': 'suanlizi — Suanlizi CLI',
+  'help.usage': 'Usage: suanlizi [options]',
   'help.opt_workspace': '  Workspace root (default: cwd)',
   'help.opt_model': '  Model name (default: qwen2.5-coder:7b)',
-  'help.opt_provider': '  Provider: ollama | lmstudio | vllm | openai_compatible | anthropic',
+  'help.opt_provider': '  Provider: ollama | lmstudio | vllm | llama_cpp | openai_compatible | anthropic',
   'help.opt_base_url': '  Override API base URL',
   'help.opt_api_key': '  API key (for remote providers)',
   'help.opt_permissions': '  Permission preset: read_only | workspace | danger_full_access',
-  'help.opt_data_dir': '  Data directory (default: .nexus)',
+  'help.opt_data_dir': '  Data directory (default: app data directory)',
   'help.opt_lang': '  UI language: zh | en (default: zh)',
   'help.opt_resume': '  Resume a thread by ID',
   'help.opt_help': '  Show this help',
@@ -147,7 +147,7 @@ const en: Record<keyof typeof zh, string> = {
   'help.cmd_help': '  Show interactive help',
   'help.cmd_quit': '  Exit',
   'agent.system_prompt':
-    'You are Nexus, a fully-featured local Agent OS. You can use tools to work with code, manage files, execute commands, search content, operate enterprise data, invoke skills, and more.\n\n' +
+    'You are Suanlizi, a fully-featured local Agent OS. You can use tools to work with code, manage files, execute commands, search content, operate enterprise data, invoke skills, and more.\n\n' +
     'Rules:\n' +
     '- Read files before editing them.\n' +
     '- Use absolute or workspace-relative paths.\n' +
@@ -163,7 +163,7 @@ const en: Record<keyof typeof zh, string> = {
     '- Always use ESM imports.\n' +
     '- Prefer simple, clear solutions.',
   'agent.system_prompt_en':
-    'You are Nexus, a fully-featured local Agent OS. You can use tools to work with code, manage files, execute commands, search content, operate enterprise data, invoke skills, and more.\n\n' +
+    'You are Suanlizi, a fully-featured local Agent OS. You can use tools to work with code, manage files, execute commands, search content, operate enterprise data, invoke skills, and more.\n\n' +
     'Rules:\n' +
     '- Read files before editing them.\n' +
     '- Use absolute or workspace-relative paths.\n' +

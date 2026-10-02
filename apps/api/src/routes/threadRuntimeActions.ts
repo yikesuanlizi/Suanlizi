@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { AgentLoop } from '@nexus/runtime';
-import type { RunControlAction, ThreadId } from '@nexus/protocol';
+import type { AgentLoop } from '@suanlizi/runtime';
+import type { RunControlAction, ThreadId } from '@suanlizi/protocol';
 import { readJson, sendJson } from '../shared/http.js';
 import type { RunControlHandlerRequest } from './runMonitorRoute.js';
 

@@ -1,7 +1,7 @@
 // Agent Runtime 进程（runtimeHostEntry）进程级测试：spawn 真实子进程，经 JSONL 管道
 // 驱动完整桌面链路：session.start → navigate → observe → act（强制过 orchestrator 策略）
 // → approval.requested 事件 → approval.resolve → session.close。
-// 前置条件：@nexus/protocol 的 dist 已构建（npm run build）。
+// 前置条件：@suanlizi/protocol 的 dist 已构建（npm run build）。
 // — English: process-level tests for the Agent Runtime entry — spawns the real
 //   child process and drives the full desktop chain over the JSONL pipe, including
 //   the mandatory orchestrator policy path and the approval flow.
@@ -19,7 +19,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 
 function protocolDistAvailable(): boolean {
   try {
-    accessSync(join(here, '../node_modules/@nexus/protocol/dist/index.js'));
+    accessSync(join(here, '../node_modules/@suanlizi/protocol/dist/index.js'));
     return true;
   } catch {
     return false;

@@ -1,4 +1,4 @@
-import type { ThreadStore } from '@nexus/storage';
+import type { ThreadStore } from '@suanlizi/storage';
 import {
   BOT_CONFIG_KEY,
   DEFAULT_BOT_CONFIG,

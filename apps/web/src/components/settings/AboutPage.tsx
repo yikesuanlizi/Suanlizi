@@ -10,7 +10,7 @@ export function AboutPage({ locale }: { locale: Locale }) {
         <div className="settingsFormGrid">
           <div className="settingsField">
             <span className="settingsFieldLabel">{locale === 'zh' ? '版本' : 'Version'}</span>
-            <span className="settingsValue">Nexus</span>
+            <span className="settingsValue">Suanlizi</span>
           </div>
           <div className="settingsField">
             <span className="settingsFieldLabel">{locale === 'zh' ? '构建' : 'Build'}</span>

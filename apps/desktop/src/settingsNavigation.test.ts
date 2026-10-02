@@ -78,7 +78,7 @@ describe('settings navigation', () => {
   it('uses a dense settings workbench layout instead of full-width stacked cards', () => {
     const css = readFileSync(join(here, 'styles.css'), 'utf-8');
 
-    expect(css).toContain('/* Nexus settings workbench density contract */');
+    expect(css).toContain('/* Suanlizi settings workbench density contract */');
     expect(css).toContain('.settingsLayer .settingsDrawer .settingsSection');
     expect(css).toMatch(/max-width:\s*1040px\s*!important;/);
     expect(css).toMatch(/grid-template-columns:\s*minmax\(112px,\s*148px\)\s+minmax\(0,\s*1fr\)\s*!important;/);

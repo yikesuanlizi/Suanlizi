@@ -14,10 +14,10 @@ vi.mock('node:os', async () => {
 });
 
 describe('provider API key environment variables', () => {
-  const envName = 'NEXUS_TEST_OPENAI_API_KEY';
+  const envName = 'SUANLIZI_TEST_OPENAI_API_KEY';
 
   beforeEach(() => {
-    mockOsState.homeDir = mkdtempSync(join(tmpdir(), 'nexus-model-gateway-'));
+    mockOsState.homeDir = mkdtempSync(join(tmpdir(), 'suanlizi-model-gateway-'));
     delete process.env[envName];
     vi.resetModules();
   });
@@ -43,6 +43,21 @@ describe('provider API key environment variables', () => {
     expect(providers.listApiKeyEnvVarCandidates('openai')).toContain(envName);
   });
 
+  it('registers llama.cpp as a local OpenAI-compatible provider', async () => {
+    // @ts-expect-error Vitest can load TS source modules in tests.
+    const providers = await import('./providers.ts');
+
+    expect(providers.getProvider('llama_cpp')).toMatchObject({
+      id: 'llama_cpp',
+      name: 'llama.cpp',
+      baseUrl: 'http://localhost:8080/v1',
+      apiKeyEnvVar: '',
+      protocol: 'openai',
+      isLocal: true,
+    });
+    expect(providers.getProvider('llama.cpp')?.id).toBe('llama_cpp');
+  });
+
   it('resolves custom provider keys from a user-selected env var', async () => {
     // @ts-expect-error Vitest can load TS source modules in tests.
     const providers = await import('./providers.ts');
@@ -62,6 +77,42 @@ describe('provider API key environment variables', () => {
     expect(providers.resolveProviderApiKeyEnvVar('custom_minimax_proxy')).toBe(envName);
     expect(providers.resolveApiKey('custom_minimax_proxy')).toBe('sk-custom-env');
     expect(providers.listApiKeyEnvVarCandidates('custom_minimax_proxy')).toContain(envName);
+  });
+
+  it('persists custom provider favicon branding', async () => {
+    // @ts-expect-error Vitest can load TS source modules in tests.
+    const providers = await import('./providers.ts');
+
+    const iconUrl = 'https://provider.example/favicon.svg';
+    providers.addCustomProvider({
+      id: 'custom_favicon_brand',
+      name: 'Favicon brand',
+      baseUrl: 'https://provider.example/v1',
+      apiKeyEnvVar: '',
+      protocol: 'openai',
+      isLocal: false,
+      iconUrl,
+    });
+
+    expect(providers.getProvider('custom_favicon_brand')?.iconUrl).toBe(iconUrl);
+    expect(providers.listAllProviders().find((p) => p.id === 'custom_favicon_brand')?.iconUrl).toBe(iconUrl);
+  });
+
+  it('deletes a custom vendor and credentials, while refusing to delete built-in vendors', async () => {
+    // @ts-expect-error Vitest can load TS source modules in tests.
+    const providers = await import('./providers.ts');
+    providers.addCustomProvider({
+      id: 'custom_disposable', name: 'Disposable', baseUrl: 'https://example.test/v1',
+      apiKeyEnvVar: '', protocol: 'openai', isLocal: false,
+    });
+    providers.saveApiKey('custom_disposable', 'sk-disposable');
+    providers.saveProviderApiKeyEnvVar('custom_disposable', envName);
+    expect(providers.removeCustomProvider('openai')).toBe(false);
+    expect(providers.removeCustomProvider('custom_disposable')).toBe(true);
+    expect(providers.listAllProviders().find((provider) => provider.id === 'custom_disposable')).toBeUndefined();
+    expect(providers.loadConfig().apiKeys?.custom_disposable).toBeUndefined();
+    expect(providers.loadConfig().apiKeyEnvVars?.custom_disposable).toBeUndefined();
+    expect(providers.removeCustomProvider('custom_disposable')).toBe(false);
   });
 
   it('resolves provider keys from canonical and alias env var names', async () => {

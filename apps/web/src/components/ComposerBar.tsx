@@ -1,13 +1,14 @@
 import React from 'react';
 import type { RunConfig } from '../config/config.js';
-import { runProfileLabel } from '../config/runProfiles.js';
 import { extractUrlTokens, summarizeUrlToken } from '../features/input/composerInput.js';
+import type { ComposerExecutionMode, ComposerThinkingMode } from '../features/composer/executionMode.js';
 import type { SlashCommandOption } from '../features/slash/slashCommands.js';
 import { resizeTextareaToContent } from '../shared/composer.js';
 import { t } from '../shared/i18n.js';
 import { DropdownSelect } from './DropdownSelect.js';
 import { Icon } from './Icon.js';
-import type { BotConfig, BotStatus, ModelPreset } from '../shared/types.js';
+import { ModelBrandIcon } from './ModelBrandIcon.js';
+import type { BotConfig, BotStatus, ModelPreset, ProviderEntry } from '../shared/types.js';
 import type { ThreadConfigOverrides } from '../api/threadConfigClient.js';
 
 export type RemoteAssistantPlatform = 'weixin' | 'dingtalk';
@@ -30,6 +31,19 @@ export const COMPOSER_DRAFT_STORAGE_KEY = 'nexus.composer.draft.v1';
 // Maximum number of history entries to keep.
 const COMPOSER_HISTORY_LIMIT = 100;
 
+// 自定义厂商图标：已注册的 custom_* 使用 iconUrl，其他厂商走原有无图标逻辑。
+// English: custom provider icon resolution for composer options.
+// 输入框模型下拉的厂商图标：自定义厂商用其 favicon，内置厂商用品牌图标。
+// 没有任何品牌时回退到中性连接图标，绝不留空。
+function providerIcon(
+  providers: ProviderEntry[],
+  providerId: string | undefined,
+  model: string | undefined,
+): React.ReactNode {
+  const selected = providers.find((provider) => provider.id === providerId);
+  return <ModelBrandIcon model={model} provider={providerId} providerName={selected?.name} iconUrl={selected?.iconUrl} baseUrl={selected?.baseUrl} />;
+}
+
 type FileMentionEntry = {
   kind: 'directory' | 'file';
   name: string;
@@ -48,6 +62,7 @@ export function ComposerBar({
   composerInputRef,
   config,
   draggingImage,
+  executionMode = 'chat',
   filteredSlashOptions,
   handleDrop,
   handleFileSelect,
@@ -56,7 +71,11 @@ export function ComposerBar({
   input,
   fileReferences = [],
   modelPresets,
+  providers = [],
   openRemoteAssistants,
+  thinkingMode = config.reasoningEffort as ComposerThinkingMode,
+  onThinkingModeChange = () => undefined,
+  onClearExecutionMode = () => undefined,
   persistThreadConfigOverrides = async () => undefined,
   removeImage,
   removeFileReference = () => undefined,
@@ -84,6 +103,7 @@ export function ComposerBar({
   composerInputRef: React.RefObject<HTMLTextAreaElement | null>;
   config: RunConfig;
   draggingImage: boolean;
+  executionMode?: ComposerExecutionMode;
   filteredSlashOptions: PaletteOption[];
   handleDrop: (event: React.DragEvent<HTMLElement>) => void;
   handleFileSelect: (event: React.ChangeEvent<HTMLInputElement>) => void;
@@ -92,7 +112,12 @@ export function ComposerBar({
   input: string;
   fileReferences?: string[];
   modelPresets: ModelPreset[];
+  providers?: ProviderEntry[];
   openRemoteAssistants: (platform: RemoteAssistantPlatform) => void;
+  /** Dynamic Workflow 是思考程度的第四档，不属于执行入口。 */
+  thinkingMode?: ComposerThinkingMode;
+  onThinkingModeChange?: (mode: ComposerThinkingMode) => void;
+  onClearExecutionMode?: () => void;
   persistThreadConfigOverrides?: (overrides: ThreadConfigOverrides) => Promise<void>;
   removeImage: (index: number) => void;
   removeFileReference?: (path: string) => void;
@@ -123,6 +148,7 @@ export function ComposerBar({
     : [{
       value: '__current__',
       label: modelDisplayName(config.model),
+      icon: providerIcon(providers, config.provider, config.model),
       title: modelPresetTooltip(config),
       current: true,
     }];
@@ -131,12 +157,25 @@ export function ComposerBar({
     ...modelPresets.map((preset) => ({
       value: preset.id,
       label: modelDisplayName(preset.config.model ?? config.model),
+      icon: providerIcon(providers, preset.config.provider ?? config.provider, preset.config.model ?? config.model),
       title: modelPresetTooltip({ ...config, ...preset.config }),
-      group: config.locale === 'zh' ? '已保存' : 'Saved',
       current: matchedModelPreset?.id === preset.id,
     })),
   ];
   const workflowBusy = workflowMode && workflowPlanning;
+  const modeIndicator: { className: string; label: string; icon?: React.ReactNode } | null = executionMode === 'plan'
+    ? { className: 'modeIndicatorPlan', label: config.locale === 'zh' ? '计划' : 'Plan', icon: <Icon name="listChecks" /> }
+    : executionMode === 'goal'
+      ? { className: 'modeIndicatorGoal', label: 'Goal' }
+      : null;
+  const thinkingOptions: Array<{ value: ComposerThinkingMode; label: string; icon: React.ReactNode }> = [
+    { value: 'no', label: config.locale === 'zh' ? '快速' : 'Fast', icon: <Icon name="gauge" /> },
+    { value: 'medium', label: config.locale === 'zh' ? '均衡' : 'Balanced', icon: <Icon name="balance" /> },
+    { value: 'high', label: config.locale === 'zh' ? '深度' : 'Deep', icon: <Icon name="layers" /> },
+    { value: 'xhigh', label: config.locale === 'zh' ? '更深' : 'Deeper', icon: <Icon name="brain" /> },
+    { value: 'max', label: config.locale === 'zh' ? '最高' : 'Max', icon: <Icon name="spark" /> },
+    { value: 'workflow', label: config.locale === 'zh' ? '动态工作流' : 'Dynamic Workflow', icon: <Icon name="workflow" /> },
+  ];
   const urlTokens = React.useMemo(() => extractUrlTokens(input), [input]);
   const commandInputClassName = [
     'commandInputRow',
@@ -282,7 +321,11 @@ export function ComposerBar({
     openRemoteAssistants(platform);
   }
 
-  function updateThreadChoice<K extends 'permissions' | 'reasoningEffort' | 'runProfile'>(
+  function updateThinkingMode(next: ComposerThinkingMode): void {
+    onThinkingModeChange(next);
+  }
+
+  function updateThreadChoice<K extends 'permissions' | 'reasoningEffort'>(
     key: K,
     value: NonNullable<ThreadConfigOverrides[K]>,
   ): void {
@@ -335,7 +378,7 @@ export function ComposerBar({
                 </div>
                 {fileMentions.map((file, index) => (
                   <button className={index === fileMentionIndex ? 'active' : ''} key={file.path} type="button" role="option" aria-selected={index === fileMentionIndex} onClick={() => file.kind === 'directory' ? openFileMentionDirectory(file.path) : insertFileMention(file.path)}>
-                    <Icon name={file.kind === 'directory' ? 'folder' : 'file'} />
+                    <Icon name={file.kind === 'directory' ? 'folderOutline' : 'fileOutline'} />
                     <span><strong>{file.name}</strong><small>{file.path}</small></span>
                     {file.kind === 'directory' ? <Icon name="chevronRight" /> : null}
                   </button>
@@ -372,7 +415,7 @@ export function ComposerBar({
             {fileReferences.length > 0 ? (
               <div className="commandFileTokenRow" aria-label={config.locale === 'zh' ? '已引用文件' : 'Referenced files'}>
                 {fileReferences.map((path) => (
-                  <span className="commandFileToken" key={path} title={path}><Icon name="file" /><span>@{path}</span><button type="button" onClick={() => removeFileReference(path)} title={config.locale === 'zh' ? '移除引用' : 'Remove reference'} aria-label={config.locale === 'zh' ? '移除引用' : 'Remove reference'}><Icon name="x" /></button></span>
+                  <span className="commandFileToken" key={path} title={path}><Icon name="fileOutline" /><span>@{path}</span><button type="button" onClick={() => removeFileReference(path)} title={config.locale === 'zh' ? '移除引用' : 'Remove reference'} aria-label={config.locale === 'zh' ? '移除引用' : 'Remove reference'}><Icon name="x" /></button></span>
                 ))}
               </div>
             ) : null}
@@ -429,7 +472,11 @@ export function ComposerBar({
               }}
               placeholder={workflowMode
                 ? (config.locale === 'zh' ? '输入工作流目标或节点修改要求...' : 'Describe a workflow goal or node change...')
-                : activeSlashOption ? (config.locale === 'zh' ? '输入自然语言参数...' : 'Describe what to add...') : t(config.locale, 'placeholder')}
+                : activeSlashOption
+                  ? (config.locale === 'zh' ? '输入自然语言参数...' : 'Describe what to add...')
+                  : thinkingMode === 'workflow'
+                    ? (config.locale === 'zh' ? '输入动态工作流目标…' : 'Describe a Dynamic Workflow…')
+                    : executionModePlaceholder(executionMode, config.locale)}
             />
           </div>
         </div>
@@ -447,6 +494,21 @@ export function ComposerBar({
           </div>
         ) : (
         <>
+          {modeIndicator ? (
+            <span className={`modeIndicator ${modeIndicator.className}`} aria-label={modeIndicator.label} title={modeIndicator.label}>
+              {modeIndicator.icon ? <span className="modeIndicatorIcon">{modeIndicator.icon}</span> : null}
+              <span>{modeIndicator.label}</span>
+              <button
+                type="button"
+                className="modeIndicatorDismiss"
+                aria-label={config.locale === 'zh' ? '关闭当前模式' : 'Clear current mode'}
+                title={config.locale === 'zh' ? '关闭当前模式' : 'Clear current mode'}
+                onClick={onClearExecutionMode}
+              >
+                <Icon name="x" />
+              </button>
+            </span>
+          ) : null}
           <div className="remoteAssistantPicker">
             <button
               className={`weixinBindingButton remoteBindingButton ${remoteBinding.tone}`}
@@ -484,7 +546,7 @@ export function ComposerBar({
           </div>
           <label className="fileButton" title={t(config.locale, 'attachImage')} aria-label={t(config.locale, 'attachImage')}>
             <input type="file" accept="image/*" multiple onChange={handleFileSelect} hidden />
-            <Icon name="images" />
+            <Icon name="imagePlus" />
           </label>
           <div className="composerMeta">
           <DropdownSelect
@@ -501,15 +563,21 @@ export function ComposerBar({
           />
           </div>
           <div className="composerActions">
-          <DropdownSelect ariaLabel={t(config.locale, 'mode')} className="modeSelect permissionSelect" title={t(config.locale, 'mode')} value={config.permissions} onChange={(permissions) => updateThreadChoice('permissions', permissions as NonNullable<ThreadConfigOverrides['permissions']>)} options={[{ value: 'read_only', label: config.locale === 'zh' ? '只读' : 'Read' }, { value: 'workspace', label: config.locale === 'zh' ? '默认' : 'Default' }, { value: 'danger_full_access', label: config.locale === 'zh' ? '自主' : 'Auto' }]} />
-          <DropdownSelect ariaLabel={config.locale === 'zh' ? '思考程度' : 'Reasoning effort'} className="modeSelect reasoningSelect" title={config.locale === 'zh' ? '思考程度' : 'Reasoning effort'} value={config.reasoningEffort} onChange={(reasoningEffort) => updateThreadChoice('reasoningEffort', reasoningEffort as NonNullable<ThreadConfigOverrides['reasoningEffort']>)} options={[{ value: 'low', label: config.locale === 'zh' ? '快速' : 'Fast' }, { value: 'medium', label: config.locale === 'zh' ? '均衡' : 'Balanced' }, { value: 'high', label: config.locale === 'zh' ? '深度' : 'Deep' }]} />
-          <DropdownSelect ariaLabel={config.locale === 'zh' ? '运行模式' : 'Run profile'} className="modeSelect runProfileSelect" title={config.locale === 'zh' ? '运行模式' : 'Run profile'} value={(config.runProfile as string) === 'harness' ? 'runtime_os' : config.runProfile} onChange={(runProfile) => updateThreadChoice('runProfile', runProfile as NonNullable<ThreadConfigOverrides['runProfile']>)} options={[{ value: 'cache_first', label: runProfileLabel('cache_first', config.locale) }, { value: 'runtime_os', label: runProfileLabel('runtime_os', config.locale) }]} />
+          <DropdownSelect ariaLabel={t(config.locale, 'mode')} className="modeSelect permissionSelect" title={t(config.locale, 'mode')} value={config.permissions} onChange={(permissions) => updateThreadChoice('permissions', permissions as NonNullable<ThreadConfigOverrides['permissions']>)} options={[{ value: 'read_only', label: config.locale === 'zh' ? '只读' : 'Read', icon: <Icon name="hand" /> }, { value: 'workspace', label: config.locale === 'zh' ? '默认' : 'Default', icon: <Icon name="messageShield" /> }, { value: 'danger_full_access', label: config.locale === 'zh' ? '自主' : 'Auto', icon: <Icon name="shieldAlert" />, tone: 'warning' }]} />
+          <DropdownSelect ariaLabel={config.locale === 'zh' ? '思考程度' : 'Reasoning effort'} className="modeSelect reasoningSelect" title={config.locale === 'zh' ? '思考程度' : 'Reasoning effort'} value={thinkingMode} onChange={updateThinkingMode} options={thinkingOptions} />
           </div>
         </>
         )}
       </div>
     </footer>
   );
+}
+
+
+function executionModePlaceholder(mode: ComposerExecutionMode, locale: RunConfig['locale']): string {
+  if (mode === 'goal') return locale === 'zh' ? '输入目标任务…' : 'Describe a Goal…';
+  if (mode === 'plan') return locale === 'zh' ? '输入规划目标…' : 'Describe a plan…';
+  return t(locale, 'placeholder');
 }
 
 function modelPresetMatchesConfig(preset: ModelPreset, config: RunConfig): boolean {
@@ -578,7 +646,6 @@ function modelPresetTooltip(config: Partial<RunConfig>): string {
     modelPresetSummary(config),
     config.baseUrl ? `API: ${config.baseUrl}` : '',
     config.reasoningEffort ? `Reasoning: ${config.reasoningEffort}` : '',
-    config.runProfile ? `Run: ${config.runProfile}` : '',
   ].filter(Boolean).join('\n');
 }
 

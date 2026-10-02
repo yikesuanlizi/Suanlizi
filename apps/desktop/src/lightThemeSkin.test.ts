@@ -16,7 +16,7 @@ function readLightGuard(): string {
 describe('light theme skin', () => {
   it('defines a light semantic surface contract after the legacy component rules', () => {
     const styles = readFileSync(join(here, 'styles.css'), 'utf-8').replace(/\r\n/g, '\n');
-    const contract = styles.slice(styles.lastIndexOf('/* Nexus visual contract:'));
+    const contract = styles.slice(styles.lastIndexOf('/* Suanlizi visual contract:'));
 
     expect(contract).toContain('--nx-surface-canvas: #f8fafc;');
     expect(contract).toContain('--nx-text-primary: #0f172a;');
@@ -86,7 +86,7 @@ describe('light theme skin', () => {
 
   it('keeps shell and composer motion deliberate instead of hard switching', () => {
     const styles = readFileSync(join(here, 'styles.css'), 'utf-8').replace(/\r\n/g, '\n');
-    const motionGuard = styles.slice(styles.lastIndexOf('/* Nexus motion polish guard */'));
+    const motionGuard = styles.slice(styles.lastIndexOf('/* Suanlizi motion polish guard */'));
 
     expect(motionGuard).toContain('--nx-motion-fast: 140ms;');
     expect(motionGuard).toContain('--nx-motion-medium: 240ms;');

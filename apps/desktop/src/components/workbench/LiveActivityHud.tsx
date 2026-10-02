@@ -1,8 +1,9 @@
 import { useState } from 'react';
+import { presentSuanliziError } from '@suanlizi/protocol';
 import type { Locale } from '../../config/config.js';
 import { formatDuration, formatRelativeTime, runStatusColor, runStatusLabel, traceIcon } from '../../features/monitor/traceFormatters.js';
 import type { CurrentPhase, RecentTraceEvent } from '../../features/agents/agentWorkbenchModel.js';
-import type { RunControlCapabilities, RunTraceSummary } from '@nexus/protocol';
+import type { RunControlCapabilities, RunTraceSummary } from '@suanlizi/protocol';
 
 const PHASE_ICONS: Record<string, string> = {
   model: '🧠',
@@ -39,6 +40,7 @@ export function LiveActivityHud({
 }) {
   const zh = locale === 'zh';
   const [errorExpanded, setErrorExpanded] = useState(false);
+  const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
 
   const runStatus = traceSummary?.status ?? (busy ? 'running' : 'idle');
   const statusColor = runStatusColor(runStatus);
@@ -47,7 +49,12 @@ export function LiveActivityHud({
   const startedAt = traceSummary?.startedAt;
 
   const model = traceSummary?.model;
-  const tools = traceSummary?.tools;
+ const tools = traceSummary?.tools;
+  const presentedError = traceSummary?.lastError
+    ? presentSuanliziError(undefined, `${traceSummary.lastError.code}: ${traceSummary.lastError.message}`, locale)
+    : undefined;
+  const errorSummary = presentedError?.summary ?? '';
+  const errorDetail = presentedError?.detail;
 
   const interruptCap = controlCapabilities?.interrupt;
   const resumeCap = controlCapabilities?.resume;
@@ -96,12 +103,12 @@ export function LiveActivityHud({
                 onClick={() => setErrorExpanded(v => !v)}
                 aria-expanded={errorExpanded}
               >
-                <span>❌ {traceSummary.lastError.code}</span>
+                <span>❌ {errorSummary}</span>
                 <span className="liveActivityErrorExpand">{errorExpanded ? '▾' : '▸'}</span>
               </button>
               {errorExpanded ? (
                 <div className="liveActivityErrorDetail">
-                  {traceSummary.lastError.message}
+                  {errorDetail}
                 </div>
               ) : null}
             </div>
@@ -181,23 +188,30 @@ export function LiveActivityHud({
               <h4>{zh ? '最近事件' : 'Recent events'}</h4>
               <div className="liveActivityEventList">
                 {recentEvents.slice(-8).reverse().map(event => (
-                  <button
+                  <div
                     key={event.eventId ?? event.itemId}
-                    type="button"
-                    className={`liveActivityEvent level-${event.level}`}
-                    onClick={() => onJumpToTrace?.({ itemId: event.itemId, runId: event.runId, eventId: event.eventId })}
+                    className={`liveActivityEvent level-${event.level}${expandedEventId === (event.eventId ?? event.itemId) ? ' expanded' : ''}`}
                   >
                     <span className="liveActivityEventIcon">{traceIcon(event.category)}</span>
                     <span className="liveActivityEventText">
                       <span className="liveActivityEventName">
                         <span className="liveActivityEventAgent" title={event.agent.label}>{event.agent.label}</span>
+                        {event.status ? (
+                          <span
+                            className={`liveActivityEventStatus status-${event.status}`}
+                            title={statusDescription(event.status, zh)}
+                            aria-label={statusDescription(event.status, zh)}
+                          >
+                            {statusMarker(event.status)}
+                          </span>
+                        ) : null}
                         {event.resource ? (
                           <span className={`liveActivityEventResource resource-${event.resource.kind.toLowerCase()}`}>
                             <span className="liveActivityEventResourceKind">{event.resource.kind}</span>
                             <span className="liveActivityEventResourceLabel" title={event.resource.label}>{event.resource.label}</span>
                           </span>
                         ) : (
-                          <span>{event.name}</span>
+                          <span className="liveActivityEventTitle" title={event.name}>{event.name}</span>
                         )}
                       </span>
                       <span className="liveActivityEventDetail">
@@ -205,7 +219,29 @@ export function LiveActivityHud({
                         <span className="liveActivityEventTime">{formatRelativeTime(event.occurredAt, zh)}</span>
                       </span>
                     </span>
-                  </button>
+                    <span className="liveActivityEventActions">
+                      <button
+                        type="button"
+                        className="liveActivityEventJump"
+                        onClick={() => onJumpToTrace?.({ itemId: event.itemId, runId: event.runId, eventId: event.eventId })}
+                      >
+                        {zh ? '定位' : 'Go'}
+                      </button>
+                      {event.detail ? (
+                        <button
+                          type="button"
+                          className="liveActivityEventDetailToggle"
+                          onClick={() => setExpandedEventId(current => current === (event.eventId ?? event.itemId) ? null : (event.eventId ?? event.itemId))}
+                          aria-expanded={expandedEventId === (event.eventId ?? event.itemId)}
+                        >
+                          {expandedEventId === (event.eventId ?? event.itemId) ? (zh ? '收起' : 'Hide') : (zh ? '详情' : 'Detail')}
+                        </button>
+                      ) : null}
+                    </span>
+                    {expandedEventId === (event.eventId ?? event.itemId) && event.detail ? (
+                      <pre className="liveActivityEventRaw">{event.detail}</pre>
+                    ) : null}
+                  </div>
                 ))}
               </div>
             </div>
@@ -229,4 +265,20 @@ function formatCompactNum(n: number): string {
   if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
   if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
   return String(n);
+}
+
+function statusMarker(status: RecentTraceEvent['status']): string {
+  if (status === 'completed') return '✓';
+  if (status === 'failed') return '!';
+  if (status === 'cancelled' || status === 'canceled') return '×';
+  if (status === 'in_progress') return '•';
+  return '';
+}
+
+function statusDescription(status: RecentTraceEvent['status'], zh: boolean): string {
+  if (status === 'completed') return zh ? '已完成' : 'Completed';
+  if (status === 'failed') return zh ? '失败' : 'Failed';
+  if (status === 'cancelled' || status === 'canceled') return zh ? '已取消' : 'Cancelled';
+  if (status === 'in_progress') return zh ? '进行中' : 'In progress';
+  return zh ? '事件状态' : 'Event status';
 }

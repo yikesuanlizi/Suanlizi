@@ -235,6 +235,8 @@ export interface AgentMessageItem {
   /** P6.3: 关联的 runId，用于 run monitor timeline 严格按 run 过滤 */
   // — Chinese: associated runId for strict run-scoped timeline filtering
   runId?: string;
+  /** Set when runtime discarded a plain-text tool-call placeholder before persistence. */
+  rejectedReason?: string;
 }
 
 // 推理过程条目：模型的思考过程（chain-of-thought）
@@ -247,6 +249,8 @@ export interface ReasoningItem {
   // 关联的 provider frame id，避免把推理文本直接回灌给模型
   providerFrameRef?: string;
   timestamp?: string;
+  /** ISO-8601 completion time for stable reasoning-duration rendering. */
+  completedAt?: string;
   harnessRunId?: string;
   harnessIteration?: number;
   /** P6.3: 关联的 runId，用于 run monitor timeline 严格按 run 过滤 */
@@ -267,6 +271,8 @@ export interface CommandExecutionItem {
   exitCode: number | null;
   status: CommandStatus;
   timestamp?: string;
+  /** ISO-8601 completion time for reliable elapsed-time rendering. */
+  completedAt?: string;
   harnessRunId?: string;
   harnessIteration?: number;
   /** P6.3: 关联的 runId，用于 run monitor timeline 严格按 run 过滤 */
@@ -313,6 +319,8 @@ export interface FileChangeItem {
   summary?: string;
   status: PatchApplyStatus;
   timestamp?: string;
+  /** ISO-8601 completion time for reliable elapsed-time rendering. */
+  completedAt?: string;
   harnessRunId?: string;
   harnessIteration?: number;
   /** P6.3: 关联的 runId，用于 run monitor timeline 严格按 run 过滤 */
@@ -579,15 +587,17 @@ export interface ToolCallItem {
   turnId: TurnId;
   toolName: string;
   arguments: Record<string, unknown>;
-  /** Model-provided tool call id; distinct from Nexus item id. */
-  // 模型返回的 tool call id，不等于 Nexus item id
+  /** Model-provided tool call id; distinct from Suanlizi item id. */
+  // 模型返回的 tool call id，不等于 Suanlizi item id
   modelToolCallId?: string;
   modelToolName?: string;
   providerToolCall?: ProviderToolCallFrame;
   result?: unknown;
-  error?: { message: string };
+  error?: { message: string; code?: string };
   status: CommandStatus;
   timestamp?: string;
+  /** ISO-8601 completion time; absent only while the call is running. */
+  completedAt?: string;
   harnessRunId?: string;
   harnessIteration?: number;
   /** P6.3: 关联的 runId，用于 run monitor timeline 严格按 run 过滤 */
@@ -626,6 +636,8 @@ export interface CollabToolCallItem {
   result?: unknown;
   error?: { message: string; code?: string };
   timestamp?: string;
+  /** ISO-8601 completion time; absent only while the call is running. */
+  completedAt?: string;
   /**
    * 远程 Agent 调用专用：状态变化轨迹。
    * 每次 status-update 事件追加一条，记录状态、时间戳、中间文本（若有）。
@@ -715,9 +727,11 @@ export interface McpToolCallItem {
     content: unknown[];
     structuredContent: unknown;
   };
-  error?: { message: string };
+  error?: { message: string; code?: string };
   status: CommandStatus;
   timestamp?: string;
+  /** ISO-8601 completion time; absent only while the call is running. */
+  completedAt?: string;
   harnessRunId?: string;
   harnessIteration?: number;
   /** P6.3: 关联的 runId，用于 run monitor timeline 严格按 run 过滤 */
@@ -765,7 +779,8 @@ export interface ErrorItem {
   type: 'error';
   turnId: TurnId;
   message: string;
-  info?: NexusErrorInfo;
+  info?: SuanliziErrorInfo;
+  detail?: string;
   recoverable?: boolean;
   timestamp?: string;
   harnessRunId?: string;
@@ -778,8 +793,8 @@ export interface ErrorItem {
 // ─── Events ──────────────────────────────────────────────────────────────────
 // Events（事件）：运行时对外推送的所有流式事件类型
 
-// Nexus 错误分类：用于错误处理与重试策略
-export type NexusErrorKind =
+// Suanlizi 错误分类：用于错误处理与重试策略
+export type SuanliziErrorKind =
   | 'ContextWindowExceeded' // 上下文窗口超出
   | 'UsageLimitExceeded' // 用量上限
   | 'ServerOverloaded' // 服务端过载
@@ -796,10 +811,14 @@ export type NexusErrorKind =
   | 'Other'; // 其它
 
 // 错误附加信息
-export interface NexusErrorInfo {
-  kind: NexusErrorKind;
+export interface SuanliziErrorInfo {
+  kind: SuanliziErrorKind;
   httpStatusCode?: number; // HTTP 状态码
   turnKind?: string; // 触发错误的回合类型
+  /** 更细的原因，用于区分超时、主动取消和 provider/协议错误。 */
+  reason?: 'timeout' | 'cancelled' | 'network' | 'provider' | 'protocol';
+  /** 触发超时的配置值（毫秒），仅在 reason=timeout 时提供。 */
+  timeoutMs?: number;
 }
 
 /** Token usage for a turn. */
@@ -807,6 +826,10 @@ export interface NexusErrorInfo {
 export interface Usage {
   inputTokens: number; // 输入 token
   cachedInputTokens: number; // 命中缓存的输入 token
+  /** Provider-reported prompt-cache creation tokens, when available. */
+  cacheWriteTokens?: number;
+  /** Whether the provider explicitly reported the cache count. */
+  cacheReported?: boolean;
   outputTokens: number; // 输出 token
   reasoningOutputTokens: number; // 推理过程 token
   cacheStrategy?: 'deepseek-native' | 'openai-compatible' | 'anthropic-cache-control' | 'mixed';
@@ -871,6 +894,8 @@ export interface ContextCompactionPressureEvent {
     softThreshold: number; // 软阈值（提示）
     hardThreshold: number; // 硬阈值（强制压缩）
     ratio: number; // 占用比例
+    /** 是否来自真实模型上下文配置；false 时 maxTokens 可能只是运行时安全 fallback。 */
+    windowKnown?: boolean;
     status: 'ok' | 'soft' | 'hard';
     window?: {
       ordinal: number; // 窗口序号
@@ -955,6 +980,17 @@ export type ThreadEvent =
   | ThreadMetadataUpdatedEvent
   | HarnessStateUpdatedEvent
   | TaskRuntimeUpdatedEvent
+  | TaskRunUpdatedEvent
+  | TaskRunTerminalEvent
+  | WorkflowRunUpdatedEvent
+  | WorkflowRunTerminalEvent
+  | WorkflowAgentCallUpdatedEvent
+  | WorkflowAgentCallTerminalEvent
+  | WorkflowRequestCreatedEvent
+  | WorkflowRequestDecidedEvent
+  | WorkflowEvidenceCreatedEvent
+  | WorkflowResultCreatedEvent
+  | TaskGoalEvaluationAvailableEvent
   | TaskCognitionUpdatedEvent
   | TaskContextUpdatedEvent
   | TaskLoopUpdatedEvent
@@ -1000,7 +1036,7 @@ export interface TurnFailedEvent {
   threadId: ThreadId;
   turnId: TurnId;
   runId: string;
-  error: { message: string; info?: NexusErrorInfo };
+  error: { message: string; info?: SuanliziErrorInfo };
 }
 
 export interface ThreadRuntimeUpdatedEvent {
@@ -1036,7 +1072,7 @@ export interface WarningEvent {
   threadId?: ThreadId;
   turnId?: TurnId;
   message: string;
-  info?: NexusErrorInfo;
+  info?: SuanliziErrorInfo;
 }
 
 // 流式响应错误事件
@@ -1046,7 +1082,7 @@ export interface StreamErrorEvent {
   turnId: TurnId;
   message: string;
   recoverable: boolean;
-  error: { message: string; info?: NexusErrorInfo };
+  error: { message: string; info?: SuanliziErrorInfo };
   additionalDetails?: string;
 }
 
@@ -1056,7 +1092,7 @@ export interface ModelOutputRejectedEvent {
   threadId: ThreadId;
   turnId: TurnId;
   message: string;
-  error: { message: string; info?: NexusErrorInfo };
+  error: { message: string; info?: SuanliziErrorInfo };
 }
 
 // 条目开始事件
@@ -1203,7 +1239,7 @@ export interface ContextCompactedV2Event {
   tokensBefore?: number;
   tokensAfter?: number;
   item?: { id: ItemId } & Partial<ContextCompactionItem>;
-  error?: { message: string; info?: NexusErrorInfo };
+  error?: { message: string; info?: SuanliziErrorInfo };
 }
 
 // 线程回滚完成事件
@@ -1219,7 +1255,7 @@ export interface ThreadRollbackFailedEvent {
   type: 'thread.rollback.failed';
   threadId: ThreadId;
   turnId?: TurnId;
-  error: { message: string; info?: NexusErrorInfo };
+  error: { message: string; info?: SuanliziErrorInfo };
 }
 
 /** Emitted when a thread is resumed from storage. */
@@ -1293,6 +1329,8 @@ export interface TaskRuntimeUpdatedEvent {
   phase: 'before_turn' | 'model' | 'tool' | 'compact' | 'after_turn' | 'idle';
   status: 'running' | 'completed' | 'failed' | 'interrupted';
   runProfile: 'cache_first' | 'runtime_os';
+  /** 上下文压缩阈值：占模型上下文窗口的比例。 */
+  compactionThreshold?: number;
   checkpoint?: boolean;
   resumable?: boolean;
   timestamp: string;
@@ -1330,6 +1368,150 @@ export interface TaskContextUpdatedEvent {
   }>;
   usedTokens: number;
   remainingTokens: number;
+  timestamp: string;
+}
+
+// 目标任务 Run 生命周期事件（计划 §7 P2 / §9.3）。
+// 事件名逐字取自 task.ts 的 TASK_EVENT_NAMES（'task.run.updated' / 'task.run.terminal'），
+// 不发明新事件名。payload 只携带 threadId/taskId/runId/status/reason?，供 SSE 增量刷新；
+// SSE 断线后前端靠 GET /api/tasks 重拉全量真相（§9.3）。
+// 注意：task.ts 只 import 本文件的 GoalEvaluation，本文件不得反向 import task.ts（避免循环），
+// 因此 status 用 string 承载 TaskRunState，由消费方按 taskRunStateSchema 收窄。
+// — Chinese: goal-task run lifecycle events; event names come verbatim from TASK_EVENT_NAMES.
+
+export interface TaskRunUpdatedEvent {
+  type: 'task.run.updated';
+  threadId: ThreadId;
+  taskId: string;
+  runId: string;
+  status: string;
+  reason?: string;
+  timestamp: string;
+}
+
+export interface TaskRunTerminalEvent {
+  type: 'task.run.terminal';
+  threadId: ThreadId;
+  taskId: string;
+  runId: string;
+  status: string;
+  reason?: string;
+  timestamp: string;
+}
+
+// Workflow 脚本运行事件（计划 §14.9：事件名逐字取自 task.ts TASK_EVENT_NAMES 的 workflow.* 族）。
+// 注意 types.ts 不得反向 import task.ts（循环依赖）：agentCall 用结构子集承载（status 用 string），
+// 完整记录由 GET /api/workflows/runs/:id/agent-calls 提供；SSE 断线后靠 result 端点重拉全量真相。
+export interface WorkflowUsageSummary {
+  inputTokens: number;
+  outputTokens: number;
+  agentCallCount: number;
+  durationMs: number;
+}
+
+export interface WorkflowRunUpdatedEvent {
+  type: 'workflow.run.updated';
+  threadId?: ThreadId;
+  taskId: string;
+  runId: string;
+  status: string;
+  phase?: string;
+  usage?: WorkflowUsageSummary;
+  timestamp: string;
+}
+
+export interface WorkflowRunTerminalEvent {
+  type: 'workflow.run.terminal';
+  threadId?: ThreadId;
+  taskId: string;
+  runId: string;
+  status: string;
+  reason?: string;
+  usage?: WorkflowUsageSummary;
+  timestamp: string;
+}
+
+export interface WorkflowAgentCallUpdatedEvent {
+  type: 'workflow.agent_call.updated';
+  threadId?: ThreadId;
+  taskId: string;
+  runId: string;
+  agentCall: { id: string; status: string; label?: string; phase?: string };
+  timestamp: string;
+}
+
+export interface WorkflowAgentCallTerminalEvent {
+  type: 'workflow.agent_call.terminal';
+  threadId?: ThreadId;
+  taskId: string;
+  runId: string;
+  agentCall: { id: string; status: string; label?: string; phase?: string; error?: string };
+  timestamp: string;
+}
+
+// P6：GoalRun 或用户显式创建的 Script Workflow 请求待批准（§12.1）；批准/拒绝共用 decided 事件。
+export interface WorkflowRequestCreatedEvent {
+  type: 'workflow.request.created';
+  threadId?: ThreadId;
+  taskId: string;
+  runId: string;
+  /** Goal 触发时关联外层 GoalRun；独立 Dynamic Workflow 没有该字段。 */
+  goalRunId?: string;
+  objective: string;
+  estimatedAgents: number;
+  estimatedTokens: number;
+  timestamp: string;
+}
+
+export interface WorkflowRequestDecidedEvent {
+  type: 'workflow.request.approved' | 'workflow.request.rejected';
+  threadId?: ThreadId;
+  taskId: string;
+  runId: string;
+  /** Goal 触发时关联外层 GoalRun；独立 Dynamic Workflow 没有该字段。 */
+  goalRunId?: string;
+  reason?: string;
+  timestamp: string;
+}
+
+// P6：WorkflowRun 结果已物化为 Evidence（wev_ 命名空间）。
+export interface WorkflowEvidenceCreatedEvent {
+  type: 'workflow.evidence.created';
+  threadId?: ThreadId;
+  taskId: string;
+  runId: string;
+  evidenceIds: string[];
+  timestamp: string;
+}
+
+/**
+ * 计划 §13.1：Workflow 结果回填必须产生 `workflow.result.created`（先于 evidence 事件）。
+ * 只携带摘要与内容指纹，不内联大结果正文（§14.5 内存边界）。
+ */
+export interface WorkflowResultCreatedEvent {
+  type: 'workflow.result.created';
+  threadId?: ThreadId;
+  taskId: string;
+  runId: string;
+  agentCallId?: string;
+  resultHash: string;
+  size: number;
+  timestamp: string;
+}
+
+/**
+ * 计划 §13.1 / §14.9：GoalEvaluator 产出可展示的目标评估时发本事件；
+ * 同样只带摘要字段，完整 evaluation 由 `GET /api/tasks/:id/goal-status` 按需读取。
+ */
+export interface TaskGoalEvaluationAvailableEvent {
+  type: 'task.goal.evaluation.available';
+  threadId?: ThreadId;
+  taskId: string;
+  runId: string;
+  satisfied: boolean;
+  status: string;
+  passedCriteria: string[];
+  failedCriteria: string[];
   timestamp: string;
 }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { ThreadStore } from '@nexus/storage';
-import type { ThreadMeta, TurnMeta } from '@nexus/protocol';
+import type { ThreadStore } from '@suanlizi/storage';
+import type { ThreadMeta, TurnMeta } from '@suanlizi/protocol';
 import { markRunningTurnsInterrupted } from './shutdown.js';
 
 describe('markRunningTurnsInterrupted', () => {

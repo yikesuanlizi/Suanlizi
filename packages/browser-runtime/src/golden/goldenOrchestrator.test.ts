@@ -10,7 +10,7 @@ import type {
   AccessRequest,
   AccessRule,
   ApprovalRequest,
-} from '@nexus/protocol';
+} from '@suanlizi/protocol';
 import type { FakeSiteDefinition } from '../fakeRuntime.js';
 import { FakeBrowserRuntime } from '../fakeRuntime.js';
 import type { GoldenTask } from './goldenTypes.js';

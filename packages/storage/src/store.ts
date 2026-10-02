@@ -1,4 +1,4 @@
-import { RUN_TRACE_VERSION } from '@nexus/protocol';
+import { RUN_TRACE_VERSION } from '@suanlizi/protocol';
 import type {
   RunTraceDraft,
   RunTraceEnvelope,
@@ -17,11 +17,12 @@ import type {
   EpisodeRecord,
   EpisodeSearchOptions,
   ThreadWorkingSetSnapshot,
-} from '@nexus/protocol';
+} from '@suanlizi/protocol';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { RunTraceQuery } from './runTraceStore.js';
+import { ensureTaskStoreSchema } from './taskStore.js';
 
 export const DEFAULT_TENANT_ID = 'default';
 
@@ -165,7 +166,7 @@ export interface ThreadStore {
     patch: Partial<
       Pick<
         ThreadMeta,
-        'title' | 'status' | 'turnCount' | 'updatedAt' | 'tags' | 'mode' | 'taskPreset'
+        'title' | 'workspaceRoot' | 'status' | 'turnCount' | 'updatedAt' | 'tags' | 'mode' | 'taskPreset'
       >
     >,
   ): Promise<void>;
@@ -636,6 +637,17 @@ export class LocalThreadStore implements ThreadStore {
       .run(4, 'episode_memory_store', now);
     this.migrateV5IfNeeded();
     this.migrateV6IfNeeded();
+    this.migrateTaskStoreIfNeeded();
+  }
+
+  /**
+   * Mount point for the goal-task workflow store (plan §6.2 / §11.2 / §14.6).
+   * Registers the four task tables through the same schema_migrations mechanism and
+   * touches no existing thread-store method. DDL lives in ./taskStore.js (single source).
+   * — Chinese：目标任务四张表的迁移挂载点；DDL 与幂等版本号统一由 ./taskStore.js 承载。
+   */
+  private migrateTaskStoreIfNeeded(): void {
+    ensureTaskStoreSchema(this.db);
   }
 
   private migrateV5IfNeeded(): void {
@@ -797,12 +809,16 @@ export class LocalThreadStore implements ThreadStore {
     patch: Partial<
       Pick<
         ThreadMeta,
-        'title' | 'status' | 'turnCount' | 'updatedAt' | 'tags' | 'mode' | 'taskPreset'
+        'title' | 'workspaceRoot' | 'status' | 'turnCount' | 'updatedAt' | 'tags' | 'mode' | 'taskPreset'
       >
     >,
   ): Promise<void> {
     const sets: string[] = [];
     const params: unknown[] = [];
+    if (patch.workspaceRoot !== undefined) {
+      sets.push('workspace_root = ?');
+      params.push(patch.workspaceRoot);
+    }
     if (patch.title !== undefined) {
       sets.push('title = ?');
       params.push(patch.title);

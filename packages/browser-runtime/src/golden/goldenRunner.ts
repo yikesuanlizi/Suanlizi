@@ -8,7 +8,7 @@ import type {
   BrowserActionKind,
   Observation,
   Postcondition,
-} from '@nexus/protocol';
+} from '@suanlizi/protocol';
 import type { BrowserRuntimePort } from '../port.js';
 import type {
   GoldenAssert,

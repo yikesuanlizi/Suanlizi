@@ -16,10 +16,10 @@ describe('useRightPaneSizing', () => {
     expect(source).toContain('function defaultFilesPaneWidth(): number');
     expect(source).toContain('function defaultBrowserPaneWidth(): number');
     expect(source).toContain('function defaultTerminalPaneWidth(): number');
-    expect(source).toContain("localStorage.getItem('nexus.standardPaneWidth')");
-    expect(source).toContain("localStorage.getItem('nexus.filesPaneWidth')");
-    expect(source).toContain("localStorage.getItem('nexus.browserPaneWidth')");
-    expect(source).toContain("localStorage.getItem('nexus.terminalPaneWidth')");
+    expect(source).toContain("localStorage.getItem('suanlizi.standardPaneWidth')");
+    expect(source).toContain("localStorage.getItem('suanlizi.filesPaneWidth')");
+    expect(source).toContain("localStorage.getItem('suanlizi.browserPaneWidth')");
+    expect(source).toContain("localStorage.getItem('suanlizi.terminalPaneWidth')");
     expect(source).not.toContain('[mode, tab]');
   });
 });

@@ -57,6 +57,20 @@ describe('ActiveRunRegistry', () => {
     expect(registry.get('run-1')).toBeNull();
   });
 
+  it('waits for the last run in a thread to finish', async () => {
+    const registry = new ActiveRunRegistry();
+    registry.register({ runId: 'run-1', threadId: 'thread-1', turnId: 'turn-1', interrupt: vi.fn() });
+    const idle = registry.waitForThreadIdle('thread-1', 100);
+    registry.finish('run-1');
+    await expect(idle).resolves.toBe(true);
+  });
+
+  it('times out while a thread is still active', async () => {
+    const registry = new ActiveRunRegistry();
+    registry.register({ runId: 'run-1', threadId: 'thread-1', turnId: 'turn-1', interrupt: vi.fn() });
+    await expect(registry.waitForThreadIdle('thread-1', 1)).resolves.toBe(false);
+  });
+
   it('concurrent runs: interrupting run A does not affect run B', () => {
     const registry = new ActiveRunRegistry();
     const interruptA = vi.fn();

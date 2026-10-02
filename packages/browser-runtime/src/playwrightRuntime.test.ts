@@ -4,7 +4,7 @@
 //   tree) covers observation contract, action loop, epoch validation,
 //   postcondition verification, cancellation and idempotent close.
 import { describe, expect, it } from 'vitest';
-import type { ActionIntent } from '@nexus/protocol';
+import type { ActionIntent } from '@suanlizi/protocol';
 import { PlaywrightRuntime } from './playwrightRuntime.js';
 
 // ─── 内存 fake 浏览器（鸭子类型实现 playwright 最小接口） ────────────────────

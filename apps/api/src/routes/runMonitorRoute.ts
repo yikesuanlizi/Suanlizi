@@ -1,13 +1,13 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { RunControlAction, RunControlRequest, RunControlResult, RunTraceCategory } from '@nexus/protocol';
-import { computeRunControlCapabilities, runControlRequestSchema } from '@nexus/protocol';
-import type { RunRecord, ThreadStore } from '@nexus/storage';
-import type { RunTraceStore } from '@nexus/storage';
+import type { RunControlAction, RunControlRequest, RunControlResult, RunTraceCategory } from '@suanlizi/protocol';
+import { computeRunControlCapabilities, runControlRequestSchema } from '@suanlizi/protocol';
+import type { RunRecord, ThreadStore } from '@suanlizi/storage';
+import type { RunTraceStore } from '@suanlizi/storage';
 import { readJson, sendError, sendJson } from '../shared/http.js';
 import type { TenantContext } from '../shared/tenant.js';
 import type { ActiveRunRegistry } from '../runtime/activeRunRegistry.js';
 
-export type { RunControlAction, RunControlCapabilities, RunControlRequest, RunControlResult } from '@nexus/protocol';
+export type { RunControlAction, RunControlCapabilities, RunControlRequest, RunControlResult } from '@suanlizi/protocol';
 
 // 使用 runControlRequestSchema 校验请求体：三个分支均 .strict()，
 // 拒绝 threadId、rollback 缺 checkpointId、approve/deny/retry 等。

@@ -15,7 +15,7 @@ import {
 
 describe('document artifact ledger', () => {
   it('persists a source to artifact lineage record', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-artifacts-'));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-artifacts-'));
     const sourcePath = path.join(root, 'a.docx');
     await fs.writeFile(sourcePath, 'source bytes');
     const source = await computeFileFingerprint(root, sourcePath);
@@ -26,7 +26,7 @@ describe('document artifact ledger', () => {
 
     await saveDocumentArtifactRecord(root, {
       artifactPath,
-      artifactRelativePath: '.nexus/artifacts/documents/' + path.basename(artifactPath),
+      artifactRelativePath: '.suanlizi/artifacts/documents/' + path.basename(artifactPath),
       artifactHash,
       artifactKind: 'document_text',
       sourcePath,
@@ -45,7 +45,7 @@ describe('document artifact ledger', () => {
   });
 
   it('reports stale when source hash changes', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-artifacts-stale-'));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-artifacts-stale-'));
     const sourcePath = path.join(root, 'a.docx');
     await fs.writeFile(sourcePath, 'v1');
     const source = await computeFileFingerprint(root, sourcePath);
@@ -54,7 +54,7 @@ describe('document artifact ledger', () => {
     await fs.writeFile(artifactPath, 'artifact v1', 'utf-8');
     await saveDocumentArtifactRecord(root, {
       artifactPath,
-      artifactRelativePath: '.nexus/artifacts/documents/' + path.basename(artifactPath),
+      artifactRelativePath: '.suanlizi/artifacts/documents/' + path.basename(artifactPath),
       artifactHash: createHash('sha256').update('artifact v1').digest('hex'),
       artifactKind: 'document_text',
       sourcePath,
@@ -81,7 +81,7 @@ describe('document artifact ledger', () => {
   });
 
   it('registers external script text artifacts with source document lineage', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-external-artifact-'));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-external-artifact-'));
     const sourcePath = path.join(root, 'brief.docx');
     const artifactPath = path.join(root, '_brief_decoded.txt');
     await fs.writeFile(sourcePath, 'source v1', 'utf-8');

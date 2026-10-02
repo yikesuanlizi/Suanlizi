@@ -1,8 +1,8 @@
 {
-  "name": "nexus",
-  "version": "1.7.0",
+  "name": "suanlizi",
+  "version": "1.8.0",
   "private": true,
-  "description": "Nexus — local-first TypeScript Agent OS runtime",
+  "description": "Suanlizi — local-first TypeScript Agent OS runtime",
   "packageManager": "npm@10.9.0",
   "workspaces": [
     "packages/*",
@@ -14,7 +14,7 @@
     "dev": "node scripts/dev.mjs",
     "build": "tsc -b",
     "desktop:dev": "node scripts/start-desktop.mjs",
-    "desktop:build": "npm --workspace @nexus/desktop run build",
+    "desktop:build": "npm --workspace @suanlizi/desktop run build",
     "clean": "tsc -b --clean",
     "check:source-artifacts": "node scripts/check-source-artifacts.mjs",
     "test": "vitest run",

@@ -3,7 +3,7 @@
 // — English: browser trace recorder tests — observations pass
 //   runTraceObservationSchema, spanIds increment, payloads correlate, levels map
 import { describe, expect, it } from 'vitest';
-import { runTraceObservationSchema, type RunTraceObservation } from '@nexus/protocol';
+import { runTraceObservationSchema, type RunTraceObservation } from '@suanlizi/protocol';
 import { BrowserTraceRecorder } from './trace.js';
 
 describe('BrowserTraceRecorder', () => {

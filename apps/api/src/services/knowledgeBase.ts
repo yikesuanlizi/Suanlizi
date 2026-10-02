@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { readdir, readFile, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
-import type { ThreadStore } from '@nexus/storage';
+import type { ThreadStore } from '@suanlizi/storage';
 import {
   buildWikiLinkGraph,
   parseWikiPage,
@@ -9,15 +9,15 @@ import {
   tokenizeWikiQuery,
   type WikiLinkGraph,
   type WikiPageRecord,
-} from '@nexus/wiki-core';
+} from '@suanlizi/wiki-core';
 import {
   ensureKnowledgeSqliteSchema,
   readKnowledgeCatalog,
   searchKnowledgeChunkIds,
   writeKnowledgeCatalog,
 } from './knowledgeSqlite.js';
-import { SecretRedactor } from '@nexus/runtime';
-import { DOCUMENT_EXTRACTOR_VERSION, extractDocumentText } from '@nexus/tools';
+import { SecretRedactor } from '@suanlizi/runtime';
+import { DOCUMENT_EXTRACTOR_VERSION, extractDocumentText } from '@suanlizi/tools';
 import type { KnowledgeCompileJob } from './knowledgeCompileJob.js';
 
 const STATE_KEY = 'knowledge.catalog.v1';
@@ -27,7 +27,7 @@ const MAX_TOTAL_BYTES = 8 * 1024 * 1024;
 const CHUNK_SIZE = 2400;
 const SNAPSHOT_RETENTION = 8;
 const PERSONAL_CATALOG_KEY = 'personal';
-const secretRedactor = new SecretRedactor({ detectorVersion: 'nexus-secret-redactor-v1' });
+const secretRedactor = new SecretRedactor({ detectorVersion: 'suanlizi-secret-redactor-v1' });
 
 const catalogLocks = new Map<string, Promise<void>>();
 
@@ -350,7 +350,7 @@ async function collectTextFiles(root: string): Promise<{ files: CollectedKnowled
     for (const entry of entries) {
       if (
         entry.name === '.git' || entry.name === 'node_modules' || entry.name === 'dist' ||
-        entry.name === 'dist-types' || entry.name === '.llmwiki' || entry.name === '.nexus'
+        entry.name === 'dist-types' || entry.name === '.llmwiki' || entry.name === '.suanlizi'
       ) { stats.skippedFiles += 1; stats.skippedReasons.push({ path: path.relative(root, path.join(directory, entry.name)).replaceAll(path.sep, '/'), reason: 'excluded_directory' }); continue; }
       const absolute = path.join(directory, entry.name);
       if (entry.isDirectory()) {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { EpisodeRecord, ThreadId } from '@nexus/protocol';
-import type { ThreadStore } from '@nexus/storage';
+import type { EpisodeRecord, ThreadId } from '@suanlizi/protocol';
+import type { ThreadStore } from '@suanlizi/storage';
 import {
   createEpisodeRecord,
   sealEpisode,
@@ -87,7 +87,7 @@ describe('episode record lifecycle', () => {
     const now = new Date('2026-06-20T00:00:00.000Z');
     const episode = createEpisodeRecord(
       {
-        workspaceRoot: 'E:/langchain/Nexus',
+        workspaceRoot: 'E:/langchain/Suanlizi',
         sourceThreadId: 'thread-1',
         sourceTurnStart: 'turn-0',
         sourceTurnEnd: 'turn-0',
@@ -109,7 +109,7 @@ describe('episode record lifecycle', () => {
 
   it('seals an open episode and is idempotent for already-sealed episodes', () => {
     const episode = createEpisodeRecord({
-      workspaceRoot: 'E:/langchain/Nexus',
+      workspaceRoot: 'E:/langchain/Suanlizi',
       sourceThreadId: 'thread-1',
       sourceTurnStart: 'turn-0',
       sourceTurnEnd: 'turn-0',
@@ -124,7 +124,7 @@ describe('episode record lifecycle', () => {
 
   it('updates an episode from turn content', () => {
     const episode = createEpisodeRecord({
-      workspaceRoot: 'E:/langchain/Nexus',
+      workspaceRoot: 'E:/langchain/Suanlizi',
       sourceThreadId: 'thread-1',
       sourceTurnStart: 'turn-0',
       sourceTurnEnd: 'turn-0',
@@ -161,7 +161,7 @@ describe('episode persistence helpers', () => {
   it('returns the only open episode for a thread', async () => {
     const store = new EpisodeStore();
     const episode = createEpisodeRecord({
-      workspaceRoot: 'E:/langchain/Nexus',
+      workspaceRoot: 'E:/langchain/Suanlizi',
       sourceThreadId: 'thread-1',
       sourceTurnStart: 'turn-0',
       sourceTurnEnd: 'turn-0',
@@ -177,7 +177,7 @@ describe('episode persistence helpers', () => {
   it('records usage and promotes cold episodes', async () => {
     const store = new EpisodeStore();
     const episode = createEpisodeRecord({
-      workspaceRoot: 'E:/langchain/Nexus',
+      workspaceRoot: 'E:/langchain/Suanlizi',
       sourceThreadId: 'thread-1',
       sourceTurnStart: 'turn-0',
       sourceTurnEnd: 'turn-0',
@@ -199,7 +199,7 @@ describe('episode persistence helpers', () => {
   it('invalidates episodes by turn range on rollback', async () => {
     const store = new EpisodeStore();
     const ep1 = createEpisodeRecord({
-      workspaceRoot: 'E:/langchain/Nexus',
+      workspaceRoot: 'E:/langchain/Suanlizi',
       sourceThreadId: 'thread-1',
       sourceTurnStart: 'turn-0',
       sourceTurnEnd: 'turn-2',
@@ -207,7 +207,7 @@ describe('episode persistence helpers', () => {
       sourceTurnEndIndex: 2,
     });
     const ep2 = createEpisodeRecord({
-      workspaceRoot: 'E:/langchain/Nexus',
+      workspaceRoot: 'E:/langchain/Suanlizi',
       sourceThreadId: 'thread-1',
       sourceTurnStart: 'turn-2',
       sourceTurnEnd: 'turn-4',
@@ -231,7 +231,7 @@ describe('episode persistence helpers', () => {
     const store = new EpisodeStore();
     const old = createEpisodeRecord(
       {
-        workspaceRoot: 'E:/langchain/Nexus',
+        workspaceRoot: 'E:/langchain/Suanlizi',
         sourceThreadId: 'thread-1',
         sourceTurnStart: 'turn-0',
         sourceTurnEnd: 'turn-0',
@@ -255,7 +255,7 @@ describe('episode persistence helpers', () => {
     const store = new EpisodeStore();
     const stale = createEpisodeRecord(
       {
-        workspaceRoot: 'E:/langchain/Nexus',
+        workspaceRoot: 'E:/langchain/Suanlizi',
         sourceThreadId: 'thread-1',
         sourceTurnStart: 'turn-0',
         sourceTurnEnd: 'turn-0',
@@ -285,7 +285,7 @@ describe('episode persistence helpers', () => {
 describe('episode prompt block', () => {
   it('renders a non-empty block for active episodes', () => {
     const episode = createEpisodeRecord({
-      workspaceRoot: 'E:/langchain/Nexus',
+      workspaceRoot: 'E:/langchain/Suanlizi',
       sourceThreadId: 'thread-1',
       sourceTurnStart: 'turn-0',
       sourceTurnEnd: 'turn-0',

@@ -7,7 +7,7 @@ import { computeFileFingerprint, detectContentType, isDocumentFile } from './fil
 
 describe('file knowledge fingerprinting', () => {
   it('computes full-file sha256, relative path, size and mtime', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-fingerprint-'));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-fingerprint-'));
     const filePath = path.join(root, 'docs', 'a.md');
     await fs.mkdir(path.dirname(filePath), { recursive: true });
     await fs.writeFile(filePath, '中文内容\nsecond line\n', 'utf-8');

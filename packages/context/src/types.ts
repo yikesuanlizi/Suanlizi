@@ -1,4 +1,4 @@
-import type { ThreadId, TurnId, ThreadItem } from '@nexus/protocol';
+import type { ThreadId, TurnId, ThreadItem } from '@suanlizi/protocol';
 
 export interface AgentContext {
   cognition: CognitionLayer;

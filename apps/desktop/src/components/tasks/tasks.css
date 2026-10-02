@@ -1,0 +1,503 @@
+/* 任务中心（P1 只读）局部样式：仅作用于 components/tasks/ 内新类名，不改全局 styles.css。
+   遵循 AGENTS.md §7：1px 低对比边框、克制中性表面、无渐变/毛玻璃/大阴影、稳定截断渐隐、
+   窄宽度下标签可压缩为图标但不溢出。语义色只用于状态文字，不作大面积背景。 */
+
+.taskCenter {
+  --tc-border: var(--nx-border, #e2e8f0);
+  --tc-text: var(--nx-text, #0f172a);
+  --tc-muted: var(--nx-muted, #64748b);
+  --tc-panel: var(--nx-panel, #ffffff);
+  --tc-tone-active: #2563eb;
+  --tc-tone-success: #059669;
+  --tc-tone-warning: #b45309;
+  --tc-tone-danger: var(--nx-danger, #dc2626);
+  --tc-tone-muted: var(--nx-faint, #94a3b8);
+  --tc-tone-neutral: var(--nx-muted, #64748b);
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+  height: 100%;
+  color: var(--tc-text);
+}
+
+.taskCenterListPane,
+.taskCenterDetailPane {
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+}
+
+.taskCenterListPane {
+  flex: 0 0 40%;
+  max-width: 40%;
+  border-right: 1px solid var(--tc-border);
+  padding-right: 12px;
+}
+
+.taskCenterDetailPane {
+  flex: 1 1 auto;
+}
+
+/* 窄容器（抽屉/右栏折叠）下切换为单列：列表横向滚动，详情在下。 */
+@media (max-width: 720px) {
+  .taskCenter { flex-direction: column; }
+  .taskCenterListPane {
+    flex: 0 0 auto;
+    max-width: none;
+    border-right: none;
+    border-bottom: 1px solid var(--tc-border);
+    padding-right: 0;
+    padding-bottom: 8px;
+    max-height: 42%;
+  }
+}
+
+.taskCenterSectionTitle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--tc-muted);
+  margin-bottom: 6px;
+}
+
+.taskCenterSectionActions { display: inline-flex; align-items: center; gap: 6px; }
+/* 创建入口属于输入栏模式；运行观察不保留任何表单或新建按钮。 */
+.taskCenterRefresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--tc-border);
+  background: transparent;
+  color: var(--tc-muted);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.taskCenterRefresh:hover { color: var(--tc-text); }
+
+/* ── 任务列表 ─────────────────────────────────────────────────────────────── */
+.taskList { display: grid; gap: 6px; }
+
+.taskListRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--tc-border);
+  background: var(--tc-panel);
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  color: inherit;
+  min-width: 0;
+}
+.taskListRow:hover { border-color: var(--tc-muted); }
+.taskListRow.selected { border-color: var(--nx-accent, #111827); }
+
+.taskListBody { min-width: 0; display: grid; gap: 4px; }
+.taskListTitleRow { min-width: 0; display: flex; align-items: baseline; gap: 7px; }
+
+.taskListObjective {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  word-break: break-word;
+}
+
+.taskListMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  font-size: 11px;
+  color: var(--tc-muted);
+  min-width: 0;
+}
+.taskListMetaItem { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+.taskListKind {
+  flex: 0 0 auto;
+  color: var(--tc-muted);
+  font-size: 10px;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+.taskListKindWorkflow { color: var(--tc-text); }
+
+/* 状态徽标：小尺寸、低对比边框 + 语义色文字，不作大背景。 */
+.taskStatusBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--tc-border);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 11px;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+}
+.taskStatusBadge svg { width: 12px; height: 12px; flex: 0 0 auto; }
+.taskStatusBadge .taskStatusLabel { overflow: hidden; text-overflow: ellipsis; }
+
+/* 窄宽度下隐藏状态文字、仅保留图标，避免溢出。 */
+@media (max-width: 520px) {
+  .taskStatusBadge--compact .taskStatusLabel { display: none; }
+  .taskStatusBadge--compact { padding: 1px 5px; }
+}
+
+.tone-active { color: var(--tc-tone-active); }
+.tone-success { color: var(--tc-tone-success); }
+.tone-warning { color: var(--tc-tone-warning); }
+.tone-danger { color: var(--tc-tone-danger); }
+.tone-muted { color: var(--tc-tone-muted); }
+.tone-neutral { color: var(--tc-tone-neutral); }
+
+.taskProgressBar {
+  position: relative;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--tc-border);
+  overflow: hidden;
+  margin-top: 2px;
+}
+.taskProgressBar > span {
+  display: block;
+  height: 100%;
+  background: var(--tc-tone-success);
+}
+
+.taskEmptyState,
+.taskErrorState {
+  padding: 16px 4px;
+  font-size: 12px;
+  color: var(--tc-muted);
+  line-height: 1.6;
+}
+.taskErrorState { color: var(--tc-tone-danger); }
+
+/* ── 详情面板 ─────────────────────────────────────────────────────────────── */
+.taskDetail { display: grid; gap: 14px; min-width: 0; }
+
+.taskDetailHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.taskDetailObjective { font-size: 14px; font-weight: 600; line-height: 1.5; word-break: break-word; margin: 0; min-width: 0; }
+.taskDetailActions { display: flex; flex: 0 0 auto; gap: 6px; }
+
+.taskJumpButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--tc-border);
+  background: transparent;
+  color: var(--tc-text);
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.taskJumpButton:hover { border-color: var(--tc-muted); }
+
+.taskDetailStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  font-size: 12px;
+  color: var(--tc-muted);
+  border-top: 1px solid var(--tc-border);
+  border-bottom: 1px solid var(--tc-border);
+  padding: 8px 0;
+}
+.taskDetailStat { display: inline-flex; align-items: center; gap: 5px; }
+.taskDetailStat strong { color: var(--tc-text); font-weight: 600; }
+
+.taskCriteria { display: grid; gap: 4px; }
+.taskCriteriaItem {
+  display: flex;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--tc-text);
+  min-width: 0;
+}
+.taskCriteriaItem svg { width: 13px; height: 13px; flex: 0 0 auto; margin-top: 2px; color: var(--tc-muted); }
+.taskCriteriaItem span { overflow: hidden; text-overflow: ellipsis; }
+
+.taskSection { display: grid; gap: 8px; min-width: 0; }
+.taskSectionHeading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--tc-muted);
+}
+.taskSectionHeading svg { width: 13px; height: 13px; }
+.taskSectionHeading strong { color: var(--tc-text); font-weight: 600; }
+.taskSectionHeading em { margin-left: auto; font-style: normal; color: var(--tc-muted); }
+
+/* ── 计划时间线 ───────────────────────────────────────────────────────────── */
+.taskPlanTimeline { display: grid; gap: 6px; }
+.taskPlanStep {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  min-width: 0;
+}
+.taskPlanStep svg { width: 14px; height: 14px; flex: 0 0 auto; }
+.taskPlanStepText { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--tc-text); }
+.taskPlanStepStatus { font-size: 11px; white-space: nowrap; }
+.taskPlanMeta { font-size: 11px; color: var(--tc-muted); }
+
+/* ── 证据面板 ─────────────────────────────────────────────────────────────── */
+.taskEvidence { display: grid; gap: 6px; }
+.taskEvidenceId {
+  font-family: var(--nx-mono, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--tc-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.taskEvidenceNote { font-size: 11px; color: var(--tc-muted); }
+
+/* ── 运行历史 ─────────────────────────────────────────────────────────────── */
+.taskRunHistory { display: grid; gap: 6px; }
+.taskRunRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  border-top: 1px solid var(--tc-border);
+  padding-top: 6px;
+  min-width: 0;
+}
+.taskRunId { font-family: var(--nx-mono, ui-monospace, monospace); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--tc-text); }
+.taskRunKind { color: var(--tc-muted); white-space: nowrap; }
+.taskRunState { white-space: nowrap; font-size: 11px; }
+
+/* ── 待处理输入卡片 ───────────────────────────────────────────────────────── */
+.pendingInputCard {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--tc-border);
+  border-left: 2px solid var(--tc-tone-warning);
+  border-radius: 8px;
+  background: var(--tc-panel);
+  padding: 10px 12px;
+  min-width: 0;
+}
+.pendingInputHead { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--tc-tone-warning); }
+.pendingInputHead svg { width: 14px; height: 14px; }
+.pendingInputQuestion { font-size: 13px; line-height: 1.5; color: var(--tc-text); word-break: break-word; }
+.pendingInputOptions { display: grid; gap: 4px; }
+.pendingInputOption {
+  font-size: 12px;
+  color: var(--tc-text);
+  border: 1px solid var(--tc-border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pendingInputFoot { font-size: 11px; color: var(--tc-muted); }
+
+/* ── P2 生命周期操作（底部右侧、就近） ───────────────────────────────────── */
+.taskActionBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  border-top: 1px solid var(--tc-border);
+  padding-top: 12px;
+  margin-top: 2px;
+}
+.taskActionButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--tc-border);
+  background: transparent;
+  color: var(--tc-text);
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.taskActionButton svg { width: 13px; height: 13px; flex: 0 0 auto; }
+.taskActionButton:hover:not(:disabled) { border-color: var(--tc-muted); }
+.taskActionButton:focus-visible { outline: none; border-color: var(--tc-muted); }
+.taskActionButton:disabled { opacity: 0.55; cursor: default; }
+.taskActionButtonDanger { color: var(--tc-tone-danger); }
+.taskActionBusy { opacity: 0.55; }
+
+/* 窄宽度（desktop 520px 断点）：操作按钮压缩为图标，隐藏文字标签。 */
+@media (max-width: 520px) {
+  .taskActionButton { padding: 4px 8px; }
+  .taskActionButtonLabel { display: none; }
+}
+
+.taskInlineError {
+  width: 100%;
+  margin-bottom: 2px;
+  padding: 6px 10px;
+  border: 1px solid var(--tc-border);
+  border-left: 2px solid var(--tc-tone-warning);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--tc-text);
+}
+
+.taskRedirectRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 4px;
+}
+.taskTextInput,
+.pendingInputAnswer {
+  flex: 1 1 200px;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--tc-border);
+  border-radius: 6px;
+  background: var(--tc-panel);
+  color: var(--tc-text);
+  font-size: 12.5px;
+}
+
+.pendingInputOptionLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--tc-text);
+  cursor: pointer;
+}
+.pendingInputOptionLabel span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pendingInputSubmit { display: flex; }
+
+/* Goal 首屏摘要：明确 Goal Run 与动态工作流的单向关系，不把它伪装成普通脚本入口。 */
+.taskKindLabel { margin-bottom: 2px; color: var(--tc-muted); font-size: 11px; }
+.taskKindLabelWorkflow { color: var(--tc-text); }
+.taskGoalSummary {
+  display: grid;
+  gap: 5px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--tc-border);
+  border-bottom: 1px solid var(--tc-border);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--tc-text);
+}
+.taskGoalSummary em,
+.taskWorkflowSummary em { color: var(--tc-muted); font-style: normal; }
+.taskWorkflowSummary {
+  display: grid;
+  gap: 5px;
+  padding: 8px 0;
+  border-top: 1px solid var(--tc-border);
+  border-bottom: 1px solid var(--tc-border);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--tc-text);
+}
+/* 运行观察抽屉始终是窄列：列表与详情按上下阅读，不做中心大弹窗的双栏布局。 */
+.taskCenter--observer {
+  flex-direction: column;
+  gap: 10px;
+}
+.taskCenter--observer .taskCenterListPane {
+  flex: 0 0 auto;
+  max-width: none;
+  max-height: 38%;
+  border-right: none;
+  border-bottom: 1px solid var(--tc-border);
+  padding: 0 0 8px;
+}
+.taskCenter--observer .taskCenterDetailPane {
+  min-height: 0;
+}
+.taskCenter--observer .taskList {
+  gap: 4px;
+}
+.taskCenter--observer .taskListRow {
+  border-color: transparent;
+  border-radius: 3px;
+  background: transparent;
+  padding: 7px 8px;
+}
+.taskCenter--observer .taskListRow:hover {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--tc-text) 5%, transparent);
+}
+.taskCenter--observer .taskListRow.selected {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--tc-text) 9%, transparent);
+  box-shadow: inset 2px 0 0 var(--tc-text);
+}
+.taskCenter--observer .taskCenterRefresh,
+.taskCenter--observer .taskJumpButton {
+  border-color: transparent;
+  border-radius: 3px;
+  background: transparent;
+}
+.taskCenter--observer .taskCenterRefresh:hover,
+.taskCenter--observer .taskJumpButton:hover {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--tc-text) 6%, transparent);
+}
+.taskCenter--observer .taskSection,
+.taskCenter--observer .taskGoalSummary,
+.taskCenter--observer .taskDetailHeader {
+  border-radius: 0;
+}
+
+
+/* 运行观察是右侧窄抽屉，不借用居中监控弹层的布局或厚重边框。 */
+.taskObserverWorkbench {
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-end;
+  padding: 0;
+  place-items: unset;
+}
+.taskObserverWorkbench .runMonitorBackdrop {
+  background: transparent;
+}
+.taskObserverPanel {
+  box-sizing: border-box;
+  box-shadow: none;
+}
+.taskObserverPanel button:focus-visible {
+  outline: 1px solid var(--tc-muted);
+  outline-offset: 1px;
+}
+.taskCenter--observer .taskEmptyState {
+  margin: 4px 0;
+  padding: 8px 0;
+}

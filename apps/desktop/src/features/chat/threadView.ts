@@ -1,4 +1,5 @@
 import type { Locale } from '../../config/config.js';
+import { formatSuanliziErrorMessage, type SuanliziErrorInfo } from '@suanlizi/protocol';
 
 export interface ThreadItemLike {
   id: string;
@@ -15,6 +16,7 @@ export interface ThreadItemLike {
   newThreadId?: string;
   agentStatus?: string;
   timestamp?: string;
+  completedAt?: string | null;
   exitCode?: number | null;
   changes?: Array<{ path: string; kind: string }>;
   trigger?: string;
@@ -22,7 +24,8 @@ export interface ThreadItemLike {
   retainedTurnIds?: string[];
   tokensBefore?: number;
   tokensAfter?: number;
-  error?: { message: string };
+  error?: { message: string; code?: string };
+  info?: SuanliziErrorInfo;
   message?: string;
   query?: string;
   intent?: string;
@@ -70,16 +73,47 @@ export function eventRenderKey(event: EventRenderLike): string {
 export function mergeThreadItems<T extends ThreadItemLike>(current: T[], incoming: T[]): T[] {
   const order: string[] = [];
   const byId = new Map<string, T>();
+  const semanticAliases = new Map<string, string>();
 
   for (const item of [...current, ...incoming]) {
-    const key = itemKey(item);
+    const idKey = item.id ? `id:${item.id}` : undefined;
+    const semanticKey = semanticItemKey(item);
+    // Prefer a stable item id when a lifecycle update changes the item type,
+    // but allow an SSE error and its persisted copy to share a semantic key.
+    const key = (idKey && byId.has(idKey) ? idKey : undefined)
+      ?? semanticAliases.get(semanticKey)
+      ?? idKey
+      ?? semanticKey;
+    // Error items are terminal evidence for a turn. A late lifecycle update
+    // for the same id must never downgrade or replace that evidence.
+    const existing = byId.get(key);
+    if (existing && isErrorItem(existing) && !isErrorItem(item)) continue;
     if (!byId.has(key)) {
       order.push(key);
     }
-    byId.set(key, item);
+    byId.set(key, mergeItemVersion(existing, item));
+    if (idKey) byId.set(idKey, byId.get(key)!);
+    semanticAliases.set(semanticKey, key);
   }
 
   return order.map((key) => byId.get(key)!);
+}
+
+/**
+ * Terminal failures can arrive once from SSE and again from the persisted
+ * snapshot with different generated ids. Collapse only identical errors from
+ * the same turn; distinct failures remain visible for auditability.
+ */
+function semanticItemKey(item: ThreadItemLike): string {
+  if (item.type !== 'error' || !item.turnId) return itemKey(item);
+ const message = [item.message, item.text, item.error?.message]
+   .find((value): value is string => typeof value === 'string' && value.trim().length > 0)
+   ?.replace(/\s+/g, ' ')
+   .trim() ?? '';
+  const code = item.error && typeof item.error === 'object' && typeof (item.error as { code?: unknown }).code === 'string'
+    ? (item.error as { code: string }).code.trim()
+    : '';
+  return message ? `error:${item.turnId}:${code}:${message}` : itemKey(item);
 }
 
 export function applyAgentMessageDelta<T extends ThreadItemLike>(
@@ -87,18 +121,53 @@ export function applyAgentMessageDelta<T extends ThreadItemLike>(
   event: { itemId?: string; delta?: string; turnId?: string; threadId?: string },
 ): T[] {
   if (!event.itemId || typeof event.delta !== 'string' || event.delta.length === 0) return current;
-  return current.map((item) => {
+  let found = false;
+  const next = current.map((item) => {
     if (item.id !== event.itemId) return item;
-    return {
-      ...item,
-      text: `${item.text ?? ''}${event.delta}`,
-    };
+    found = true;
+    if (isErrorItem(item)) return item;
+    if (item.status && item.status !== 'in_progress') return item;
+    return { ...item, turnId: item.turnId ?? event.turnId, text: `${item.text ?? ''}${event.delta}` };
   });
+  if (found) return next;
+  return [...next, { id: event.itemId, type: 'agent_message', turnId: event.turnId, status: 'in_progress', text: event.delta, timestamp: new Date().toISOString() } as T];
 }
 
 export function removeThreadItem<T extends ThreadItemLike>(current: T[], itemId?: string): T[] {
   if (!itemId) return current;
-  return current.filter((item) => item.id !== itemId);
+  return current.filter((item) => item.id !== itemId || isErrorItem(item));
+}
+
+/**
+ * 命令输出的流式增量：把 delta 追加到对应条目的实时输出缓冲（liveOutput）。
+ * 只对进行中的条目生效；最终结果仍以 item.completed 携带的完整输出为准。
+ * — Chinese: append a streaming command-output delta to the item's live buffer.
+ */
+export function applyCommandOutputDelta<T extends ThreadItemLike>(
+  current: T[],
+  event: { itemId: string; delta: string },
+): T[] {
+  if (!event.itemId || !event.delta) return current;
+  let found = false;
+  const next = current.map((item) => {
+    if (item.id !== event.itemId) return item;
+    found = true;
+    const status = (item as { status?: string }).status;
+    if (status && status !== 'in_progress') return item;
+    const live = `${(item as { liveOutput?: string }).liveOutput ?? ''}${event.delta}`;
+    if (live.length > 65_536) {
+      (item as { liveOutput?: string }).liveOutput = live.slice(-65_536);
+    } else {
+      (item as { liveOutput?: string }).liveOutput = live;
+    }
+    return { ...item, liveOutput: (item as { liveOutput?: string }).liveOutput };
+  });
+  if (found) return next;
+  return current;
+}
+
+function isErrorItem(item: ThreadItemLike): boolean {
+  return item.type === 'error';
 }
 
 export function withSyntheticUserMessages<T extends ThreadItemLike>(
@@ -136,46 +205,106 @@ export function groupTranscriptItems<T extends ThreadItemLike>(
   turns: TurnLike[] = [],
 ): TranscriptGroup[] {
   const turnById = new Map(turns.map((turn) => [turn.turnId, turn]));
-  const groups: TranscriptGroup[] = [];
-  const assistantByTurn = new Map<string, Extract<TranscriptGroup, { kind: 'assistant' }>>();
-
+  const userByTurn = new Map<string, ThreadItemLike>();
+  const assistantItemsByTurn = new Map<string, ThreadItemLike[]>();
+  const turnOrder: string[] = [];
+  const unscoped: ThreadItemLike[] = [];
   for (const item of items) {
     if (!isTranscriptItem(item)) continue;
-    if (item.type === 'user_message') {
-      const existingAssistant = item.turnId ? assistantByTurn.get(item.turnId) : undefined;
-      const userGroup: TranscriptGroup = { kind: 'user', item };
-      if (existingAssistant) {
-        const assistantIndex = groups.indexOf(existingAssistant);
-        groups.splice(assistantIndex >= 0 ? assistantIndex : groups.length, 0, userGroup);
-      } else {
-        groups.push(userGroup);
-      }
-      continue;
-    }
-
-    const key = item.turnId ?? `item:${item.id}`;
-    let group = assistantByTurn.get(key);
-    if (!group) {
-      group = {
-        kind: 'assistant',
-        id: `assistant:${key}`,
-        turnId: item.turnId,
-        items: [],
-        status: item.turnId ? turnById.get(item.turnId)?.status : item.status,
-        timestamp: item.timestamp,
-        completedAt: item.turnId ? turnById.get(item.turnId)?.completedAt ?? null : null,
-      };
-      assistantByTurn.set(key, group);
-      groups.push(group);
-    }
-    group.items.push(item);
-    group.timestamp = group.timestamp ?? item.timestamp;
-    if (item.status === 'in_progress') {
-      group.status = 'running';
+    const key = item.turnId;
+    if (!key) { unscoped.push(item); continue; }
+    if (!turnOrder.includes(key)) turnOrder.push(key);
+    if (item.type === 'user_message') userByTurn.set(key, item);
+    else {
+      const existing = assistantItemsByTurn.get(key) ?? [];
+      existing.push(item);
+      assistantItemsByTurn.set(key, existing);
     }
   }
-
+  const orderedTurnIds = [
+    ...turns.map((turn) => turn.turnId).filter((turnId) => turnOrder.includes(turnId)),
+    ...turnOrder.filter((turnId) => !turns.some((turn) => turn.turnId === turnId)),
+  ];
+  const groups: TranscriptGroup[] = [];
+  for (const turnId of orderedTurnIds) {
+    const user = userByTurn.get(turnId);
+    if (user) groups.push({ kind: 'user', item: user });
+    const assistantItems = assistantItemsByTurn.get(turnId);
+    if (!assistantItems?.length) continue;
+    const orderedItems = orderItemsByTimestamp(assistantItems);
+    const group: Extract<TranscriptGroup, { kind: 'assistant' }> = {
+      kind: 'assistant', id: `assistant:${turnId}`, turnId, items: orderedItems,
+      status: turnById.get(turnId)?.status, timestamp: orderedItems.find((item) => item.timestamp)?.timestamp,
+      completedAt: turnById.get(turnId)?.completedAt ?? null,
+    };
+    if (orderedItems.some((item) => item.status === 'in_progress')) group.status = 'running';
+    groups.push(group);
+  }
+  for (const item of unscoped) groups.push({ kind: 'assistant', id: `assistant:item:${item.id}`, items: [item], status: item.status, timestamp: item.timestamp, completedAt: null });
   return groups;
+}
+
+function mergeItemVersion<T extends ThreadItemLike>(existing: T | undefined, incoming: T): T {
+  if (!existing) return incoming;
+  // Event/snapshot payloads are partial in practice. Do not let an omitted
+  // field (or a stale non-terminal status) erase the live item currently on
+  // screen while a turn is streaming or being persisted.
+  const merged = { ...existing } as T;
+  for (const [key, value] of Object.entries(incoming)) {
+    if (value !== undefined) {
+      (merged as Record<string, unknown>)[key] = value;
+    }
+  }
+  // `timestamp` is the stable creation time. Completion belongs in
+  // `completedAt`; accepting a later lifecycle timestamp here makes a tool
+  // jump past the final answer when its terminal event arrives.
+  if (existing.timestamp) merged.timestamp = existing.timestamp;
+  if (existing.turnId) merged.turnId = existing.turnId;
+  if (isTerminalStatus(existing.status) && !isTerminalStatus(incoming.status)) {
+    merged.status = existing.status;
+  }
+  if (existing.type === 'agent_message' && incoming.type === 'agent_message' && (existing.text ?? '').length > (incoming.text ?? '').length) {
+    merged.text = existing.text;
+  }
+  if (existing.completedAt && !incoming.completedAt) merged.completedAt = existing.completedAt;
+  return merged;
+}
+
+function isTerminalStatus(status: string | undefined): boolean {
+  return status === 'completed'
+    || status === 'failed'
+    || status === 'cancelled'
+    || status === 'canceled'
+    || status === 'interrupted'
+    || status === 'timed_out'
+    || status === 'timeout'
+    || status === 'rejected';
+}
+
+function orderItemsByTimestamp<T extends ThreadItemLike>(items: T[]): T[] {
+  return items
+    .map((item, index) => ({
+      item,
+      index,
+      timestamp: item.timestamp ? Date.parse(item.timestamp) : Number.NaN,
+      ordinal: itemOrdinal(item.id),
+    }))
+    .sort((a, b) => {
+      // Runtime item ids encode the model/tool emission ordinal. Prefer it
+      // whenever available so late lifecycle updates cannot move a tool after
+      // the final assistant output merely because their timestamps changed.
+      if (Number.isFinite(a.ordinal) && Number.isFinite(b.ordinal) && a.ordinal !== b.ordinal) return a.ordinal - b.ordinal;
+      if (Number.isFinite(a.timestamp) && Number.isFinite(b.timestamp) && a.timestamp !== b.timestamp) return a.timestamp - b.timestamp;
+      if (Number.isFinite(a.timestamp) !== Number.isFinite(b.timestamp)) return Number.isFinite(a.timestamp) ? -1 : 1;
+      if (Number.isFinite(a.ordinal) && Number.isFinite(b.ordinal) && a.ordinal !== b.ordinal) return a.ordinal - b.ordinal;
+      return a.index - b.index;
+    })
+    .map(({ item }) => item);
+}
+
+function itemOrdinal(id: string): number {
+  const match = /_item_(\d+)$/.exec(id);
+  return match ? Number(match[1]) : Number.NaN;
 }
 
 function isTranscriptItem(item: ThreadItemLike): boolean {
@@ -258,7 +387,8 @@ export function describeEvent(event: Record<string, unknown>, locale: Locale): E
   if (type === 'model.retry') {
     const attempt = Number(event.attempt ?? 0);
     const maxAttempts = Number(event.maxAttempts ?? 0);
-    const status = event.status ? `HTTP ${String(event.status)}` : String(event.error ?? '');
+    const rawRetryError = event.status ? `HTTP ${String(event.status)}` : String(event.error ?? '');
+    const status = event.status ? rawRetryError : formatSuanliziErrorMessage(undefined, rawRetryError, locale);
     return {
       key: `${type}:${String(event.turnId ?? '')}:${attempt}`,
       kind: type,
@@ -285,12 +415,27 @@ export function describeEvent(event: Record<string, unknown>, locale: Locale): E
 
   if (type === 'turn.failed') {
     const error = event.error as { message?: string } | undefined;
+    const info = event.error && typeof event.error === 'object' ? (event.error as { info?: SuanliziErrorInfo }).info : undefined;
     return {
       key: type,
       kind: type,
       title: zh ? '回复失败' : 'Turn failed',
-      detail: error?.message ?? (zh ? '执行过程中出现错误。' : 'An error occurred while running the turn.'),
+      detail: formatSuanliziErrorMessage(info, error?.message, locale),
       tone: 'danger',
+    };
+  }
+
+  if (type === 'model.output.rejected') {
+    const message = typeof event.message === 'string'
+      ? event.message
+      : (event.error as { message?: string } | undefined)?.message;
+    const info = event.error && typeof event.error === 'object' ? (event.error as { info?: SuanliziErrorInfo }).info : undefined;
+    return {
+      key: type + ':' + String(event.turnId ?? ''),
+      kind: type,
+      title: zh ? '模型输出格式错误' : 'Model output format error',
+      detail: formatSuanliziErrorMessage(info, message ?? 'model.output.rejected', locale),
+      tone: 'warning',
     };
   }
 
@@ -299,11 +444,12 @@ export function describeEvent(event: Record<string, unknown>, locale: Locale): E
       ? event.message
       : (event.error as { message?: string } | undefined)?.message;
     const recoverable = event.recoverable === true;
+    const info = event.error && typeof event.error === 'object' ? (event.error as { info?: SuanliziErrorInfo }).info : undefined;
     return {
       key: `${type}:${String(event.turnId ?? '')}`,
       kind: type,
       title: recoverable ? (zh ? '流式响应中断' : 'Stream interrupted') : (zh ? '流式响应失败' : 'Stream failed'),
-      detail: message ?? (zh ? '模型响应流中断。' : 'The model response stream was interrupted.'),
+      detail: formatSuanliziErrorMessage(info, message, locale),
       tone: recoverable ? 'warning' : 'danger',
     };
   }
@@ -410,7 +556,7 @@ export function itemHeading(item: ThreadItemLike, locale: Locale): { title: stri
     case 'error':
       return {
         title: zh ? '错误' : 'Error',
-        detail: item.message ?? item.error?.message ?? '',
+        detail: formatSuanliziErrorMessage(item.info, item.message ?? item.error?.message, locale),
       };
     default:
       return {
@@ -447,7 +593,7 @@ function describeItemEvent(type: string, item: ThreadItemLike, locale: Locale): 
   const heading = itemHeading(item, locale);
   const completed = type === 'item.completed';
   const running = type === 'item.started' || type === 'item.updated';
-  const hasError = Boolean(item.error) || item.status === 'failed';
+  const hasError = item.type === 'error' || Boolean(item.error) || item.status === 'failed';
   const suffix = completed
     ? (zh ? '完成' : 'completed')
     : (zh ? '进行中' : 'running');
@@ -467,7 +613,8 @@ export function eventKey(item: ThreadItemLike): string {
 
 function itemDetail(item: ThreadItemLike, locale: Locale): string {
   const zh = locale === 'zh';
-  if (item.error?.message) return item.error.message;
+  if (item.type === 'error') return formatSuanliziErrorMessage(item.info, item.message ?? item.error?.message, locale);
+  if (item.error?.message) return formatSuanliziErrorMessage(item.info, item.error.message, locale);
   if (item.type === 'agent_message') {
     return zh ? '已收到模型回复。' : 'Received model reply.';
   }
@@ -501,10 +648,11 @@ function tokenUsageText(usage: Record<string, unknown>, locale: Locale): string 
   const input = Number(usage.inputTokens ?? usage.input_tokens ?? 0);
   const cached = Number(usage.cachedInputTokens ?? usage.cached_input_tokens ?? 0);
   const output = Number(usage.outputTokens ?? usage.output_tokens ?? 0);
+  const cacheReported = usage.cacheReported === true || usage.cache_reported === true;
   if (!input && !cached && !output) return zh ? '本轮已完成。' : 'Turn completed.';
   return zh
-    ? `Token：输入 ${input}，缓存命中 ${cached}，输出 ${output}。`
-    : `Tokens: input ${input}, cached ${cached}, output ${output}.`;
+    ? `Token：输入 ${input}，缓存命中 ${cacheReported ? cached : 0}，输出 ${output}。`
+    : `Tokens: input ${input}, cached ${cacheReported ? cached : 0}, output ${output}.`;
 }
 
 function isThreadItem(value: unknown): value is ThreadItemLike {

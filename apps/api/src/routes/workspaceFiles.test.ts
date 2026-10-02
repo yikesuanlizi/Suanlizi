@@ -52,10 +52,10 @@ async function fetchFromRoute(url: string): Promise<Response> {
 
 describe('workspace files route', () => {
   it('lists workspace entries and previews text files', async () => {
-    const root = await mkdtemp(path.join(tmpdir(), 'nexus-files-'));
+    const root = await mkdtemp(path.join(tmpdir(), 'suanlizi-files-'));
     await mkdir(path.join(root, 'src'));
     await mkdir(path.join(root, 'node_modules'));
-    await writeFile(path.join(root, 'README.md'), '# Nexus\n');
+    await writeFile(path.join(root, 'README.md'), '# Suanlizi\n');
     await writeFile(path.join(root, 'src', 'index.ts'), 'export const ok = true;\n');
 
     const listed = await route(`/api/workspaces/files?root=${encodeURIComponent(root)}`);
@@ -74,7 +74,7 @@ describe('workspace files route', () => {
   });
 
   it('accepts an explicit workspace root that matches the API process cwd', async () => {
-    const root = await mkdtemp(path.join(tmpdir(), 'nexus-files-cwd-'));
+    const root = await mkdtemp(path.join(tmpdir(), 'suanlizi-files-cwd-'));
     await writeFile(path.join(root, 'package.json'), '{"name":"cwd-root"}\n');
     const previousCwd = process.cwd();
     try {
@@ -91,14 +91,14 @@ describe('workspace files route', () => {
   });
 
   it('rejects paths outside the workspace root', async () => {
-    const root = await mkdtemp(path.join(tmpdir(), 'nexus-files-'));
+    const root = await mkdtemp(path.join(tmpdir(), 'suanlizi-files-'));
     const result = await route(`/api/workspaces/files?root=${encodeURIComponent(root)}&path=${encodeURIComponent('../')}`);
     expect(result.response.status).toBe(400);
     expect(result.response.body).toMatchObject({ error: 'Path escapes workspace root' });
   });
 
   it('searches recursively by file extension', async () => {
-    const root = await mkdtemp(path.join(tmpdir(), 'nexus-files-'));
+    const root = await mkdtemp(path.join(tmpdir(), 'suanlizi-files-'));
     await mkdir(path.join(root, 'docs'));
     await writeFile(path.join(root, 'docs', 'manual.PDF'), '%PDF-1.4\n');
     await writeFile(path.join(root, 'notes.md'), '# Notes\n');
@@ -123,7 +123,7 @@ describe('workspace files route', () => {
   });
 
   it('skips virtualenv folders while searching', async () => {
-    const root = await mkdtemp(path.join(tmpdir(), 'nexus-files-'));
+    const root = await mkdtemp(path.join(tmpdir(), 'suanlizi-files-'));
     await mkdir(path.join(root, '.venv', 'bin'), { recursive: true });
     await mkdir(path.join(root, 'docs'));
     await writeFile(path.join(root, '.venv', 'bin', 'python.pdf'), '%PDF-1.4\n');
@@ -137,7 +137,7 @@ describe('workspace files route', () => {
   });
 
   it('searches document type aliases such as word', async () => {
-    const root = await mkdtemp(path.join(tmpdir(), 'nexus-files-'));
+    const root = await mkdtemp(path.join(tmpdir(), 'suanlizi-files-'));
     await mkdir(path.join(root, 'docs'));
     await writeFile(path.join(root, 'docs', 'meeting-notes.docx'), 'placeholder');
 
@@ -150,13 +150,13 @@ describe('workspace files route', () => {
   });
 
   it('classifies markdown, html, image, pdf, and spreadsheet previews', async () => {
-    const root = await mkdtemp(path.join(tmpdir(), 'nexus-files-'));
+    const root = await mkdtemp(path.join(tmpdir(), 'suanlizi-files-'));
     await writeFile(path.join(root, 'notes.md'), '# Title\n\n| A | B |\n| - | - |\n| 1 | 2 |\n');
     await writeFile(path.join(root, 'page.html'), '<h1>Hello</h1><p>World</p>');
     await writeFile(path.join(root, 'image.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
     await writeFile(path.join(root, 'paper.pdf'), '%PDF-1.4\n');
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([['Name', 'Score'], ['Nexus', 42]]), 'Sheet1');
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([['Name', 'Score'], ['Suanlizi', 42]]), 'Sheet1');
     XLSX.writeFile(workbook, path.join(root, 'scores.xlsx'));
 
     const markdown = await route(`/api/workspaces/preview?root=${encodeURIComponent(root)}&path=${encodeURIComponent('notes.md')}`);
@@ -200,13 +200,13 @@ describe('workspace files route', () => {
       name: 'scores.xlsx',
       previewType: 'office',
       mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      text: expect.stringContaining('Nexus,42'),
+      text: expect.stringContaining('Suanlizi,42'),
       binary: false,
     });
   });
 
   it('serves raw files with unicode filenames', async () => {
-    const root = await mkdtemp(path.join(tmpdir(), 'nexus-files-'));
+    const root = await mkdtemp(path.join(tmpdir(), 'suanlizi-files-'));
     await writeFile(path.join(root, '中国货币政策执行报告63页.pdf'), '%PDF-1.4\n');
 
     const response = await fetchFromRoute(`/api/workspaces/raw?root=${encodeURIComponent(root)}&path=${encodeURIComponent('中国货币政策执行报告63页.pdf')}`);

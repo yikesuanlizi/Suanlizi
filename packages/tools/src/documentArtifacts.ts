@@ -6,7 +6,7 @@ import type {
   DocumentExtractor,
   FileFingerprint,
   FileFreshness,
-} from '@nexus/protocol';
+} from '@suanlizi/protocol';
 import {
   artifactDocumentsDir,
   artifactIndexPath,

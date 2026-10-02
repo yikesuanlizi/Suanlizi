@@ -5,7 +5,7 @@
 //        不塞 system prompt（避免打爆 cache prefix）。
 // trimToBudget: 40k 预算分配 + 7 条裁切规则 + 动态调整。
 
-import type { CompactionSummary, ThreadId, ThreadItem } from '@nexus/protocol';
+import type { CompactionSummary, ThreadId, ThreadItem } from '@suanlizi/protocol';
 import type {
   EvidenceReceipt,
   HarnessContextSlice,

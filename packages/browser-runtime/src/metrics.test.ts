@@ -6,7 +6,7 @@
 //   task.failed events), budget exhaustion, zero-denominator pass rate,
 //   totalSteps taken from the last budget.updated
 import { describe, expect, it } from 'vitest';
-import type { BrowserTaskEvent, ClassifiedError } from '@nexus/protocol';
+import type { BrowserTaskEvent, ClassifiedError } from '@suanlizi/protocol';
 import { aggregateBrowserMetrics } from './metrics.js';
 
 const TASK_ID = 'task-metrics-1';

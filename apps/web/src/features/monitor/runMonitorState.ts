@@ -1,4 +1,4 @@
-import type { RunTraceCategory, RunTraceEnvelope, ThreadItem, TurnMeta } from '@nexus/protocol';
+import type { RunTraceCategory, RunTraceEnvelope, ThreadItem, TurnMeta } from '@suanlizi/protocol';
 import type { RunEvent, RunRecord, ThreadWithRuns } from '../../shared/types.js';
 
 export interface TracePageInfo {
@@ -23,6 +23,7 @@ export interface RunMonitorState {
   expandedThreadId: string;
   activeRequestId: number;
   loading: boolean;
+  loadError: string | null;
   items: ThreadItem[];
   selectedItemId: string;
   inspectorItem: ThreadItem | null;
@@ -46,6 +47,7 @@ export const initialRunMonitorState: RunMonitorState = {
   expandedThreadId: '',
   activeRequestId: 0,
   loading: false,
+  loadError: null,
   items: [],
   selectedItemId: '',
   inspectorItem: null,
@@ -83,6 +85,7 @@ export type RunMonitorAction =
   | { type: 'toggle-errors-only'; value: boolean }
   | { type: 'clear-items' }
   | { type: 'toggle-thread'; threadId: string }
+  | { type: 'load-error'; requestId: number; message: string }
   | { type: 'refresh.done'; requestId: number };
 
 function mergeTraces(existing: RunTraceEnvelope[], incoming: RunTraceEnvelope[], mode: 'append' | 'prepend' | 'replace'): RunTraceEnvelope[] {
@@ -144,6 +147,7 @@ export function runMonitorReducer(state: RunMonitorState, action: RunMonitorActi
         ...state,
         activeRequestId: action.requestId,
         loading: true,
+        loadError: null,
       };
     }
     case 'refresh.begin-silent': {
@@ -156,6 +160,7 @@ export function runMonitorReducer(state: RunMonitorState, action: RunMonitorActi
       if (action.requestId !== state.activeRequestId) return state;
       return {
         ...state,
+        loadError: null,
         threads: action.threads,
       };
     }
@@ -389,6 +394,14 @@ export function runMonitorReducer(state: RunMonitorState, action: RunMonitorActi
       return {
         ...state,
         expandedThreadId: state.expandedThreadId === action.threadId ? '' : action.threadId,
+      };
+    }
+    case 'load-error': {
+      if (action.requestId !== state.activeRequestId) return state;
+      return {
+        ...state,
+        loading: false,
+        loadError: action.message,
       };
     }
     case 'refresh.done': {

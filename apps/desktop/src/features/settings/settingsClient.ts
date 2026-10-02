@@ -1,4 +1,4 @@
-import type { AccessPolicyConfig, ThreadConfigUpdate } from '@nexus/protocol';
+import type { AccessPolicyConfig, ThreadConfigUpdate } from '@suanlizi/protocol';
 import type { RunConfig } from '../../config/config.js';
 import { globalRuntimePayload } from './configState.js';
 

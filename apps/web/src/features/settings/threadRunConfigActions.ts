@@ -1,4 +1,4 @@
-import type { ThreadConfigUpdate, ThreadRunConfigKey, ThreadRunConfigOverrides } from '@nexus/protocol';
+import type { ThreadConfigUpdate, ThreadRunConfigKey, ThreadRunConfigOverrides } from '@suanlizi/protocol';
 import type { AppearanceConfig, ConfigState, ConfigStateAction, GlobalRuntimeConfig } from './configState.js';
 import { saveActiveThreadConfig, saveGlobalDefaults } from './settingsClient.js';
 
@@ -11,7 +11,7 @@ interface Storage {
   setItem(key: string, value: string): void;
 }
 
-const APPEARANCE_STORAGE_KEY = 'nexus.appearance';
+const APPEARANCE_STORAGE_KEY = 'suanlizi.appearance';
 
 export interface ThreadRunConfigActions {
   saveGlobal: (patch: Partial<GlobalRuntimeConfig>) => Promise<void>;

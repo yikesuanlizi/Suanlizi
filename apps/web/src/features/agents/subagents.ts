@@ -90,7 +90,7 @@ export function buildAgentStageRows(options: {
 }): AgentStageRow[] {
   const mainStatus = options.busy ? 'running' : 'idle';
   const labels = statusLabels[options.locale];
-  const mainAgentTitle = options.locale === 'zh' ? 'Nexus 主控 Agent' : 'Nexus Primary Agent';
+  const mainAgentTitle = options.locale === 'zh' ? 'Suanlizi 主控 Agent' : 'Suanlizi Primary Agent';
   return [
     {
       kind: 'main',

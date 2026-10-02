@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const appDir = fileURLToPath(new URL('.', import.meta.url));
-const apiTarget = (process.env.NEXUS_API_URL || 'http://127.0.0.1:4127').replace(/\/+$/, '');
+const apiTarget = (process.env.SUANLIZI_API_URL || 'http://127.0.0.1:4127').replace(/\/+$/, '');
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -15,7 +15,7 @@ export default defineConfig({
   base: './',
   resolve: {
     alias: {
-      '@nexus/protocol': resolve(appDir, '../../packages/protocol/src/index.ts'),
+      '@suanlizi/protocol': resolve(appDir, '../../packages/protocol/src/index.ts'),
     },
   },
   server: {

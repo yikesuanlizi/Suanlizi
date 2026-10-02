@@ -11,7 +11,7 @@ import type {
   ClassifiedError,
   InteractableElement,
   Observation,
-} from '@nexus/protocol';
+} from '@suanlizi/protocol';
 import {
   buildSlimContextState,
   slimErrors,

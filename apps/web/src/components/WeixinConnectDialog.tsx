@@ -34,7 +34,7 @@ export function WeixinConnectDialog({
         {qr && state.polling ? (
           <div className="weixinQrBox large">
             <img src={qr.startsWith('data:image/') ? qr : qrImageSrc(qr)} alt={locale === 'zh' ? '微信登录二维码' : 'WeChat login QR'} />
-            <span>{locale === 'zh' ? '请用手机微信扫码，Nexus 会自动确认。' : 'Scan with WeChat. Nexus will confirm automatically.'}</span>
+            <span>{locale === 'zh' ? '请用手机微信扫码，Suanlizi 会自动确认。' : 'Scan with WeChat. Suanlizi will confirm automatically.'}</span>
           </div>
         ) : (
           <div className={resultClass}>

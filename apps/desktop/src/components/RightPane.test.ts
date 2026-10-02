@@ -113,7 +113,7 @@ describe('RightPane', () => {
     expect(html).not.toContain('深度');
   });
 
-  it('derives the Ops tab from thread metadata when the caller does not pass an override', () => {
+  it('does not open the Ops tab from historical thread metadata alone', () => {
     const html = renderToStaticMarkup(React.createElement(RightPane, {
       activeTab: 'activity',
       activeThreadId: 'thread_ops',
@@ -135,20 +135,33 @@ describe('RightPane', () => {
       onTabChange: vi.fn(),
     }));
 
-    expect(html).toContain('运维');
+    expect(html).not.toContain('运维');
   });
 
-  it('keeps the agent info button meaningful by not rendering inspector until an agent is selected', () => {
+  it('keeps the agent info button meaningful by showing cards until an agent is selected', () => {
     const workbenchSource = readFileSync(join(here, 'workbench', 'WorkspaceWorkbench.tsx'), 'utf-8');
     const agentStageSource = readFileSync(join(here, 'AgentStagePanel.tsx'), 'utf-8');
+    const detailSource = readFileSync(join(here, 'workbench', 'AgentConversationView.tsx'), 'utf-8');
 
     expect(workbenchSource).toContain("const mainAgentThreadId = activeThreadId || 'main'");
     expect(workbenchSource).toContain('mainThreadId: mainAgentThreadId');
     expect(workbenchSource).toContain('if (!selectedAgentId) return null');
     expect(workbenchSource).toContain('setSelectedAgentId((current) => current === threadId ? null : threadId)');
-    expect(workbenchSource).toContain('{selectedNode ? (');
-    expect(agentStageSource).toContain('aria-pressed={selectedThreadId === mainRow.threadId}');
-    expect(agentStageSource).toContain('收起主 Agent 详情');
+    // 卡片视图与详情视图互斥：选中节点才渲染详情，否则渲染卡片
+    // — Chinese: card and detail views are mutually exclusive
+    expect(workbenchSource).toContain('selectedNode ? (');
+    expect(workbenchSource).toContain('<AgentConversationView');
+    expect(workbenchSource).toContain('<AgentStagePanel');
+    expect(workbenchSource).toContain('onBack={() => setSelectedAgentId(null)}');
+    // 主卡片的 info 按钮保留"查看主 Agent 详情"入口
+    // — Chinese: the hero card keeps its info button as the main-agent detail entry
+    expect(agentStageSource).toContain('查看主 Agent 详情');
+    // 详情视图必须提供返回卡片的出口，且为只读（无输入框）
+    // — Chinese: the detail view offers a back button and stays read-only
+    expect(detailSource).toContain('onBack');
+    expect(detailSource).toContain('返回卡片');
+    expect(detailSource).toContain('<ItemView');
+    expect(detailSource).not.toContain('textarea');
   });
 
   it('passes item trace jumps through to monitor instead of transcript-only scrolling', () => {
@@ -192,21 +205,26 @@ describe('RightPane', () => {
   it('guards mode writes and Ops task state by thread before rendering or mutating', () => {
     const mainSource = readFileSync(join(here, '..', 'main.tsx'), 'utf-8');
 
-    expect(mainSource).toContain('modePatchGenerationRef');
-    expect(mainSource).toContain('modePatchQueueRef');
     expect(mainSource).toContain('opsStartGenerationRef');
     expect(mainSource).toContain('isCurrentStart');
     expect(mainSource).toContain('requestThreadId');
     expect(mainSource).toContain('opsTaskDetail?.task.spec.threadId === threadId');
     expect(mainSource).toContain('opsTaskAnchor?.threadId === threadId');
+    expect(mainSource).toContain('const opsSessionActive = Boolean(currentOpsTaskDetail || currentOpsTaskAnchor)');
+    expect(mainSource).toContain("Only a live or blocked task reopens the Ops surface");
+    expect(mainSource).toContain("if (!opsKnowledgeScope?.knowledgeBaseIds.length)");
     expect(mainSource).toContain('setItems((current) => mergeIncomingItems(current, [{ id: `ops_error_');
   });
 
-  it('keeps Ops unavailable until a real workspace exists', () => {
+  it('keeps Ops as an explicit composer submission mode rather than a right-pane creation control', () => {
     const mainSource = readFileSync(join(here, '..', 'main.tsx'), 'utf-8');
+    const composerSource = readFileSync(join(here, 'ComposerBar.tsx'), 'utf-8');
 
-    expect(mainSource).toContain('const opsModeAvailable = Boolean(activeWorkspaceRoot.trim())');
-    expect(mainSource).toContain('opsModeAvailable={opsModeAvailable}');
+    expect(mainSource).toContain('showOps={hasActiveThread && opsSessionActive}');
+    expect(composerSource).toContain('modeIndicatorOps');
+    expect(composerSource).toContain("executionMode === 'ops'");
+    expect(composerSource).not.toContain('executionModeSelect');
+    expect(composerSource).not.toContain('onThreadModeChange');
   });
 
   it('mounts file and browser panels only while their dynamic tabs are open', () => {
@@ -233,20 +251,29 @@ describe('RightPane', () => {
     expect(styles).toContain('contain: layout paint style;');
   });
 
-  it('persists dynamic tabs across startup and reports sizing to the app shell', () => {
+  it('persists dynamic tabs per thread without injecting the previous active tab on scope changes', () => {
     const mainSource = readFileSync(join(here, '..', 'main.tsx'), 'utf-8');
     const rightPaneSource = readFileSync(join(here, 'RightPane.tsx'), 'utf-8');
 
     expect(rightPaneSource).toContain('useState<RightPaneTab>');
     expect(rightPaneSource).toContain('const [openUtilityTabs, setOpenUtilityTabs]');
-    expect(rightPaneSource).toContain('readStoredWorkbenchState');
-    expect(rightPaneSource).toContain('writeStoredWorkbenchState');
-    expect(rightPaneSource).toContain("localStorage.removeItem('nexus.rightPane.tab')");
+    expect(rightPaneSource).toContain('readStoredWorkbenchState(threadScope)');
+    expect(rightPaneSource).toContain('writeStoredWorkbenchState({');
+    expect(rightPaneSource).toContain('if (previous === contextKey) return;');
+    expect(rightPaneSource).toContain('setOpenUtilityTabs(stored.openUtilityTabs);');
+    const contextSwitchEffect = rightPaneSource.slice(
+      rightPaneSource.indexOf('if (previous === null || previous === contextKey) return;'),
+      rightPaneSource.indexOf('useEffect(() => {\n    if (hasActiveThread) return;'),
+    );
+    expect(contextSwitchEffect).not.toContain('initialUtility');
     expect(rightPaneSource).toContain('const nextActiveTab: RightPaneTab');
     expect(rightPaneSource).toContain('onTabChange?.(nextActiveTab)');
     expect(mainSource).not.toContain('setRightPaneTab');
     expect(mainSource).toContain("setRightPaneSizingMode(rightPaneSizingModeForTab(tab))");
     expect(mainSource).not.toContain('onTabChange={setRightPaneTab}');
+    expect(mainSource).toContain('readStoredWorkbenchVisibility(threadId)');
+    expect(mainSource).toContain('pendingAgentRequestTaskIds()');
+    expect(mainSource).toContain('event.taskId !== threadId');
   });
 
   it('shows resource details inside recent activity events instead of a separate resource block', () => {
@@ -296,7 +323,7 @@ describe('RightPane', () => {
 
     expect(html).not.toContain('资源使用');
     expect(html).toContain('最近事件');
-    expect(html).toContain('Nexus 主控 Agent');
+    expect(html).toContain('Suanlizi 主控 Agent');
     expect(html).toContain('MCP');
     expect(html).toContain('gitnexus / search_code');
     expect(html).toContain('Skill');

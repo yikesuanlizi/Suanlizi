@@ -5,7 +5,7 @@
 //
 // fail-closed 原则：模型解析失败 / 无法判定时，一律视为 not satisfied。
 
-import type { GoalEvaluation, ThreadItem } from '@nexus/protocol';
+import type { GoalEvaluation, ThreadItem } from '@suanlizi/protocol';
 import type {
   EvidenceReceipt,
   HarnessGoal,
@@ -65,7 +65,7 @@ export class GoalEvaluator {
     }
 
     try {
-      return this.parseEvaluation(raw, goal, state);
+      return this.parseEvaluation(raw, goal, state, evidenceReceipts);
     } catch (err) {
       // 解析失败：fail-closed
       return this.failClosed(goal, state, `evaluation parse error: ${(err as Error).message}`);
@@ -156,7 +156,12 @@ export class GoalEvaluator {
 
   // ─── 解析 ───────────────────────────────────────────────────────────────────
 
-  private parseEvaluation(raw: string, goal: HarnessGoal, state: HarnessState): GoalEvaluation {
+  private parseEvaluation(
+    raw: string,
+    goal: HarnessGoal,
+    state: HarnessState,
+    evidenceReceipts: EvidenceReceipt[],
+  ): GoalEvaluation {
     // 去除 markdown code fence
     let jsonStr = raw.trim();
     if (jsonStr.startsWith('```')) {
@@ -188,15 +193,49 @@ export class GoalEvaluator {
     const newEvidenceIds = (state.lastEvaluation ? '' : 'first');
     const progressSignature = this.computeProgressSignature(failedCriteria, state, newEvidenceIds);
 
-    // Gap 8: criteriaEvidenceMap
+    // Gap 8 + P3 证据硬校验：criteriaEvidenceMap 只保留指向真实存在的 criterion 与
+    // evidence id 的映射；出现任何非法引用时 fail-closed（satisfied 强制 false），
+    // 防止模型凭空引用证据 id（计划 §7 P3 验收条款）。
     let criteriaEvidenceMap: Record<string, string[]> | undefined;
+    let invalidEvidenceRefs = false;
     if (parsed.criteriaEvidenceMap && typeof parsed.criteriaEvidenceMap === 'object') {
+      const validCriteria = new Set(goal.acceptanceCriteria);
+      const validEvidenceIds = new Set(evidenceReceipts.map((r) => r.id));
       criteriaEvidenceMap = {};
       for (const [k, v] of Object.entries(parsed.criteriaEvidenceMap as Record<string, unknown>)) {
-        if (Array.isArray(v)) {
-          criteriaEvidenceMap[k] = (v as unknown[]).filter(s => typeof s === 'string') as string[];
+        if (!validCriteria.has(k)) {
+          invalidEvidenceRefs = true;
+          continue;
         }
+        if (!Array.isArray(v)) continue;
+        const ids: string[] = [];
+        for (const id of v as unknown[]) {
+          if (typeof id !== 'string') {
+            invalidEvidenceRefs = true;
+            continue;
+          }
+          if (!validEvidenceIds.has(id)) {
+            invalidEvidenceRefs = true;
+            continue;
+          }
+          ids.push(id);
+        }
+        criteriaEvidenceMap[k] = ids;
       }
+    }
+
+    if (invalidEvidenceRefs) {
+      return {
+        satisfied: false,
+        status: 'continue',
+        passedCriteria: [],
+        failedCriteria: goal.acceptanceCriteria,
+        blocker: 'evaluation rejected: criteriaEvidenceMap referenced unknown criteria or evidence ids',
+        evidenceSummary: '',
+        progressSignature: `invalid_criteria_evidence_map::${state.iteration}`,
+        reasoning: 'Fail-closed: the evaluator output referenced criteria/evidence ids that do not exist; refusing to accept satisfaction.',
+        criteriaEvidenceMap,
+      };
     }
 
     return {
