@@ -1,6 +1,6 @@
 {
   "name": "@suanlizi/desktop",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "private": true,
   "type": "module",
   "main": "dist-electron/main/index.js",
@@ -15,8 +15,8 @@
     "electron:dev": "npm run electron:build && electron dist-electron/main/index.js"
   },
   "dependencies": {
-    "@suanlizi/browser-runtime": "1.8.0",
-    "@suanlizi/protocol": "1.8.0",
+    "@suanlizi/browser-runtime": "1.9.0",
+    "@suanlizi/protocol": "1.9.0",
     "@tailwindcss/vite": "^4.3.0",
     "@tencent-weixin/openclaw-weixin": "^2.4.3",
     "@types/react": "^19.0.0",

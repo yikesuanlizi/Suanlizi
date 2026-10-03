@@ -1,6 +1,6 @@
 {
   "name": "suanlizi",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "private": true,
   "description": "Suanlizi — local-first TypeScript Agent OS runtime",
   "packageManager": "npm@10.9.0",
