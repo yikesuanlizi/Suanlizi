@@ -1,7 +1,6 @@
 import type { Server } from 'node:http';
 import type { ThreadStore } from '@suanlizi/storage';
 import { shutdownAllDingtalkClients } from '../routes/botRoute.js';
-import { resetGitNexusService } from '../services/gitNexusService.js';
 import { reconcileThreadRuntimeOnStartup } from '../services/threadRuntimeReconcile.js';
 
 export async function markRunningTurnsInterrupted(store: ThreadStore, now = new Date().toISOString()): Promise<number> {
@@ -48,7 +47,6 @@ export function installGracefulShutdown(options: {
       // — English: abort all running harness runs on shutdown
       options.onShutdown?.();
       shutdownAllDingtalkClients();
-      resetGitNexusService();
       await new Promise<void>((resolve) => {
         options.server.close(() => resolve());
       });

@@ -1,7 +1,13 @@
-import { isTerminalUtilityWorkbenchTab, type UtilityWorkbenchTab, type WorkbenchTab } from './WorkbenchTabs.js';
+import {
+  isPinnableWorkbenchTab,
+  isTerminalUtilityWorkbenchTab,
+  type PinnableWorkbenchTab,
+  type UtilityWorkbenchTab,
+  type WorkbenchTab,
+} from './WorkbenchTabs.js';
 
-export const WORKBENCH_STATE_STORAGE_KEY = 'nexus.workbench.state.v1';
-export const WORKBENCH_VISIBILITY_STORAGE_KEY = 'nexus.workbench.visibility.v1';
+export const WORKBENCH_STATE_STORAGE_KEY = 'suanlizi.workbench.state.v1';
+export const WORKBENCH_VISIBILITY_STORAGE_KEY = 'suanlizi.workbench.visibility.v1';
 
 function storageKey(scope: string): string {
   return `${WORKBENCH_STATE_STORAGE_KEY}:${encodeURIComponent(scope)}`;
@@ -35,30 +41,28 @@ export function writeStoredWorkbenchVisibility(visible: boolean, scope?: string)
 export interface PersistedWorkbenchState {
   activeTab: WorkbenchTab;
   openUtilityTabs: UtilityWorkbenchTab[];
+  pinnedTabs?: PinnableWorkbenchTab[];
 }
 
 const DEFAULT_STATE: PersistedWorkbenchState = {
   activeTab: 'activity',
   openUtilityTabs: [],
+  pinnedTabs: ['activity', 'agents'],
 };
-
-const LEGACY_TERMINAL_TAB: UtilityWorkbenchTab = 'terminal:legacy';
 
 function normalizeUtilityTab(tab: unknown): UtilityWorkbenchTab | null {
   if (tab === 'files' || tab === 'browser') return tab;
-  if (tab === 'terminal') return LEGACY_TERMINAL_TAB;
   return typeof tab === 'string' && isTerminalUtilityWorkbenchTab(tab) ? tab : null;
 }
 
 export function readStoredWorkbenchState(scope?: string): PersistedWorkbenchState {
   const normalized = scope?.trim();
-  // Workbench state is conversation state. Do not revive a legacy global tab
-  // while no conversation is selected.
-  if (!normalized) return { ...DEFAULT_STATE, openUtilityTabs: [] };
+  // Workbench state is conversation state. Do not revive a global tab while no conversation is selected.
+  if (!normalized) return { ...DEFAULT_STATE, openUtilityTabs: [], pinnedTabs: [...(DEFAULT_STATE.pinnedTabs ?? ['activity', 'agents'])] };
   try {
     const raw = localStorage.getItem(storageKey(normalized));
     if (!raw) {
-      return { ...DEFAULT_STATE, openUtilityTabs: [] };
+      return { ...DEFAULT_STATE, openUtilityTabs: [], pinnedTabs: [...(DEFAULT_STATE.pinnedTabs ?? ['activity', 'agents'])] };
     }
     const parsed = JSON.parse(raw) as Partial<PersistedWorkbenchState>;
     const openUtilityTabs = Array.isArray(parsed.openUtilityTabs)
@@ -69,9 +73,12 @@ export function readStoredWorkbenchState(scope?: string): PersistedWorkbenchStat
       ?? (parsed.activeTab === 'agents' || parsed.activeTab === 'activity' || parsed.activeTab === 'ops' ? parsed.activeTab : 'activity');
     const normalizedTabs = [...new Set(openUtilityTabs)];
     if (utilityActiveTab && !normalizedTabs.includes(utilityActiveTab)) normalizedTabs.push(utilityActiveTab);
-    return { activeTab, openUtilityTabs: normalizedTabs };
+    const pinnedTabs = Array.isArray(parsed.pinnedTabs)
+      ? parsed.pinnedTabs.filter(isPinnableWorkbenchTab)
+      : [...(DEFAULT_STATE.pinnedTabs ?? ['activity', 'agents'])];
+    return { activeTab, openUtilityTabs: normalizedTabs, pinnedTabs: [...new Set(pinnedTabs)] };
   } catch {
-    return { ...DEFAULT_STATE, openUtilityTabs: [] };
+    return { ...DEFAULT_STATE, openUtilityTabs: [], pinnedTabs: [...(DEFAULT_STATE.pinnedTabs ?? ['activity', 'agents'])] };
   }
 }
 
@@ -82,6 +89,7 @@ export function writeStoredWorkbenchState(state: PersistedWorkbenchState, scope?
     localStorage.setItem(storageKey(normalized), JSON.stringify({
       activeTab: state.activeTab,
       openUtilityTabs: [...new Set(state.openUtilityTabs)],
+      pinnedTabs: [...new Set(state.pinnedTabs)],
     }));
   } catch {
     // UI state persistence is best effort.

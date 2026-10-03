@@ -19,8 +19,8 @@ export type PaletteOption = SlashCommandOption & (
   | { action: 'enable_mcp'; mcpId: string; hideCommand: true }
 );
 
-export const COMPOSER_HISTORY_STORAGE_KEY = 'nexus.composer.history.v1';
-export const COMPOSER_DRAFT_STORAGE_KEY = 'nexus.composer.draft.v1';
+export const COMPOSER_HISTORY_STORAGE_KEY = 'suanlizi.composer.history.v1';
+export const COMPOSER_DRAFT_STORAGE_KEY = 'suanlizi.composer.draft.v1';
 const COMPOSER_HISTORY_LIMIT = 100;
 
 // 输入框模型下拉的厂商图标：自定义厂商用其 favicon，内置厂商用品牌图标。
@@ -161,13 +161,13 @@ export function ComposerBar({
       : executionMode === 'ops'
         ? { className: 'modeIndicatorOps', label: 'Ops', icon: <Icon name="monitor" /> }
         : null;
-  const thinkingOptions: Array<{ value: ComposerThinkingMode; label: string; icon: React.ReactNode }> = [
-    { value: 'no', label: config.locale === 'zh' ? '快速' : 'Fast', icon: <Icon name="gauge" /> },
-    { value: 'medium', label: config.locale === 'zh' ? '均衡' : 'Balanced', icon: <Icon name="balance" /> },
-    { value: 'high', label: config.locale === 'zh' ? '深度' : 'Deep', icon: <Icon name="layers" /> },
-    { value: 'xhigh', label: config.locale === 'zh' ? '更深' : 'Deeper', icon: <Icon name="brain" /> },
-    { value: 'max', label: config.locale === 'zh' ? '最高' : 'Max', icon: <Icon name="spark" /> },
-    { value: 'workflow', label: config.locale === 'zh' ? '动态工作流' : 'Dynamic Workflow', icon: <Icon name="workflow" /> },
+  const thinkingOptions: Array<{ value: ComposerThinkingMode; label: string }> = [
+    { value: 'no', label: 'Fast' },
+    { value: 'medium', label: 'Balanced' },
+    { value: 'high', label: 'Deep' },
+    { value: 'xhigh', label: 'Deeper' },
+    { value: 'max', label: 'Max' },
+    { value: 'workflow', label: 'Workflow' },
   ];
   const urlTokens = React.useMemo(() => extractUrlTokens(input), [input]);
   const commandInputClassName = [

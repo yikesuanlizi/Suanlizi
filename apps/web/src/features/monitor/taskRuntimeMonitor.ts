@@ -10,7 +10,7 @@
  * 重要约束：
  *  - 不存完整 system prompt / chunk content
  *  - 普通 /turn 也会产生这些事件，但不代表进入 harness
- *  - 旧 harness.state.updated 是 legacy harness API 事件，不进入普通任务运行态面板
+ *  - harness.state.updated 是历史事件名，不进入普通任务运行态面板
  */
 import { useCallback, useState } from 'react';
 import type {

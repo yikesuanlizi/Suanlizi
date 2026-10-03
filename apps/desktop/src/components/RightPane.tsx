@@ -10,9 +10,11 @@ import {
   isUtilityWorkbenchTab,
   type UtilityWorkbenchTab,
   type UtilityWorkbenchTabKind,
+  type PinnableWorkbenchTab,
   type WorkbenchTab,
 } from './workbench/WorkbenchTabs.js';
 import { readStoredWorkbenchState, writeStoredWorkbenchState } from './workbench/workbenchState.js';
+import type { RunConfig } from '../config/config.js';
 import { showItemInSystemFolder } from '../api/desktopBridge.js';
 import type { OpsTaskSession } from '@suanlizi/protocol';
 import type { OpsTaskTimelineEvent } from './workbench/OpsTaskInspector.js';
@@ -28,6 +30,7 @@ export function RightPane({
   busy,
   threadChildren,
   locale,
+  config,
   workspaceRoot,
   terminalWorkspaceRoot,
   onTabChange,
@@ -67,6 +70,7 @@ export function RightPane({
   busy: boolean;
   threadChildren: ThreadChildInfo[];
   locale: Locale;
+  config?: RunConfig;
   workspaceRoot: string;
   terminalWorkspaceRoot?: string;
   onTabChange?(tab: RightPaneTab): void;
@@ -109,10 +113,11 @@ export function RightPane({
   const threadScope = hasActiveThread ? activeThreadId.trim() : '';
   const initialWorkbenchState = threadScope
     ? readStoredWorkbenchState(threadScope)
-    : { activeTab: 'activity' as RightPaneTab, openUtilityTabs: [] as UtilityWorkbenchTab[] };
+    : { activeTab: 'activity' as RightPaneTab, openUtilityTabs: [] as UtilityWorkbenchTab[], pinnedTabs: ['activity', 'agents'] as PinnableWorkbenchTab[] };
   const [activeTab, setActiveTab] = useState<RightPaneTab>(() => (
     hasActiveThread ? (initialActiveTab ?? initialWorkbenchState.activeTab) : 'activity'
   ));
+  const [pinnedTabs, setPinnedTabs] = useState<PinnableWorkbenchTab[]>(() => initialWorkbenchState.pinnedTabs ?? ['activity', 'agents']);
   const [openUtilityTabs, setOpenUtilityTabs] = useState<UtilityWorkbenchTab[]>(() => {
     if (!hasActiveThread) return [];
     const stored = initialWorkbenchState;
@@ -136,9 +141,10 @@ export function RightPane({
     if (previous === contextKey) return;
     const stored = threadScope
       ? readStoredWorkbenchState(threadScope)
-      : { activeTab: 'activity' as RightPaneTab, openUtilityTabs: [] as UtilityWorkbenchTab[] };
+      : { activeTab: 'activity' as RightPaneTab, openUtilityTabs: [] as UtilityWorkbenchTab[], pinnedTabs: ['activity', 'agents'] as PinnableWorkbenchTab[] };
     setActiveTab(stored.activeTab);
     setOpenUtilityTabs(stored.openUtilityTabs);
+    setPinnedTabs(stored.pinnedTabs ?? ['activity', 'agents']);
     onTabChange?.(stored.activeTab);
   }, [contextKey, onTabChange, threadScope]);
 
@@ -166,9 +172,19 @@ export function RightPane({
     writeStoredWorkbenchState({
       activeTab: tab,
       openUtilityTabs: isUtilityWorkbenchTab(tab) ? [...new Set([...stored.openUtilityTabs, tab])] : stored.openUtilityTabs,
+      pinnedTabs,
     }, threadScope);
     onTabChange?.(tab);
-  }, [hasActiveThread, onTabChange, threadScope]);
+  }, [hasActiveThread, onTabChange, pinnedTabs, threadScope]);
+
+  const handleTogglePinnedTab = useCallback((tab: PinnableWorkbenchTab) => {
+    const nextPinned = pinnedTabs.includes(tab)
+      ? pinnedTabs.filter((item) => item !== tab)
+      : [...pinnedTabs, tab];
+    setPinnedTabs(nextPinned);
+    const stored = readStoredWorkbenchState(threadScope);
+    writeStoredWorkbenchState({ ...stored, pinnedTabs: nextPinned }, threadScope);
+  }, [pinnedTabs, threadScope]);
 
   useEffect(() => {
     if (browserRequestVersion === 0 || browserRequestVersion === handledBrowserRequestVersion.current) return;
@@ -194,10 +210,11 @@ export function RightPane({
     writeStoredWorkbenchState({
       activeTab: tab,
       openUtilityTabs: [...new Set([...stored.openUtilityTabs, tab])],
+      pinnedTabs,
     }, threadScope);
     onTabChange?.(tab);
     return tab;
-  }, [hasActiveThread, onTabChange, threadScope]);
+  }, [hasActiveThread, onTabChange, pinnedTabs, threadScope]);
 
   const handleCloseUtilityTab = useCallback((tab: UtilityWorkbenchTab) => {
     if (!hasActiveThread || !threadScope) return;
@@ -211,11 +228,12 @@ export function RightPane({
     writeStoredWorkbenchState({
       activeTab: nextActiveTab,
       openUtilityTabs: remainingUtilityTabs,
+      pinnedTabs,
     }, threadScope);
     if (activeTab !== tab) return;
     setActiveTab(nextActiveTab);
     onTabChange?.(nextActiveTab);
-  }, [activeTab, hasActiveThread, onTabChange, openUtilityTabs, threadScope]);
+  }, [activeTab, hasActiveThread, onTabChange, openUtilityTabs, pinnedTabs, threadScope]);
 
   return (
     <WorkspaceWorkbench
@@ -234,6 +252,10 @@ export function RightPane({
       externalPreviewRequest={externalPreviewRequest}
       activeTab={contextChanged ? 'activity' : activeTab}
       onTabChange={handleTabChange}
+      pinnedTabs={config?.workbenchPinnedTabs === true
+        ? ['activity', 'agents']
+        : config?.workbenchPinnedTabs === false ? [] : pinnedTabs}
+      onTogglePinnedTab={handleTogglePinnedTab}
       openUtilityTabs={hasActiveThread && !contextChanged ? openUtilityTabs : []}
       onOpenUtilityTab={handleOpenUtilityTab}
       onCloseUtilityTab={handleCloseUtilityTab}

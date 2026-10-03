@@ -53,22 +53,10 @@ const ERROR_LINGER_MS = 6000;
 const OBSERVER_ORIGINS: NonNullable<TaskListQuery['origin']> = ['explicit_goal', 'explicit_workflow'];
 
 /**
- * 前端发布可早于 API 重启。仅当旧 API 明确拒绝 explicit_workflow 时，保留
- * Goal 的观察能力；其他真实请求失败仍应向用户展示，不能被静默吞掉。
+ * 任务中心只请求当前 API 支持的 Goal / Workflow 来源；请求失败直接展示。
  */
-async function fetchObserverTasks() {
-  try {
-    return await fetchTasks({ origin: OBSERVER_ORIGINS });
-  } catch (error) {
-    if (isLegacyWorkflowOriginError(error)) return fetchTasks({ origin: ['explicit_goal'] });
-    throw error;
-  }
-}
-
-function isLegacyWorkflowOriginError(error: unknown): boolean {
-  return error instanceof TaskApiError
-    && error.code === 'TASK_REQUEST_INVALID'
-    && /\bexplicit_workflow\b/.test(error.message);
+async function fetchObserverTasks(): Promise<{ tasks: Task[] }> {
+  return await fetchTasks({ origin: OBSERVER_ORIGINS });
 }
 
 export function TaskCenterDrawer({ open, locale, onClose, onJumpToThread }: TaskCenterDrawerProps) {

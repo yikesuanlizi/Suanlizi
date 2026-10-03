@@ -12,7 +12,7 @@
 packages/
 ├── protocol/         事件协议、Thread/Turn/Item 类型、审批、checkpoint、harness 类型
 ├── model-gateway/    Ollama / LM Studio / vLLM / OpenAI-compatible 适配层
-├── tools/            Shell、文件系统、patch、搜索、git、GitNexus 等本地工具
+├── tools/            Shell、文件系统、patch、搜索、git 等本地工具
 ├── sandbox/          权限预设、执行策略、审批 handler
 ├── storage/          单机 SQLite + JSONL 持久化
 ├── context/          Cognitive Context Layer：Provider 体系 + ProjectBrain + Task Cognition + Experience Engine
@@ -110,7 +110,6 @@ React Desktop UI → Electron Main（BrowserViewManager + CDP Adapter）
 - **人机审批**：workspace 模式下，写文件和命令类工具自动进入 Web 审批队列
 - **执行策略**：shell 命令可按规则配置 allow / prompt / forbidden
 - **MCP 治理**：支持 MCP 工具接入，Web 配置界面 + 运行时懒加载 + 连接状态监控
-- **GitNexus 代码分析**（v1.1+）：三层架构（serve HTTP / MCP fallback / CLI npx 包装）自动分析代码仓库
 
 ### 技能与扩展
 - **Skills 系统**：支持本地 Skill 目录，按任务选择、自动匹配，支持 GitHub URL 一键安装
@@ -145,7 +144,7 @@ Suanlizi 把"做什么"（**会话类型**）和"怎么跑"（**runProfile**）�
 | 类型 | workspace | 适用 | 说明 |
 |------|-----------|------|------|
 | **Work（聊天）** | 空（无工作区） | 文档问答、内容生产、知识查询、闲聊 | 不绑定项目目录，配置极简，适合轻量任务 |
-| **Code（项目）** | workspaceRoot | 编程开发、文件操作、工具调用、代码分析 | 绑定本地代码目录，可读写文件、运行命令、调用 GitNexus 等工具 |
+| **Code（项目）** | workspaceRoot | 编程开发、文件操作、工具调用、代码分析 | 绑定本地代码目录，可读写文件、运行命令、调用本地工具 |
 
 会话类型决定的是"Agent 能看到/操作什么"。
 
@@ -195,7 +194,7 @@ Suanlizi 把"做什么"（**会话类型**）和"怎么跑"（**runProfile**）�
 |---|---|---|
 | **首选 profile** | `cache_first` | `harness` |
 | **次选 profile** | `runtime_os` | `runtime_os` |
-| **核心能力** | 文档问答、内容生产、压缩对话 | 文件操作、工具调用、GitNexus、自主循环 |
+| **核心能力** | 文档问答、内容生产、压缩对话 | 文件操作、工具调用、自主循环 |
 | **不涉及** | 本地文件 | 跨项目跨用户 |
 
 ## 微信远程助手
@@ -259,18 +258,6 @@ Suanlizi 深度集成钉钉平台，支持消息收发、AI Card 流式回复、
 - `dws_auth_status`：检查 dws 登录状态和当前组织
 
 支持 `dwsDryRun` 预览破坏性操作，`dwsJq` 过滤 JSON 输出减少 token 消耗。
-
-## GitNexus 三层架构（v1.1+）
-
-GitNexus 是 Suanlizi 内置的代码仓库分析能力，通过三层降级保证可用性：
-
-| 层 | 名称 | 作用 | 触发条件 |
-|----|------|------|----------|
-| **Layer 1** | serve HTTP | `gitnexus serve` 子进程 + HTTP 查询（4747 端口） | 默认优先 |
-| **Layer 2** | MCP | serve 不可用时 fallback 到 MCP 协议 | serve 健康检查失败 |
-| **Layer 3** | CLI / npx | `gitnexus_analyze` 工具封装 `npx -y gitnexus@latest` 调用 | serve 与 MCP 都不可用 |
-
-Agent system prompt 明确三层使用策略，确保任何环境下都能调用 GitNexus 做代码分析。
 
 ## API 路由速查
 

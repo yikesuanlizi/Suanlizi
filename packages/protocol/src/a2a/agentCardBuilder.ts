@@ -55,7 +55,7 @@ export interface SuanliziAgentCardConfig {
    * 可选：声明 Agent 的认证要求。
    * - 'bearer'：声明调用方必须使用 HTTP Bearer JWT（Suanlizi token 模式下的默认）。
    * - 'none'：声明无需认证（Suanlizi auth=off 模式）。
-   * - undefined：不在 AgentCard 中声明 security（保持向后兼容）。
+   * - undefined：不在 AgentCard 中声明 security。
    */
   // — Chinese: declare auth requirement. 'bearer' = JWT required; 'none' = no auth; undefined = omit
   securityScheme?: SuanliziSecuritySchemeKind;

@@ -260,9 +260,7 @@ function taskFromRequest(body: OpsTaskRequest): OpsTaskSpec {
         : `ops_${randomUUID()}`,
     threadId: source.threadId,
     parentTaskId: source.parentTaskId,
-    presetId: source.presetId === 'diagnose' || source.presetId === 'log_analysis' || source.presetId === undefined
-      ? 'ops'
-      : source.presetId,
+    presetId: source.presetId === undefined ? 'ops' : source.presetId,
     workspaceRoot: source.workspaceRoot,
     environmentId,
     target: source.target,

@@ -166,7 +166,7 @@ export interface ThreadStore {
     patch: Partial<
       Pick<
         ThreadMeta,
-        'title' | 'workspaceRoot' | 'status' | 'turnCount' | 'updatedAt' | 'tags' | 'mode' | 'taskPreset'
+        'title' | 'hasWorkspace' | 'workspaceRoot' | 'status' | 'turnCount' | 'updatedAt' | 'tags' | 'mode' | 'taskPreset'
       >
     >,
   ): Promise<void>;
@@ -343,8 +343,8 @@ export class LocalThreadStore implements ThreadStore {
     this.dataDir = dataDir;
     this.sqlitePath = path.join(dataDir, 'threads.db');
     this.tenantId = safeTenantId(tenantId);
-    // The JSON fallback implements the legacy thread-shaped SQL shim but does
-    // not expose pragma(), so it must never be treated as a real SQLite index.
+    // The JSON fallback implements the thread-shaped SQL shim but does not
+    // expose pragma(), so it must never be treated as a real SQLite index.
     if (typeof db.pragma === 'function') {
       this.knowledgeSqlite = {
         exec: (sql) => db.exec(sql),
@@ -373,6 +373,7 @@ export class LocalThreadStore implements ThreadStore {
         thread_id TEXT PRIMARY KEY,
         tenant_id TEXT NOT NULL DEFAULT 'default',
         title TEXT NOT NULL DEFAULT '',
+        has_workspace INTEGER NOT NULL DEFAULT 1,
         workspace_root TEXT NOT NULL DEFAULT '',
         status TEXT NOT NULL DEFAULT 'active',
         turn_count INTEGER NOT NULL DEFAULT 0,
@@ -599,6 +600,7 @@ export class LocalThreadStore implements ThreadStore {
         ON thread_working_sets(tenant_id, thread_id);
     `);
     this.addColumnIfMissing('threads', 'tenant_id', `TEXT NOT NULL DEFAULT '${DEFAULT_TENANT_ID}'`);
+    this.addColumnIfMissing('threads', 'has_workspace', 'INTEGER NOT NULL DEFAULT 1');
     this.addColumnIfMissing('threads', 'parent_thread_id', 'TEXT');
     this.addColumnIfMissing('threads', 'agent_nickname', 'TEXT');
     this.addColumnIfMissing('threads', 'agent_role', 'TEXT');
@@ -736,13 +738,14 @@ export class LocalThreadStore implements ThreadStore {
   async createThread(meta: ThreadMeta): Promise<void> {
     this.db
       .prepare(
-        `INSERT INTO threads (thread_id, tenant_id, title, workspace_root, status, turn_count, created_at, updated_at, archived_at, ephemeral, tags, parent_thread_id, agent_nickname, agent_role, mode, task_preset)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO threads (thread_id, tenant_id, title, has_workspace, workspace_root, status, turn_count, created_at, updated_at, archived_at, ephemeral, tags, parent_thread_id, agent_nickname, agent_role, mode, task_preset)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         meta.threadId,
         this.tenantId,
         meta.title,
+        meta.hasWorkspace === false ? 0 : 1,
         meta.workspaceRoot,
         meta.status,
         meta.turnCount,
@@ -799,9 +802,6 @@ export class LocalThreadStore implements ThreadStore {
       .prepare('DELETE FROM threads WHERE thread_id = ? AND tenant_id = ?')
       .run(threadId, this.tenantId);
     await fs.rm(this.rolloutPath(threadId), { force: true });
-    if (this.tenantId === DEFAULT_TENANT_ID) {
-      await fs.rm(this.legacyRolloutPath(threadId), { force: true });
-    }
   }
 
   async updateThreadMetadata(
@@ -809,12 +809,16 @@ export class LocalThreadStore implements ThreadStore {
     patch: Partial<
       Pick<
         ThreadMeta,
-        'title' | 'workspaceRoot' | 'status' | 'turnCount' | 'updatedAt' | 'tags' | 'mode' | 'taskPreset'
+        'title' | 'hasWorkspace' | 'workspaceRoot' | 'status' | 'turnCount' | 'updatedAt' | 'tags' | 'mode' | 'taskPreset'
       >
     >,
   ): Promise<void> {
     const sets: string[] = [];
     const params: unknown[] = [];
+    if (patch.hasWorkspace !== undefined) {
+      sets.push('has_workspace = ?');
+      params.push(patch.hasWorkspace ? 1 : 0);
+    }
     if (patch.workspaceRoot !== undefined) {
       sets.push('workspace_root = ?');
       params.push(patch.workspaceRoot);
@@ -877,7 +881,7 @@ export class LocalThreadStore implements ThreadStore {
     },
   ): Promise<ThreadItem[]> {
     const thread = await this.getThread(threadId);
-    const rolloutPath = await this.readableRolloutPath(threadId);
+    const rolloutPath = this.rolloutPath(threadId);
     let content: string;
     try {
       content = await fs.readFile(rolloutPath, 'utf-8');
@@ -968,7 +972,7 @@ export class LocalThreadStore implements ThreadStore {
   }
 
   async getLastCheckpoint(threadId: ThreadId): Promise<Checkpoint | null> {
-    const rolloutPath = await this.readableRolloutPath(threadId);
+    const rolloutPath = this.rolloutPath(threadId);
     let content: string;
     try {
       content = await fs.readFile(rolloutPath, 'utf-8');
@@ -1031,13 +1035,7 @@ export class LocalThreadStore implements ThreadStore {
     const row = this.db.prepare('SELECT value FROM settings WHERE key = ?').get(scopedKey) as
       | { value?: string }
       | undefined;
-    const fallbackRow =
-      !row && this.tenantId === DEFAULT_TENANT_ID && scopedKey !== key
-        ? (this.db.prepare('SELECT value FROM settings WHERE key = ?').get(key) as
-            | { value?: string }
-            | undefined)
-        : undefined;
-    const source = row ?? fallbackRow;
+    const source = row;
     if (!source?.value) return null;
     try {
       return JSON.parse(source.value) as T;
@@ -1324,7 +1322,7 @@ export class LocalThreadStore implements ThreadStore {
     afterLines: number;
     removedItems: number;
   }> {
-    const rolloutPath = await this.readableRolloutPath(threadId);
+    const rolloutPath = this.rolloutPath(threadId);
     let content: string;
     try {
       content = await fs.readFile(rolloutPath, 'utf-8');
@@ -1834,20 +1832,6 @@ export class LocalThreadStore implements ThreadStore {
     return path.join(this.tenantRolloutDir(), `${threadId}.jsonl`);
   }
 
-  private legacyRolloutPath(threadId: ThreadId): string {
-    return path.join(this.dataDir, 'rollouts', `${threadId}.jsonl`);
-  }
-
-  private async readableRolloutPath(threadId: ThreadId): Promise<string> {
-    const current = this.rolloutPath(threadId);
-    try {
-      await fs.access(current);
-      return current;
-    } catch {
-      return this.tenantId === DEFAULT_TENANT_ID ? this.legacyRolloutPath(threadId) : current;
-    }
-  }
-
   private settingKey(key: string): string {
     if (key === 'storage.schemaVersion' || key === 'auth.tokens.v1') return key;
     return `tenant:${this.tenantId}:${key}`;
@@ -1860,6 +1844,7 @@ function rowToMeta(row: Record<string, unknown>): ThreadMeta {
     threadId: row.thread_id as string,
     tenantId: (row.tenant_id as string | null | undefined) ?? DEFAULT_TENANT_ID,
     title: row.title as string,
+    hasWorkspace: (row.has_workspace as number | undefined) !== 0,
     workspaceRoot: row.workspace_root as string,
     status: row.status as ThreadMeta['status'],
     turnCount: row.turn_count as number,

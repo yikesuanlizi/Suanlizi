@@ -2,7 +2,7 @@ import type { AccessPolicyConfig, ThreadRunConfigOverrides } from '@suanlizi/pro
 
 export type ThreadConfigOverrides = Pick<
   ThreadRunConfigOverrides,
-  'provider' | 'model' | 'baseUrl' | 'modelContextTokens' | 'modelMaxOutputTokens' | 'permissions' | 'reasoningEffort' | 'runProfile' | 'compactionThreshold'
+  'provider' | 'model' | 'baseUrl' | 'modelContextTokens' | 'modelMaxOutputTokens' | 'permissions' | 'reasoningEffort' | 'compactionThreshold'
 >;
 
 export interface ThreadConfigResponse {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isLegacyGuessedProviderIcon, matchingProviderTabFavicon, pageDeclaredIconUrl, validProviderIconUrl } from './providerFavicon.js';
+import { isGuessedProviderIcon, matchingProviderTabFavicon, pageDeclaredIconUrl, validProviderIconUrl } from './providerFavicon.js';
 
 describe('provider favicon', () => {
   it('matches the API site rather than the first visible unrelated tab', () => {
@@ -18,8 +18,8 @@ describe('provider favicon', () => {
     expect(validProviderIconUrl('data:image/png;base64,aGVsbG8=')).toBe(true);
   });
   it('only replaces the old guessed API favicon when a real tab icon is available', () => {
-    expect(isLegacyGuessedProviderIcon('https://poolai.chat/v1', 'https://poolai.chat/favicon.ico')).toBe(true);
-    expect(isLegacyGuessedProviderIcon('https://poolai.chat/v1', 'https://poolai.chat/poolai-logo.svg')).toBe(false);
+    expect(isGuessedProviderIcon('https://poolai.chat/v1', 'https://poolai.chat/favicon.ico')).toBe(true);
+    expect(isGuessedProviderIcon('https://poolai.chat/v1', 'https://poolai.chat/poolai-logo.svg')).toBe(false);
   });
   it('accepts any icon-bearing rel token, not only two fixed values', () => {
     for (const rel of ['shortcut icon', 'mask-icon', 'apple-touch-icon-precomposed', 'fluid-icon', 'ICON']) {

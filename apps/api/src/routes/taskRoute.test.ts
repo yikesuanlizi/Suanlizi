@@ -554,15 +554,13 @@ describe('taskRoute P0', () => {
     const store = new FakeTaskStore();
     await store.createTask(makeTask({ id: 'goal-1', threadId: 'thread-1', origin: 'explicit_goal' }));
     await store.createTask(makeTask({ id: 'shadow-1', threadId: 'thread-1', origin: 'harness_shadow' }));
-    // Legacy data without origin is interpreted as a harness shadow as well.
-    await store.createTask(makeTask({ id: 'legacy-1', threadId: 'thread-2' }));
 
     const goals = await invoke(store, 'GET', '/api/tasks?origin=explicit_goal');
     expect(goals.statusCode).toBe(200);
     expect((goals.body as { tasks: Task[] }).tasks.map((task) => task.id)).toEqual(['goal-1']);
 
     const shadows = await invoke(store, 'GET', '/api/tasks?origin=harness_shadow');
-    expect((shadows.body as { tasks: Task[] }).tasks.map((task) => task.id).sort()).toEqual(['legacy-1', 'shadow-1']);
+    expect((shadows.body as { tasks: Task[] }).tasks.map((task) => task.id)).toEqual(['shadow-1']);
 
     const invalid = await invoke(store, 'GET', '/api/tasks?origin=ordinary_task');
     expect(invalid.statusCode).toBe(400);

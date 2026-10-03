@@ -598,9 +598,9 @@ export class BrowserViewManager {
   }
 
   private tabsForTask(taskId: string): ManagedView[] {
-    // A browser page is never implicitly claimed across threads. Older tabs
-    // without a scope remain user-visible legacy state, but cannot become an
-    // agent target until the renderer recreates them with an explicit scope.
+    // A browser page is never implicitly claimed across threads. Tabs without
+    // a scope remain user-visible, but cannot become an agent target until the
+    // renderer recreates them with an explicit scope.
     return [...this.views.values()].filter((managed) => managed.threadId === taskId);
   }
 

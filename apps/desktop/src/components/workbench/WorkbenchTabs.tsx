@@ -7,6 +7,10 @@ export type UtilityWorkbenchTabKind = 'files' | 'browser' | 'terminal';
 export type TerminalUtilityWorkbenchTab = `terminal:${string}`;
 export type UtilityWorkbenchTab = 'files' | 'browser' | TerminalUtilityWorkbenchTab;
 export type WorkbenchTab = PrimaryWorkbenchTab | UtilityWorkbenchTab;
+export type PinnableWorkbenchTab = 'activity' | 'agents';
+export function isPinnableWorkbenchTab(tab: unknown): tab is PinnableWorkbenchTab {
+  return tab === 'activity' || tab === 'agents';
+}
 
 let terminalTabSequence = 0;
 
@@ -31,6 +35,8 @@ export function WorkbenchTabs({
   openUtilityTabs,
   onOpenUtilityTab,
   onCloseUtilityTab,
+  pinnedTabs = [],
+  onTogglePinnedTab,
   runningAgentCount,
   utilitiesEnabled = true,
   showOps = false,
@@ -41,6 +47,8 @@ export function WorkbenchTabs({
   openUtilityTabs: UtilityWorkbenchTab[];
   onOpenUtilityTab(tab: UtilityWorkbenchTabKind): UtilityWorkbenchTab;
   onCloseUtilityTab(tab: UtilityWorkbenchTab): void;
+  pinnedTabs?: PinnableWorkbenchTab[];
+  onTogglePinnedTab?(tab: PinnableWorkbenchTab): void;
   runningAgentCount: number;
   utilitiesEnabled?: boolean;
   showOps?: boolean;
@@ -130,22 +138,42 @@ export function WorkbenchTabs({
     <>
     <div className="workbenchTabs" role="tablist" aria-label={zh ? '工作台' : 'Workbench'}>
       <div className="workbenchPrimaryTabs">
-        {tabs.map(tab => (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            className={activeTab === tab.id ? 'active' : ''}
-            aria-selected={activeTab === tab.id}
-            aria-label={tab.label}
-            title={tab.label}
-            onClick={() => onTabChange(tab.id)}
-          >
-            <Icon name={tab.icon} />
-            <span>{tab.label}</span>
-            {tab.badge != null ? <span className="workbenchTabBadge">{tab.badge}</span> : null}
-          </button>
-        ))}
+        {tabs.map(tab => {
+          const pinnable = isPinnableWorkbenchTab(tab.id);
+          const pinned = pinnable && pinnedTabs.includes(tab.id as PinnableWorkbenchTab);
+          return (
+            <span className="workbenchPrimaryTabWrap" key={tab.id}>
+              <button
+                type="button"
+                role="tab"
+                className={activeTab === tab.id ? 'active' : ''}
+                aria-selected={activeTab === tab.id}
+                aria-label={tab.label}
+                title={tab.label}
+                onClick={() => onTabChange(tab.id)}
+              >
+                <Icon name={tab.icon} />
+                <span>{tab.label}</span>
+                {tab.badge != null ? <span className="workbenchTabBadge">{tab.badge}</span> : null}
+              </button>
+              {pinnable && onTogglePinnedTab ? (
+                <button
+                  className={`workbenchPrimaryTabPin${pinned ? ' pinned' : ''}`}
+                  type="button"
+                  aria-pressed={pinned}
+                  aria-label={pinned ? `${tab.label}取消固定` : `${tab.label}固定`}
+                  title={pinned ? `取消固定${tab.label}` : `固定${tab.label}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onTogglePinnedTab(tab.id as PinnableWorkbenchTab);
+                  }}
+                >
+                  <Icon name={pinned ? 'pin' : 'pinOff'} />
+                </button>
+              ) : null}
+            </span>
+          );
+        })}
       </div>
       <div ref={dynamicTabsScrollerRef} className="workbenchTabsScrollable" onScroll={handleTabsScroll} onWheel={handleWheel}>
         <div className="workbenchUtilityTabs">

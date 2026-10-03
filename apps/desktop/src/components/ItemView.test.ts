@@ -8,9 +8,9 @@ import { AssistantTurnView, ItemView, TurnPreparingIndicator, resolveElapsedMs, 
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-it('keeps transcript errors visible after legacy dismissal rules', () => {
+it('keeps transcript errors visible after dismissal rules', () => {
   const styles = readFileSync(join(here, '..', 'styles.css'), 'utf-8');
-  const selector = '.appShell :is(.message.error, .assistantTurnError, .childActivityError, .workspaceFileError, .gitNexusError, .gitNexusResultError) {';
+  const selector = '.appShell :is(.message.error, .assistantTurnError, .childActivityError, .workspaceFileError) {';
   const ruleStart = styles.lastIndexOf(selector);
   const ruleEnd = styles.indexOf('}', ruleStart);
   const finalRule = styles.slice(ruleStart, ruleEnd);

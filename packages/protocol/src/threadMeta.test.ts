@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { threadMetaSchema, threadModeSchema, threadTaskPresetSchema } from './schemas.js';
 import type { ThreadMeta, ThreadMode, ThreadTaskPreset } from './types.js';
 
-const legacyThread: ThreadMeta = {
+const baseThread: ThreadMeta = {
   threadId: 'thread-1',
   title: '旧线程',
   workspaceRoot: 'D:/workspace',
@@ -16,18 +16,18 @@ const legacyThread: ThreadMeta = {
 };
 
 describe('Thread Ops entrance metadata', () => {
-  it('accepts chat and ops modes without changing runProfile', () => {
+  it('accepts chat and ops modes', () => {
     const mode: ThreadMode = 'ops';
     const taskPreset: ThreadTaskPreset = 'ops';
-    const parsed = threadMetaSchema.parse({ ...legacyThread, mode, taskPreset });
+    const parsed = threadMetaSchema.parse({ ...baseThread, mode, taskPreset });
     expect(parsed.mode).toBe('ops');
     expect(parsed.taskPreset).toBe('ops');
   });
 
-  it('keeps legacy thread metadata compatible and permits clearing the preset', () => {
-    expect(threadMetaSchema.parse(legacyThread)).toEqual(legacyThread);
+  it('keeps required thread metadata and permits clearing the preset', () => {
+    expect(threadMetaSchema.parse(baseThread)).toEqual(baseThread);
     expect(
-      threadMetaSchema.parse({ ...legacyThread, mode: 'chat', taskPreset: null }),
+      threadMetaSchema.parse({ ...baseThread, mode: 'chat', taskPreset: null }),
     ).toMatchObject({
       mode: 'chat',
       taskPreset: null,
@@ -37,6 +37,6 @@ describe('Thread Ops entrance metadata', () => {
   it('rejects unsupported modes and task presets', () => {
     expect(threadModeSchema.safeParse('runtime_os').success).toBe(false);
     expect(threadTaskPresetSchema.safeParse('incident_response').success).toBe(false);
-    expect(() => threadMetaSchema.parse({ ...legacyThread, mode: 'runtime_os' })).toThrow();
+    expect(() => threadMetaSchema.parse({ ...baseThread, mode: 'runtime_os' })).toThrow();
   });
 });

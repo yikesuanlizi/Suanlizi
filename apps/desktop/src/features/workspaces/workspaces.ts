@@ -3,7 +3,7 @@ import type { Locale } from '../../config/config.js';
 import type { ThreadMeta } from '../../shared/types.js';
 import { formatSuanliziErrorMessage } from '@suanlizi/protocol';
 
-export const WORKSPACE_ROOTS_STORAGE_KEY = 'nexus.workspaceRoots.v1';
+export const WORKSPACE_ROOTS_STORAGE_KEY = 'suanlizi.workspaceRoots.v1';
 export const MAX_REMEMBERED_WORKSPACE_ROOTS = 30;
 
 export type ThreadActivityState = 'idle' | 'running' | 'unread';
@@ -116,7 +116,7 @@ export function forgetWorkspaceRoot(current: readonly string[], root: string): s
   return saveRememberedWorkspaceRoots(current.filter((item) => workspaceKey(item) !== key));
 }
 
-/** 移除工作区时要删除的线程：根目录匹配的对话，以及这些对话的子线程。 */
+/** 移除工作区时只按显式工作区线程删除；路径仅是位置数据。 */
 export function threadsInWorkspace(threads: readonly ThreadMeta[], workspaceRoot: string): ThreadMeta[] {
   const target = workspaceKey(workspaceRoot);
   if (!target) return [];
@@ -135,13 +135,18 @@ export function threadsInWorkspace(threads: readonly ThreadMeta[], workspaceRoot
     for (const child of childrenByParent.get(thread.threadId) ?? []) visit(child);
   };
   for (const thread of threads) {
+    if (thread.hasWorkspace === false) continue;
     if (workspaceKey(thread.workspaceRoot ?? '') === target) visit(thread);
   }
   return threads.filter((thread) => selected.has(thread.threadId));
 }
 
 export function isPlainChatThread(thread: ThreadMeta): boolean {
-  return !thread.parentThreadId && (!normalizeWorkspaceRoot(thread.workspaceRoot) || thread.tags?.conversationKind === 'chat');
+  // hasWorkspace=false 时 workspaceRoot 只能当残留位置数据，不能再归入工作区。
+  return !thread.parentThreadId
+    && (thread.hasWorkspace === false
+      || !normalizeWorkspaceRoot(thread.workspaceRoot)
+      || thread.tags?.conversationKind === 'chat');
 }
 
 export function buildPlainChatThreads(options: {
@@ -185,9 +190,9 @@ export function buildWorkspaceThreadGroups(options: {
   };
 
   for (const thread of options.threads) {
-    if (thread.parentThreadId) continue;
-    if (isPlainChatThread(thread)) continue;
-    const root = normalizeWorkspaceRoot(thread.workspaceRoot) || currentRoot;
+    if (thread.parentThreadId || isPlainChatThread(thread)) continue;
+    const root = normalizeWorkspaceRoot(thread.workspaceRoot);
+    if (!root) continue;
     ensureGroup(root).threads.push(thread);
   }
 

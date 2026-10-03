@@ -7,7 +7,8 @@ import type { OpsTaskSession } from '@suanlizi/protocol';
 import type { OpsAnchorAction } from './OpsTaskAnchorCard.js';
 import type { ExternalPreviewRequest } from './WorkspaceFilesPanel.js';
 import { WorkspaceWorkbench } from './workbench/WorkspaceWorkbench.js';
-import type { WorkbenchTab } from './workbench/WorkbenchTabs.js';
+import type { RunConfig } from '../config/config.js';
+import { isPinnableWorkbenchTab, type PinnableWorkbenchTab, type WorkbenchTab } from './workbench/WorkbenchTabs.js';
 
 export type RightPaneTab = WorkbenchTab;
 
@@ -19,6 +20,7 @@ export function RightPane({
   busy,
   threadChildren,
   locale,
+  config,
   workspaceRoot,
   onTabChange,
   onToggleMemoryExcluded,
@@ -48,6 +50,7 @@ export function RightPane({
   busy: boolean;
   threadChildren: ThreadChildInfo[];
   locale: Locale;
+  config?: RunConfig;
   workspaceRoot: string;
   onTabChange?(tab: RightPaneTab): void;
   onToggleMemoryExcluded?(excluded: boolean): void;
@@ -77,6 +80,7 @@ export function RightPane({
   const [activeTab, setActiveTab] = useState<RightPaneTab>(() => (
     hasActiveThread ? (initialActiveTab ?? readStoredRightPaneTab(threadScope)) : 'activity'
   ));
+  const [pinnedTabs, setPinnedTabs] = useState<PinnableWorkbenchTab[]>(() => readStoredPinnedTabs(threadScope));
   const contextKey = `${activeThreadId}::${workspaceRoot}`;
   const previousContextKeyRef = useRef<string | null>(null);
   const contextChanged = previousContextKeyRef.current !== null && previousContextKeyRef.current !== contextKey;
@@ -87,6 +91,7 @@ export function RightPane({
     if (previous === contextKey) return;
     const nextTab = threadScope ? readStoredRightPaneTab(threadScope) : 'activity';
     setActiveTab(nextTab);
+    setPinnedTabs(readStoredPinnedTabs(threadScope));
     onTabChange?.(nextTab);
   }, [contextKey, onTabChange, threadScope]);
 
@@ -98,6 +103,14 @@ export function RightPane({
     } catch { /* best-effort local UI preference */ }
     onTabChange?.(tab);
   }, [onTabChange, threadScope]);
+
+  const handleTogglePinnedTab = useCallback((tab: PinnableWorkbenchTab) => {
+    const nextPinned = pinnedTabs.includes(tab)
+      ? pinnedTabs.filter((item) => item !== tab)
+      : [...pinnedTabs, tab];
+    setPinnedTabs(nextPinned);
+    writeStoredPinnedTabs(nextPinned, threadScope);
+  }, [pinnedTabs, threadScope]);
 
   return (
     <WorkspaceWorkbench
@@ -115,6 +128,10 @@ export function RightPane({
       externalPreviewRequest={externalPreviewRequest}
       activeTab={contextChanged ? 'activity' : activeTab}
       onTabChange={handleTabChange}
+      pinnedTabs={config?.workbenchPinnedTabs === true
+        ? ['activity', 'agents']
+        : config?.workbenchPinnedTabs === false ? [] : pinnedTabs}
+      onTogglePinnedTab={handleTogglePinnedTab}
       onJumpToMonitor={onJumpToMonitor}
       onInterrupt={onInterrupt}
       onResume={onResume}
@@ -131,8 +148,33 @@ export function RightPane({
   );
 }
 
+function pinnedTabsStorageKey(scope: string): string {
+  return `suanlizi.workbench.pinnedTabs:${encodeURIComponent(scope)}`;
+}
+
+function readStoredPinnedTabs(scope?: string): PinnableWorkbenchTab[] {
+  const normalized = scope?.trim();
+  if (!normalized) return ['activity', 'agents'];
+  try {
+    const raw = localStorage.getItem(pinnedTabsStorageKey(normalized));
+    if (!raw) return ['activity', 'agents'];
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? parsed.filter(isPinnableWorkbenchTab) : ['activity', 'agents'];
+  } catch {
+    return ['activity', 'agents'];
+  }
+}
+
+function writeStoredPinnedTabs(tabs: PinnableWorkbenchTab[], scope?: string): void {
+  const normalized = scope?.trim();
+  if (!normalized) return;
+  try {
+    localStorage.setItem(pinnedTabsStorageKey(normalized), JSON.stringify([...new Set(tabs)]));
+  } catch { /* best-effort local UI preference */ }
+}
+
 function rightPaneStorageKey(scope: string): string {
-  return `nexus.rightPane.tab:${encodeURIComponent(scope)}`;
+  return `suanlizi.rightPane.tab:${encodeURIComponent(scope)}`;
 }
 
 function readStoredRightPaneTab(scope?: string): RightPaneTab {

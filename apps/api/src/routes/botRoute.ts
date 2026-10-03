@@ -22,7 +22,6 @@ import {
   DEFAULT_WEIXIN_BRIDGE_URL,
   mergeBotConfig,
   normalizeBotConfig,
-  normalizeRuntimeWeixinBridgeUrl,
   publicBotConfig,
   type BotConfig,
 } from '../config/botConfig.js';
@@ -667,10 +666,9 @@ function normalizeUsageForEvent(value: unknown): Usage | null {
     : null;
 }
 
-// 读取存储的机器人配置（运行时规范化微信桥接 URL）
-// — Chinese: read stored bot config (runtime normalize WeChat bridge URL)
+// 读取存储的机器人配置。
 export async function readBotConfig(store: ThreadStore): Promise<BotConfig> {
-  return normalizeRuntimeWeixinBridgeUrl(normalizeBotConfig(await store.getSetting<unknown>(BOT_CONFIG_KEY) ?? DEFAULT_BOT_CONFIG));
+  return normalizeBotConfig(await store.getSetting<unknown>(BOT_CONFIG_KEY) ?? DEFAULT_BOT_CONFIG);
 }
 
 // 创建微信客户端（优先使用选项中的 createWeixinClient，否则使用默认的 HTTP 桥接客户端）

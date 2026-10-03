@@ -47,16 +47,16 @@ describe('configStateReducer', () => {
     state = configStateReducer(state, {
       type: 'thread.selected',
       threadId: 'thread-1',
-      config: { model: 'm1', provider: 'p1', runProfile: 'cache_first' },
+      config: { model: 'm1', provider: 'p1' },
     });
     state = configStateReducer(state, {
       type: 'thread.unset',
-      keys: ['model', 'runProfile'],
+      keys: ['model', 'modelContextTokens'],
     });
 
     expect(state.activeThreadOverrides.model).toBeUndefined();
     expect(state.activeThreadOverrides.provider).toBe('p1');
-    expect(state.activeThreadOverrides.runProfile).toBeUndefined();
+    expect(state.activeThreadOverrides.modelContextTokens).toBeUndefined();
   });
 
   it('new-thread and active-thread overrides should not interfere with each other', () => {

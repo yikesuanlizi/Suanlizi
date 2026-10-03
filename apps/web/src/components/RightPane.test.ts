@@ -175,7 +175,7 @@ describe('RightPane', () => {
         {
           id: 'mcp-1',
           type: 'mcp_tool_call',
-          server: 'gitnexus',
+          server: 'example-mcp',
           tool: 'search_code',
           status: 'completed',
           timestamp: '2026-07-23T00:00:00.000Z',
@@ -213,7 +213,7 @@ describe('RightPane', () => {
     expect(html).toContain('最近事件');
     expect(html).toContain('Suanlizi 主控 Agent');
     expect(html).toContain('MCP');
-    expect(html).toContain('gitnexus / search_code');
+    expect(html).toContain('example-mcp / search_code');
     expect(html).toContain('Skill');
     expect(html).toContain('frontend-design');
     expect(html).toContain('Shell');

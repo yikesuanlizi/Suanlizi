@@ -147,41 +147,6 @@ export function LiveActivityHud({
             ) : null}
           </div>
 
-          <div className="liveActivityControls">
-            {interruptCap ? (
-              <button
-                type="button"
-                className="controlButton controlButtonDanger"
-                disabled={!interruptCap.enabled}
-                title={interruptCap.reason}
-                onClick={onInterrupt}
-              >
-                {zh ? '中断' : 'Interrupt'}
-              </button>
-            ) : null}
-            {resumeCap ? (
-              <button
-                type="button"
-                className="controlButton"
-                disabled={!resumeCap.enabled}
-                title={resumeCap.reason}
-                onClick={onResume}
-              >
-                {zh ? '恢复' : 'Resume'}
-              </button>
-            ) : null}
-            {rollbackCap ? (
-              <button
-                type="button"
-                className="controlButton controlButtonWarning"
-                disabled={!rollbackCap.enabled}
-                title={rollbackCap.reason}
-                onClick={() => onRollback?.(rollbackCap.checkpointIds?.[rollbackCap.checkpointIds.length - 1])}
-              >
-                {zh ? '回滚' : 'Rollback'}
-              </button>
-            ) : null}
-          </div>
 
           {recentEvents.length > 0 ? (
             <div className="liveActivityRecent">

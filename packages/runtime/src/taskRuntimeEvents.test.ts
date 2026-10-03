@@ -11,7 +11,6 @@
  *  - 不发完整 system prompt
  *  - 不发完整 chunk content
  *  - 普通 /turn 不会进入 harness
- *  - runProfile 不被事件触碰（仍是 runtime_os）
  */
 import { describe, expect, it, vi } from 'vitest';
 import type { ThreadEvent, ThreadId } from '@suanlizi/protocol';
@@ -96,7 +95,6 @@ function buildAgent(threadId: ThreadId, events: ThreadEvent[]) {
       sandbox: { level: 'workspace_write', workspaceRoot: process.cwd() },
       model: new StubModel() as never,
       store: store as unknown as ThreadStore,
-      runProfile: 'runtime_os',
       locale: 'zh',
     },
     stateManager,
@@ -208,7 +206,6 @@ describe('task.context.updated（钉子 3）', () => {
       userInput: { type: 'text', text: 'hi' },
       workspaceRoot: process.cwd(),
       locale: 'zh',
-      runProfile: 'runtime_os',
       webSearchMode: 'auto',
       runtimeState: { threadId: 'thread-ctx-emit', status: 'idle', resumable: false, stale: false, checkpoint: null },
       checkpoint: null as unknown as Checkpoint,
@@ -270,7 +267,6 @@ describe('task.runtime.updated on normal /turn（钉子 4）', () => {
 //
 // 这里直接验证 TaskHarnessEngine 在 continuation 时调用 onStateChange，
 // agent.ts 的 onHarnessStateChange 会据此 emit task.loop.updated。
-// runProfile 字段在 agent.ts 中固定从 this.config.runProfile 取，runtime_os 不被事件触碰。
 
 class FakeHarnessStore {
   private tags: Record<string, string> = {};
@@ -297,7 +293,7 @@ class FakeHarnessStore {
 }
 
 describe('task.loop.updated on harness continuation（钉子 5）', () => {
-  it('harness 第一次状态变化是 active，最终是 satisfied；runProfile 仍是 runtime_os', async () => {
+  it('harness 第一次状态变化是 active，最终是 satisfied', async () => {
     const statuses: string[] = [];
     const onStateChange: HarnessStateChangeCallback = ({ state }) => {
       statuses.push(state.status);
@@ -351,8 +347,6 @@ describe('task.loop.updated on harness continuation（钉子 5）', () => {
     expect(statuses.at(-1)).toBe('satisfied');
 
     // 模拟 agent.ts 的 task.loop.updated emit 约束：
-    // runProfile 字段直接从 this.config.runProfile 取，与状态机无关
-    // 这里仅校验 state 数据完整 — runProfile 由 normalizeRunProfile 兜底为 runtime_os
     expect(statuses.length).toBeGreaterThan(0);
   });
 });

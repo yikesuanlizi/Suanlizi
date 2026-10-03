@@ -60,11 +60,10 @@ export interface TaskLifecycleAgent {
       maxContinuations?: number;
       signal?: AbortSignal;
       harnessRunId?: string;
-      suspendSignal?: AbortSignal;
       workflow?: HarnessWorkflowOptions;
     },
   ): Promise<HarnessResult>;
-  resumeHarness(threadId: ThreadId, options?: { signal?: AbortSignal; suspendSignal?: AbortSignal; harnessRunId?: string; workflow?: HarnessWorkflowOptions }): Promise<HarnessResult>;
+  resumeHarness(threadId: ThreadId, options?: { signal?: AbortSignal; harnessRunId?: string; workflow?: HarnessWorkflowOptions }): Promise<HarnessResult>;
   interrupt(threadId: ThreadId, requestId?: string): boolean;
 }
 
@@ -188,15 +187,10 @@ export function createTaskLifecycleService(deps: TaskLifecycleDeps): TaskLifecyc
       throw new TaskError(
         'TASK_INVALID_TRANSITION',
         `Goal lifecycle is available only for explicitly created Goals (task ${task.id})`,
-        { taskId: task.id, origin: task.origin ?? 'harness_shadow' },
+        { taskId: task.id, origin: task.origin },
       );
     }
     return task;
-  }
-
-  /** Task.origin 为兼容旧数据可选；只有精确 Goal 来源才允许动态工作流注入。 */
-  function effectiveTaskOrigin(task: Pick<Task, 'origin'>): TaskOrigin {
-    return task.origin === 'explicit_goal' ? 'explicit_goal' : 'harness_shadow';
   }
 
   async function currentRun(task: Task): Promise<TaskRun | null> {
@@ -330,8 +324,6 @@ export function createTaskLifecycleService(deps: TaskLifecycleDeps): TaskLifecyc
     acceptanceCriteria?: string[];
     /** 新建 Run 时由调用方预生成并写入 run.harnessRunId，保证 registry 与 DB 对齐。 */
     harnessRunId?: string;
-    /** P2 生命周期修复（§21）：pause 的 suspend 意图信号（pause 调用点传新 controller.signal）。 */
-    suspendSignal?: AbortSignal;
   }): Promise<TaskHarnessRunHandle> {
     const agent = await getAgent(params.threadId);
     const harnessRunId = params.harnessRunId ?? harnessRunIdFactory();
@@ -355,7 +347,6 @@ export function createTaskLifecycleService(deps: TaskLifecycleDeps): TaskLifecyc
         params.resume
           ? agent.resumeHarness(params.threadId, {
               signal,
-              suspendSignal: params.suspendSignal,
               harnessRunId,
               workflow,
             })
@@ -363,7 +354,6 @@ export function createTaskLifecycleService(deps: TaskLifecycleDeps): TaskLifecyc
               goal: params.goal,
               acceptanceCriteria: params.acceptanceCriteria,
               signal,
-              suspendSignal: params.suspendSignal,
               harnessRunId,
               workflow,
             }),
@@ -427,7 +417,7 @@ export function createTaskLifecycleService(deps: TaskLifecycleDeps): TaskLifecyc
     await launchGoalHarness({
       taskId,
       runId: run.id,
-      origin: effectiveTaskOrigin(runningTask),
+      origin: runningTask.origin,
       threadId: runningTask.threadId as ThreadId,
       resume: false,
       userInput: textInput(runningTask.objective),
@@ -472,7 +462,7 @@ export function createTaskLifecycleService(deps: TaskLifecycleDeps): TaskLifecyc
     await launchGoalHarness({
       taskId,
       runId: running.id,
-      origin: effectiveTaskOrigin(task),
+      origin: task.origin,
       threadId: task.threadId as ThreadId,
       resume: true,
       // P2 生命周期修复（§21）：显式传回原 harnessRunId。缺省时 launchGoalHarness 会登记
@@ -542,7 +532,7 @@ export function createTaskLifecycleService(deps: TaskLifecycleDeps): TaskLifecyc
     await launchGoalHarness({
       taskId,
       runId: newRun.id,
-      origin: effectiveTaskOrigin(runningTask),
+      origin: runningTask.origin,
       threadId: runningTask.threadId as ThreadId,
       resume: false,
       userInput: textInput(runningTask.objective),
@@ -577,7 +567,7 @@ export function createTaskLifecycleService(deps: TaskLifecycleDeps): TaskLifecyc
     await launchGoalHarness({
       taskId,
       runId: newRun.id,
-      origin: effectiveTaskOrigin(runningTask),
+      origin: runningTask.origin,
       threadId: runningTask.threadId as ThreadId,
       resume: false,
       userInput: textInput(instruction),
@@ -608,7 +598,7 @@ export function createTaskLifecycleService(deps: TaskLifecycleDeps): TaskLifecyc
     await launchGoalHarness({
       taskId,
       runId: running.id,
-      origin: effectiveTaskOrigin(synced),
+      origin: synced.origin,
       threadId: synced.threadId as ThreadId,
       resume: false,
       userInput: textInput(answer),

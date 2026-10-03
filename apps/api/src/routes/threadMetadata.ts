@@ -36,16 +36,17 @@ export async function updateThreadTitle(store: ThreadStore, threadId: ThreadId, 
 // 处理 PATCH /api/threads/:id — 更新线程标题和/或标签
 // — Chinese: handle PATCH /api/threads/:id — update thread title and/or tags
 export async function handlePatchThread(req: IncomingMessage, res: ServerResponse, store: ThreadStore, threadId: ThreadId): Promise<void> {
-  const body = await readJson<{ title?: unknown; workspaceRoot?: unknown; tags?: unknown; mode?: unknown; taskPreset?: unknown }>(req);
+  const body = await readJson<{ title?: unknown; hasWorkspace?: unknown; workspaceRoot?: unknown; tags?: unknown; mode?: unknown; taskPreset?: unknown }>(req);
   const title = normalizeThreadTitlePatch(body);
+  const hasWorkspace = typeof body.hasWorkspace === 'boolean' ? body.hasWorkspace : undefined;
   const workspaceRoot = typeof body.workspaceRoot === 'string' ? body.workspaceRoot.trim() : undefined;
   const tags = normalizeThreadTagsPatch(body);
   const mode = body.mode === 'chat' || body.mode === 'ops' ? body.mode as ThreadMode : undefined;
-  const taskPreset = body.taskPreset === null || body.taskPreset === 'ops' || body.taskPreset === 'diagnose' || body.taskPreset === 'log_analysis'
+  const taskPreset = body.taskPreset === null || body.taskPreset === 'ops'
     ? (body.taskPreset === null ? null : 'ops') as ThreadTaskPreset | null
     : undefined;
-  if (!title && workspaceRoot === undefined && !tags && !mode && body.taskPreset === undefined) {
-    sendError(res, 400, 'Thread title, workspaceRoot, tags, mode, or taskPreset are required');
+  if (!title && hasWorkspace === undefined && workspaceRoot === undefined && !tags && !mode && body.taskPreset === undefined) {
+    sendError(res, 400, 'Thread title, hasWorkspace, workspaceRoot, tags, mode, or taskPreset are required');
     return;
   }
   if (body.mode !== undefined && !mode) {
@@ -63,6 +64,7 @@ export async function handlePatchThread(req: IncomingMessage, res: ServerRespons
   }
   await store.updateThreadMetadata(threadId, {
     ...(title ? { title } : {}),
+    ...(hasWorkspace !== undefined ? { hasWorkspace } : {}),
     ...(workspaceRoot !== undefined ? { workspaceRoot } : {}),
     ...(tags ? { tags: { ...(current.tags ?? {}), ...tags } } : {}),
     ...(mode ? { mode } : {}),

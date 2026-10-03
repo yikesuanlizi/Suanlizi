@@ -223,8 +223,6 @@ describe('ComposerBar', () => {
     expect(source).toContain("'folderOutline' : 'fileOutline'");
     expect(source).toContain(`<Icon name="fileOutline" />`);
     // 运行模式已收敛：不再有「缓存优先 / 长运行」下拉，压缩阈值改在运行参数页设置。
-    expect(source).not.toContain('runProfileSelect');
-    expect(source).not.toContain('runProfileLabel');
 
     // 图标系统已完全移除 FontAwesome：不允许任何实心映射或依赖回流
     expect(icons).not.toContain('fontAwesomeIcons');

@@ -1,21 +1,6 @@
 import type { CompactOptions } from '@suanlizi/memory';
 
-/**
- * 运行模式已收敛：不再提供「缓存优先 / 长运行」两档 profile。
- *
- * 两档的唯一实际差异是压缩时机与摘要策略，用一个用户可调的
- * 「上下文压缩阈值」表达即可，避免暴露无意义的运行模式选择。
- *
- * 历史配置里的 'cache_first' / 'runtime_os' / 'harness' 全部归一为同一策略，
- * 保证旧数据不会因为类型收紧而崩。
- */
-export type RunProfile = 'cache_first' | 'runtime_os';
-
-/** 归一化：任何历史值都落到统一策略，不再区分两档。 */
-export function normalizeRunProfile(_value?: unknown): RunProfile {
-  return 'runtime_os';
-}
-
+/** Runtime OS 是唯一的运行模式。 */
 /** 统一的压缩策略：LLM 摘要 + 固定软/硬阈值。 */
 export const COMPACTION_SOFT_RATIO = 0.5;
 export const COMPACTION_HARD_RATIO = 0.8;
@@ -36,7 +21,7 @@ export function normalizeCompactionThreshold(value: unknown): number {
  * 压缩选项：硬阈值 = 用户设置的压缩阈值；软阈值按比例前移到 0.625 * hard，
  * 这样“达到阈值就压缩”的直觉成立，同时在接近阈值时提前给出压力提示。
  */
-export function compactionOptionsForRunProfile(_profile?: RunProfile): Pick<CompactOptions, 'softCompactRatio' | 'hardCompactRatio' | 'strategy'> {
+export function defaultCompactionOptions(): Pick<CompactOptions, 'softCompactRatio' | 'hardCompactRatio' | 'strategy'> {
   return {
     softCompactRatio: COMPACTION_SOFT_RATIO,
     hardCompactRatio: COMPACTION_HARD_RATIO,
@@ -60,18 +45,17 @@ export function compactionOptionsForThreshold(
 }
 
 export function compactionOptionsForModelContext(
-  profile: RunProfile,
   modelContextTokens: number | undefined,
   compactionThreshold?: number,
 ): Pick<CompactOptions, 'maxTokens' | 'softCompactRatio' | 'hardCompactRatio' | 'strategy'> | Pick<CompactOptions, 'softCompactRatio' | 'hardCompactRatio' | 'strategy'> {
   const base = compactionThreshold === undefined
-    ? compactionOptionsForRunProfile(profile)
+    ? defaultCompactionOptions()
     : compactionOptionsForThreshold(compactionThreshold);
   const maxTokens = positiveInteger(modelContextTokens);
   return maxTokens ? { ...base, maxTokens } : base;
 }
 
-export function contextBudgetForRunProfile(_profile?: RunProfile): number {
+export function contextBudget(): number {
   return 8000;
 }
 

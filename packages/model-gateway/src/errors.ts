@@ -27,3 +27,24 @@ export function isModelRequestTimeoutError(error: unknown): error is ModelReques
       && typeof error === 'object'
       && (error as { code?: unknown }).code === 'MODEL_REQUEST_TIMEOUT');
 }
+
+/** 流式连接在 idle 窗口内没有收到任何帧；不等总超时，立即给出可识别终态。 */
+export class ModelStreamIdleTimeoutError extends Error {
+  readonly code = 'MODEL_STREAM_IDLE_TIMEOUT';
+  readonly detail?: string;
+
+  constructor(readonly idleTimeoutMs: number, options?: { cause?: unknown }) {
+    super(`Model stream was idle for more than ${idleTimeoutMs}ms`);
+    this.name = 'ModelStreamIdleTimeoutError';
+    if (options && 'cause' in options) {
+      (this as Error & { cause?: unknown }).cause = options.cause;
+    }
+  }
+}
+
+export function isModelStreamIdleTimeoutError(error: unknown): error is ModelStreamIdleTimeoutError {
+  return error instanceof ModelStreamIdleTimeoutError
+    || (Boolean(error)
+      && typeof error === 'object'
+      && (error as { code?: unknown }).code === 'MODEL_STREAM_IDLE_TIMEOUT');
+}

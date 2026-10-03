@@ -253,14 +253,13 @@ export class ToolRegistry {
         timeout,
         controller,
       );
-      // Truncate output
-      // 截断超出 maxOutputLength 的输出，并在 data 上附 truncation 元数据
-      const maxLen = tool.maxOutputLength ?? 50_000;
+      // Deterministic tool-result pruning keeps command heads and error tails
+      // while avoiding a model call for compaction.
+      // 中文注释：进入模型前先做无模型调用的首尾裁剪，避免巨型工具输出挤占上下文。
+      const maxLen = Math.min(tool.maxOutputLength ?? DEFAULT_TOOL_RESULT_LIMIT, DEFAULT_TOOL_RESULT_LIMIT);
       if (result.output.length > maxLen) {
         const originalLength = result.output.length;
-        result.output =
-          result.output.slice(0, maxLen) +
-          `\n... [truncated ${originalLength - maxLen} chars]`;
+        result.output = pruneToolOutput(result.output, maxLen);
         result.data = withTruncationMetadata(result.data, {
           originalLength,
           returnedLength: result.output.length,
@@ -329,6 +328,23 @@ const DEFAULT_TOOL_ALIASES = new Map<string, string>([
   ['web_open', 'web_search'],
 ]);
 
+/** 默认进入模型上下文的工具输出上限（Unicode code point）。 */
+const DEFAULT_TOOL_RESULT_LIMIT = 8_000;
+
+/** 太短的首尾窗口继续用旧的尾部截断，保证测试和错误信息稳定。 */
+function pruneToolOutput(output: string, maxOutputLength: number): string {
+  if (maxOutputLength < 200) {
+    return `${output.slice(0, maxOutputLength)}\n... [truncated ${output.length - maxOutputLength} chars]`;
+  }
+  const marker = '\n\n[... tool result middle pruned ...]\n\n';
+  const budget = Math.max(80, maxOutputLength - [...marker].length);
+  const headLength = Math.floor(budget * 0.6);
+  const tailLength = budget - headLength;
+  const codePoints = [...output];
+  const head = codePoints.slice(0, headLength).join('');
+  const tail = codePoints.slice(-tailLength).join('');
+  return `${head}${marker}${tail}`;
+}
 // 给工具结果 data 追加 truncation 元数据；data 不是对象则包成 { value, truncation }
 function withTruncationMetadata(
   data: unknown,

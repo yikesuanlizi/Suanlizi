@@ -76,10 +76,7 @@ function uniqueNonEmpty(values: readonly string[] | undefined): string[] {
   return [...new Set((values ?? []).map((value) => value.trim()).filter((value) => value.length > 0))];
 }
 
-/** 兼容旧数据：只有精确的 explicit_goal 是 Goal，其余缺失/非法来源一律按 Harness shadow 处理。 */
-export function effectiveTaskOrigin(task: Pick<Task, 'origin'>): TaskOrigin {
-  return task.origin === 'explicit_goal' ? 'explicit_goal' : 'harness_shadow';
-}
+
 
 /** Run 的字段形状校验：goal / workflow 的关联字段互斥（§14.8 子类型必须可区分）。 */
 function assertRunShape(input: {
@@ -134,7 +131,7 @@ export async function findActiveTask(
   });
   for (const task of listed ?? []) {
     if (task.threadId !== threadId) continue;
-    if (origin && effectiveTaskOrigin(task) !== origin) continue;
+    if (origin && task.origin !== origin) continue;
     if (isTaskTerminalState(task.status)) continue;
     return task;
   }
@@ -157,7 +154,7 @@ export interface CreateTaskWithRunInput {
   /** 协议占位，第一版固定 supervised（§14.11）。 */
   interactionMode?: TaskInteractionMode;
   /** 来源不可变：普通 Harness 留在影子记录，用户 Goal 显式写入。 */
-  origin?: TaskOrigin;
+  origin: TaskOrigin;
   /** 确定性 id 注入点（测试 / 上层 id 生成器）。 */
   ids?: { taskId?: string; runId?: string };
   now?: string;
@@ -190,7 +187,7 @@ export async function createTaskWithRun(
   assertRunShape(input);
 
   const now = input.now ?? nowIso();
-  const origin = input.origin ?? 'harness_shadow';
+  const origin = input.origin;
   const active = await findActiveTask(port, threadId, origin);
   if (active) {
     throw new TaskError(

@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 const here = dirname(fileURLToPath(import.meta.url));
 
 describe('light theme skin', () => {
-  it('defines a light semantic surface contract after the legacy component rules', () => {
+  it('defines a light semantic surface contract for semantic component surfaces', () => {
     const styles = readFileSync(join(here, 'styles.css'), 'utf-8').replace(/\r\n/g, '\n');
     const contract = styles.slice(styles.lastIndexOf('/* Suanlizi visual contract:'));
 

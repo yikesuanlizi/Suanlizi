@@ -41,7 +41,6 @@ describe('modelPresetConfigFrom', () => {
       permissions: 'workspace',
       webSearchMode: 'auto',
       reasoningEffort: 'high',
-      runProfile: 'runtime_os',
       memoryEnabled: false,
       dataDir: 'E:/private',
     })).toEqual({
@@ -54,7 +53,6 @@ describe('modelPresetConfigFrom', () => {
       permissions: 'workspace',
       webSearchMode: 'auto',
       reasoningEffort: 'high',
-      runProfile: 'runtime_os',
     });
   });
 
@@ -167,7 +165,7 @@ describe('parseCompositeConfigSnapshot', () => {
 });
 
 describe('normalizeReasoningEffort', () => {
-  it('maps legacy and new reasoning presets without treating low as enabled', () => {
+  it('maps current reasoning presets without treating low as enabled', () => {
     expect(normalizeReasoningEffort(' low ')).toBe('no');
     expect(normalizeReasoningEffort('NONE')).toBe('no');
     expect(normalizeReasoningEffort('ultra')).toBe('max');

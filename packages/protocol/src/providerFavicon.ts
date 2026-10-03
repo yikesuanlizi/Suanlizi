@@ -70,8 +70,8 @@ export function pageDeclaredIconUrl(
   }
 }
 
-/** 旧版 UI 在未读取网页前猜出的 API origin/favicon.ico；允许被真实 Tab 图标替换。 */
-export function isLegacyGuessedProviderIcon(baseUrl: string, iconUrl?: string): boolean {
+/** UI 在未读取网页前猜出的 API origin/favicon.ico；允许被真实 Tab 图标替换。 */
+export function isGuessedProviderIcon(baseUrl: string, iconUrl?: string): boolean {
   if (!iconUrl) return false;
   try {
     const base = new URL(baseUrl);

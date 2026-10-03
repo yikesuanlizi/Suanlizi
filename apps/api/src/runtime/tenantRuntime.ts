@@ -279,15 +279,14 @@ export function createTenantRuntime(options: TenantRuntimeOptions): TenantRuntim
     }
     // 系统监控开关/阈值变更：热更新到当前运行中的 agent
     // — Chinese: system monitor toggle/threshold change: hot-update the currently running agent
-    if (configPatch.systemMonitorEnabled !== undefined
-      || configPatch.systemMonitorSamplingEnabled !== undefined
+    if (configPatch.systemMonitorSamplingEnabled !== undefined
       || configPatch.systemMonitorGuardEnabled !== undefined
       || configPatch.systemMonitorLogRecordingEnabled !== undefined
       || configPatch.systemMonitorThresholds !== undefined) {
       const currentAgent = defaultAgent;
       if (currentAgent) {
         currentAgent.updateSystemMonitorConfig({
-          enabled: configPatch.systemMonitorSamplingEnabled ?? configPatch.systemMonitorEnabled,
+          enabled: configPatch.systemMonitorSamplingEnabled,
           guardEnabled: configPatch.systemMonitorGuardEnabled,
           logRecordingEnabled: configPatch.systemMonitorLogRecordingEnabled,
           thresholds: configPatch.systemMonitorThresholds,
@@ -295,7 +294,7 @@ export function createTenantRuntime(options: TenantRuntimeOptions): TenantRuntim
       }
       if (sharedSystemMonitor) {
         sharedSystemMonitor.updateConfig({
-          enabled: configPatch.systemMonitorSamplingEnabled ?? configPatch.systemMonitorEnabled,
+          enabled: configPatch.systemMonitorSamplingEnabled,
           guardEnabled: configPatch.systemMonitorGuardEnabled,
           logRecordingEnabled: configPatch.systemMonitorLogRecordingEnabled,
           thresholds: configPatch.systemMonitorThresholds,
@@ -367,7 +366,7 @@ export function createTenantRuntime(options: TenantRuntimeOptions): TenantRuntim
 
 ## Managed temporary files
 For one-off scripts and disposable caches, use the application-managed tmp directory. Do not create runtime data folders or disposable caches in the project workspace. Application-managed tmp files may be removed after seven days; durable user-requested work belongs in the selected workspace.`;
-    if (config.workspaceRoot === hiddenChatWorkspaceRoot(config.dataDir)) {
+    if (config.hasWorkspace && config.workspaceRoot === hiddenChatWorkspaceRoot(config.dataDir)) {
       fs.mkdirSync(config.workspaceRoot, { recursive: true });
     }
     const modelCapabilities = resolveModelCapabilities({
@@ -385,6 +384,7 @@ For one-off scripts and disposable caches, use the application-managed tmp direc
       maxTokens: config.modelMaxOutputTokens ?? 8192,
       temperature: 0.2,
       timeoutMs: (config.modelTimeoutSeconds ?? 120) * 1_000,
+      streamIdleTimeoutMs: (config.streamIdleTimeoutSeconds ?? 300) * 1_000,
       reasoningEffort: config.reasoningEffort,
       contextTokens: config.modelContextTokens,
     };
@@ -429,6 +429,7 @@ For one-off scripts and disposable caches, use the application-managed tmp direc
     // 读取 A2A 客户端配置 — Chinese: read A2A client config
     const a2aConfig = normalizeA2AConfig(await tenantStore.getSetting(A2A_CONFIG_KEY));
     const agent = new AgentLoop(({
+      hasWorkspace: config.hasWorkspace,
       workspaceRoot: config.workspaceRoot,
       sandbox,
       model,
@@ -442,7 +443,6 @@ For one-off scripts and disposable caches, use the application-managed tmp direc
       maxIterations: config.maxIterations,
       webSearchMode: config.webSearchMode,
       webProvider,
-      runProfile: config.runProfile,
       modelContextTokens: effectiveContextTokens,
       modelMaxOutputTokens: modelConfig.maxTokens,
       agentRoles: config.agentRoles,

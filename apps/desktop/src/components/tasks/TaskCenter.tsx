@@ -81,24 +81,10 @@ const defaultApi: TaskCenterApi = {
 };
 
 /**
- * 允许 Web UI 在新前端先于 API 重启时继续观察既有 Goal。只为旧 API 明确
- * 不认识 explicit_workflow 的 400 降级；网络、权限和其他协议错误照常暴露。
+ * 任务中心只请求当前 API 支持的 Goal / Workflow 来源；请求失败直接展示。
  */
 async function listObserverTasks(filter?: TaskListFilter): Promise<Task[]> {
-  try {
-    return await listTasks(filter);
-  } catch (error) {
-    if (isLegacyWorkflowOriginError(error)) {
-      return listTasks({ ...filter, origin: ['explicit_goal'] });
-    }
-    throw error;
-  }
-}
-
-function isLegacyWorkflowOriginError(error: unknown): boolean {
-  return error instanceof TaskRequestError
-    && error.code === 'TASK_REQUEST_INVALID'
-    && /\bexplicit_workflow\b/.test(error.message);
+  return await listTasks(filter);
 }
 
 interface TaskDetail {

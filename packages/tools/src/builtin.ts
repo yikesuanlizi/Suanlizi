@@ -169,7 +169,7 @@ export const readDocumentTool: ToolDefinition = {
   requiredPolicy: 'readonly',
   supportsParallelToolCalls: true,
   timeoutMs: 120_000,
-  maxOutputLength: 50_000,
+  maxOutputLength: 8_000,
   async execute(args, ctx): Promise<ToolResult> {
     const rawPath = firstString(args.filePath, args.path, args.filename);
     if (!rawPath) return failedToolResult('filePath is required', 'INVALID_ARGUMENTS');
@@ -307,7 +307,7 @@ export const listFilesTool: ToolDefinition = {
   requiredPolicy: 'readonly',
   supportsParallelToolCalls: true,
   timeoutMs: 30_000,
-  maxOutputLength: 20_000,
+  maxOutputLength: 8_000,
   async execute(args, ctx): Promise<ToolResult> {
     const rawPath = firstString(args.path, args.dir, args.directory, args.filePath) ?? '.';
     const access = await guardPathAccess(ctx, {
@@ -423,7 +423,7 @@ export const shellCommandTool: ToolDefinition = {
   },
   requiredPolicy: 'workspace_write',
   requiresApproval: true,
-  maxOutputLength: 20_000,
+  maxOutputLength: 8_000,
   timeoutMs: 120_000,
   async execute(args, ctx): Promise<ToolResult> {
     const cmd = String(args.command);
@@ -446,88 +446,6 @@ export const shellCommandTool: ToolDefinition = {
     });
     if (cwdAccess.denied) return cwdAccess.denied;
     return runShellCommand(cmd, cwdAccess.filePath, ctx.signal, ctx.onOutputDelta);
-  },
-};
-
-// ─── gitnexus_analyze ──────────────────────────────────────────────────────
-// 中文注释：为指定工作区构建/刷新 GitNexus 索引。
-// 这是 CLI/npx 索引运维层的入口，Agent 通过此工具触发索引，不直接裸跑 npx。
-export const gitNexusAnalyzeTool: ToolDefinition = {
-  name: 'gitnexus_analyze',
-  description:
-    'Build or refresh the GitNexus code graph index for a workspace. This runs "npx -y gitnexus@latest analyze" under the hood. Use this when GitNexus graph queries (context, impact, trace, graph) are needed and the repository may not be indexed yet. After indexing completes, GitNexus serve and MCP tools can provide structured code analysis. This is an enhancement path; continue using list_files/read_file/search_content if GitNexus is unavailable.',
-  parameters: {
-    type: 'object',
-    properties: {
-      repoPath: {
-        type: 'string',
-        description: 'Path to the repository to index. Defaults to the current workspace root.',
-      },
-      force: {
-        type: 'boolean',
-        description: 'Force re-index even if an index already exists.',
-      },
-    },
-    additionalProperties: false,
-  },
-  requiredPolicy: 'workspace_write',
-  requiresApproval: true,
-  timeoutMs: 600_000,
-  maxOutputLength: 30_000,
-  async execute(args, ctx): Promise<ToolResult> {
-    const repoPath = typeof args.repoPath === 'string' && args.repoPath.trim()
-      ? resolveToolPath(ctx.workspaceRoot, args.repoPath)
-      : ctx.workspaceRoot;
-    const forceFlag = args.force === true ? ['--force'] : [];
-    const command = ['npx', '-y', 'gitnexus@latest', 'analyze', ...forceFlag];
-    const { execFile } = await import('node:child_process');
-
-    return new Promise((resolve) => {
-      const child = execFile(
-        command[0],
-        command.slice(1),
-        {
-          cwd: repoPath,
-          maxBuffer: 10 * 1024 * 1024,
-          timeout: 600_000,
-          windowsHide: true,
-          shell: process.platform === 'win32',
-        },
-        (error, stdout, stderr) => {
-          const output = [
-            stdout,
-            stderr ? `\n[stderr]\n${stderr}` : '',
-          ].filter(Boolean).join('\n').trim();
-          const exitCode = typeof error?.code === 'number' ? error.code : error ? 1 : 0;
-          const baseData = {
-            command,
-            cwd: repoPath,
-            repoPath,
-            exitCode,
-          };
-          if (error) {
-            const message = output || `GitNexus analyze failed: ${error.message}`;
-            resolve({
-              output: message,
-              status: 'failed',
-              exitCode,
-              data: baseData,
-              error: { message: error.message, code: 'GITSUANLIZI_ANALYZE_FAILED' },
-            });
-            return;
-          }
-          resolve({
-            output: output || 'GitNexus analyze completed.',
-            status: 'completed',
-            exitCode: 0,
-            data: { ...baseData, started: true },
-          });
-        },
-      );
-      if (ctx.signal) {
-        ctx.signal.addEventListener('abort', () => terminateProcessTree(child), { once: true });
-      }
-    });
   },
 };
 
@@ -559,7 +477,7 @@ export const searchContentTool: ToolDefinition = {
   requiredPolicy: 'readonly',
   supportsParallelToolCalls: true,
   timeoutMs: 30_000,
-  maxOutputLength: 30_000,
+  maxOutputLength: 8_000,
   async execute(args, ctx): Promise<ToolResult> {
     const pattern = firstString(args.pattern, args.query, args.search, args.text);
     if (!pattern) {
@@ -644,7 +562,7 @@ export const webSearchTool: ToolDefinition = {
   requiredPolicy: 'readonly',
   supportsParallelToolCalls: true,
   timeoutMs: 20_000,
-  maxOutputLength: 12_000,
+  maxOutputLength: 8_000,
   async execute(args, ctx): Promise<ToolResult> {
     const url = typeof args.url === 'string' ? args.url.trim() : '';
     const pattern = typeof args.pattern === 'string' ? args.pattern.trim() : '';
@@ -732,7 +650,7 @@ export const webFetchTool: ToolDefinition = {
   requiredPolicy: 'readonly',
   supportsParallelToolCalls: true,
   timeoutMs: 25_000,
-  maxOutputLength: 18_000,
+  maxOutputLength: 8_000,
   async execute(args, ctx): Promise<ToolResult> {
     const rawUrl = typeof args.url === 'string' ? args.url.trim() : '';
     return fetchUrlAsToolResult(rawUrl, ctx);
@@ -920,7 +838,6 @@ export const BUILTIN_TOOLS: ToolDefinition[] = [
   listFilesTool,
   writeFileTool,
   shellCommandTool,
-  gitNexusAnalyzeTool,
   searchContentTool,
   webSearchTool,
   webFetchTool,

@@ -16,7 +16,7 @@ function readVisualContract(): string {
 }
 
 describe('dark theme skin', () => {
-  it('defines a dark semantic surface contract after legacy component rules', () => {
+  it('defines a dark semantic surface contract for semantic component surfaces', () => {
     const contract = readVisualContract();
 
     expect(contract).toContain('--nx-surface-canvas: #0a0e13;');
@@ -45,7 +45,6 @@ describe('dark theme skin', () => {
       '.appShell:not(.theme-light) .workbenchPanel',
       '.appShell:not(.theme-light) .dropdownMenu',
       '.appShell:not(.theme-light) .appDialog',
-      '.appShell:not(.theme-light) .gitNexusGraphModal',
       '.appShell:not(.theme-light) .turnFileSummary',
     ]) {
       expect(contract).toContain(selector);
@@ -56,7 +55,7 @@ describe('dark theme skin', () => {
     expect(contract).toContain('color: var(--nx-text-primary);');
   });
 
-  it('overrides the legacy important light surfaces inside the dark settings shell', () => {
+  it('overrides important light surfaces inside the dark settings shell', () => {
     const contract = readVisualContract();
 
     for (const selector of [

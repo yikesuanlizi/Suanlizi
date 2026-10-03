@@ -21,8 +21,8 @@ describe('traceSummary', () => {
     expect(traceSummary({
       ...base,
       name: 'mcp.tool.completed',
-      payload: { toolName: 'mcp_call_tool', callId: 'call-1', server: 'gitnexus', tool: 'search_code' },
-    } as unknown as RunTraceEnvelope, true)).toBe('MCP · gitnexus / search_code');
+      payload: { toolName: 'mcp_call_tool', callId: 'call-1', server: 'example-mcp', tool: 'search_code' },
+    } as unknown as RunTraceEnvelope, true)).toBe('MCP · example-mcp / search_code');
 
     expect(traceSummary({
       ...base,

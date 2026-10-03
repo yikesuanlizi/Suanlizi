@@ -367,8 +367,8 @@ describe('compactThread', () => {
     for (const label of ['当前进度', '关键上下文', '待办事项']) {
       expect(systemPrompt).toContain(`${label}：`);
     }
-    for (const legacyLabel of ['用户目标', '已完成变更', '关键约束', '文件', '工具结果', '子 agent 结论', '未完成事项', '风险']) {
-      expect(systemPrompt).not.toContain(`${legacyLabel}：`);
+    for (const removedLabel of ['用户目标', '已完成变更', '关键约束', '文件', '工具结果', '子 agent 结论', '未完成事项', '风险']) {
+      expect(systemPrompt).not.toContain(`${removedLabel}：`);
     }
   });
 

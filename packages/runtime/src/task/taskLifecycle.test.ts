@@ -144,6 +144,7 @@ async function seed(store: FakeTaskStore = new FakeTaskStore()) {
     objective: '把目标任务改造 P0 的 runtime 层落地',
     acceptanceCriteria: ['task/ 模块可运行', '测试全绿'],
     kind: 'goal',
+    origin: 'explicit_goal',
     harnessRunId: 'hrun_1',
     ids: { taskId: 'task-1', runId: 'run-1' },
     now: '2026-09-19T00:00:00.000Z',
@@ -175,6 +176,7 @@ describe('createTaskWithRun', () => {
       objective: '目标',
       acceptanceCriteria: ['标准 A', '标准 A', ' 标准 B '],
       kind: 'goal',
+      origin: 'explicit_goal',
       harnessRunId: 'hrun_1',
     });
 
@@ -208,6 +210,7 @@ describe('createTaskWithRun', () => {
           objective: '另一个目标',
           acceptanceCriteria: [],
           kind: 'goal',
+          origin: 'explicit_goal',
         }),
       'TASK_ACTIVE_EXISTS',
     );
@@ -216,28 +219,7 @@ describe('createTaskWithRun', () => {
     expect((await store.listTasks({ threadId: 'thread-1' })).length).toBe(1);
   });
 
-  it('旧数据缺少 origin 时按 Harness shadow 过滤，绝不误当 explicit Goal', async () => {
-    const store = new FakeTaskStore();
-    const legacyTask: Task = {
-      id: 'task-legacy-shadow',
-      threadId: 'thread-legacy',
-      objective: 'legacy harness task',
-      acceptanceCriteria: [],
-      status: 'running',
-      runIds: [],
-      evidenceIds: [],
-      createdAt: '2026-09-19T00:00:00.000Z',
-      updatedAt: '2026-09-19T00:00:00.000Z',
-      version: 0,
-      interactionMode: 'supervised',
-      // SQLite 迁移会回填；这里模拟其它实现或历史 fixture 尚未归一的记录。
-      origin: undefined,
-    };
-    await store.createTask(legacyTask);
 
-    expect((await findActiveTask(store, 'thread-legacy', 'harness_shadow'))?.id).toBe('task-legacy-shadow');
-    expect(await findActiveTask(store, 'thread-legacy', 'explicit_goal')).toBeNull();
-  });
 
   it('blocked Task 也算 active；终态 Task 不阻塞新 Task', async () => {
     const { store, task } = await seed();
@@ -249,6 +231,7 @@ describe('createTaskWithRun', () => {
           objective: '再来一个',
           acceptanceCriteria: [],
           kind: 'goal',
+          origin: 'explicit_goal',
         }),
       'TASK_ACTIVE_EXISTS',
     );
@@ -263,6 +246,7 @@ describe('createTaskWithRun', () => {
       objective: '取消后允许新建',
       acceptanceCriteria: [],
       kind: 'goal',
+      origin: 'explicit_goal',
       ids: { taskId: 'task-2', runId: 'run-2' },
     });
     expect(second.task.id).toBe('task-2');
@@ -277,6 +261,7 @@ describe('createTaskWithRun', () => {
         objective: '目标',
         acceptanceCriteria: [],
         kind: 'workflow',
+        origin: 'explicit_workflow',
       }),
     ).rejects.toThrow(/workflowKind/);
 
@@ -286,7 +271,8 @@ describe('createTaskWithRun', () => {
         objective: '目标',
         acceptanceCriteria: [],
         kind: 'goal',
-        workflowKind: 'script',
+          origin: 'explicit_goal',
+          workflowKind: 'script',
       }),
     ).rejects.toThrow(/must not carry workflowRunId\/workflowKind/);
 
@@ -295,6 +281,7 @@ describe('createTaskWithRun', () => {
       objective: '目标',
       acceptanceCriteria: [],
       kind: 'workflow',
+      origin: 'explicit_workflow',
       workflowKind: 'script',
       workflowRunId: 'wfrun_1',
     });
@@ -312,6 +299,7 @@ describe('createTaskWithRun', () => {
         objective: '   ',
         acceptanceCriteria: [],
         kind: 'goal',
+        origin: 'explicit_goal',
       }),
     ).rejects.toThrow(/objective/);
   });
@@ -406,6 +394,7 @@ describe('syncTaskFromRun', () => {
     status: 'running',
     runIds: ['run-1'],
     currentRunId: 'run-1',
+    origin: 'explicit_goal',
     evidenceIds: [],
     createdAt: '2026-09-19T00:00:00.000Z',
     updatedAt: '2026-09-19T00:00:00.000Z',
@@ -585,6 +574,7 @@ describe('createRetryRun', () => {
       objective: '并行编排',
       acceptanceCriteria: [],
       kind: 'workflow',
+      origin: 'explicit_workflow',
       workflowKind: 'blueprint',
       workflowRunId: 'wfrun_1',
       ids: { taskId: 'task-w', runId: 'run-w1' },

@@ -27,7 +27,6 @@ import { adaptAgentLoopToPort, createA2AHandlerRegistry } from './services/a2aHa
 import { createSkillDraftService, skillInstallUrlsFromBody } from './services/skillDraftService.js';
 import { handleRunMonitorRoute } from './routes/runMonitorRoute.js';
 import { handleSystemMonitorRoute } from './routes/systemMonitorRoute.js';
-import { handleGitNexusRoute } from './routes/gitnexusRoute.js';
 import { handleMemoryRoute } from './routes/memoryRoute.js';
 import { handleThreadRoutes } from './routes/threadRoutes.js';
 import { harnessRuntimeRegistry } from './services/harnessRuntime.js';
@@ -44,7 +43,6 @@ import { shouldRetitleThread, titleFromInput } from './services/threadTitle.js';
 const activeAgentProcesses: import('node:child_process').ChildProcess[] = [];
 import { buildUserInputFromTurnRequest } from './services/turnInput.js';
 import { defaultConfig, hiddenChatWorkspaceRoot, resolveConfig, type AgentRunConfig, type TurnRequest, A2A_CONFIG_KEY, normalizeA2AConfig } from './config/config.js';
-import { cleanupLegacyProjectAppData } from './runtime/appDataMigration.js';
 import { createTenantRuntime } from './runtime/tenantRuntime.js';
 import { applyCorsHeaders, resolveCorsOptions } from './shared/cors.js';
 import { handleRequestGate } from './routes/requestGate.js';
@@ -57,7 +55,6 @@ import { pruneOrphanCustomProviders, reconcileRemovedModelSelection } from './se
 import { handleOpsRoute, recoverOpsTasks } from './routes/opsRoute.js';
 import { handleKnowledgeRoute } from './routes/knowledgeRoute.js';
 
-cleanupLegacyProjectAppData(defaultConfig.dataDir);
 const storageOptions = resolveStorageOptions();
 const { store: rootStore, taskStore } = createStore(defaultConfig.dataDir);
 // SSE 发布/订阅与回放缓冲已下沉到 ./services/threadEventBus.ts；本处只按需取用。
@@ -272,9 +269,6 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     return;
   }
 
-  // GitNexus 可视化 API — Chinese: GitNexus visualization API
-  if (await handleGitNexusRoute({ req, res, url, mcpManager: tenantMcpManager, listMcpServers })) return;
-
   if (req.method === 'GET' && url.pathname === '/api/skills') {
     const config = await getDefaultRunConfig();
     const forceReload = url.searchParams.get('forceReload') === '1';
@@ -443,14 +437,17 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
       ? resolveConfig({ ...await getDefaultRunConfig(), ...body.config })
       : await getDefaultRunConfig();
     if (conversationKind === 'chat') {
+      effectiveConfig.hasWorkspace = false;
       effectiveConfig.workspaceRoot = hiddenChatWorkspaceRoot(effectiveConfig.dataDir);
     }
     const agent = body.config ? (await createTenantAgent(effectiveConfig)).agent : await getTenantDefaultAgent();
     const thread = await agent.startThread(body.title ?? 'Suanlizi', {
+      hasWorkspace: conversationKind === 'chat' ? false : effectiveConfig.hasWorkspace,
       workspaceRoot: conversationKind === 'chat' ? '' : effectiveConfig.workspaceRoot,
       tags: conversationKind === 'chat' ? { conversationKind: 'chat' } : body.workflowProject ? { workflowProject: 'true' } : {},
     });
     const threadConfigPatch: Partial<AgentRunConfig> = body.config ? { ...body.config } : {};
+    threadConfigPatch.hasWorkspace = conversationKind === 'chat' ? false : effectiveConfig.hasWorkspace;
     if (conversationKind === 'chat') threadConfigPatch.workspaceRoot = '';
     const config = await saveThreadRunConfig(thread.threadId, threadConfigPatch);
     if (body.mode || body.taskPreset !== undefined) {

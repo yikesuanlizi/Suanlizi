@@ -42,7 +42,7 @@ export async function reconcileRemovedModelSelection(input: {
     try {
       tagged = JSON.parse(raw) as Record<string, unknown>;
     } catch {
-      // 旧版本的损坏标签由配置仓库原有的兼容读取路径处理。
+      // 损坏标签由配置仓库原有读取路径处理。
       continue;
     }
     if (!matches(tagged as { provider?: string; model?: string }, removed)) continue;
@@ -58,7 +58,7 @@ export async function reconcileRemovedModelSelection(input: {
   }
 }
 
-/** 仅在 API 接受请求之前运行：清除旧版本删除预设后遗留的无模型厂商。 */
+/** 仅在 API 接受请求之前运行：清除已删除预设遗留的无模型厂商。 */
 export async function pruneOrphanCustomProviders(input: {
   listPresets: () => Promise<ModelPreset[]>;
   listProviders: () => Array<{ id: string }>;

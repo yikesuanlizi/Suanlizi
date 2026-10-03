@@ -10,6 +10,7 @@ import { buildAgentStageRows, buildSubagentStatusRows } from '../../features/age
 import {
   isTerminalUtilityWorkbenchTab,
   WorkbenchTabs,
+  type PinnableWorkbenchTab,
   type UtilityWorkbenchTab,
   type UtilityWorkbenchTabKind,
   type WorkbenchTab,
@@ -41,6 +42,8 @@ export function WorkspaceWorkbench({
   externalPreviewRequest,
   activeTab,
   onTabChange,
+  pinnedTabs = ['activity', 'agents'],
+  onTogglePinnedTab,
   openUtilityTabs,
   onOpenUtilityTab,
   onCloseUtilityTab,
@@ -81,6 +84,8 @@ export function WorkspaceWorkbench({
   externalPreviewRequest?: ExternalPreviewRequest | null;
   activeTab: WorkbenchTab;
   onTabChange(tab: WorkbenchTab): void;
+  pinnedTabs?: PinnableWorkbenchTab[];
+  onTogglePinnedTab?(tab: PinnableWorkbenchTab): void;
   openUtilityTabs: UtilityWorkbenchTab[];
   onOpenUtilityTab(tab: UtilityWorkbenchTabKind): UtilityWorkbenchTab;
   onCloseUtilityTab(tab: UtilityWorkbenchTab): void;
@@ -259,6 +264,8 @@ export function WorkspaceWorkbench({
       <WorkbenchTabs
         activeTab={activeTab}
         onTabChange={handleTabChange}
+        pinnedTabs={pinnedTabs}
+        onTogglePinnedTab={onTogglePinnedTab}
         openUtilityTabs={hasActiveThread ? openUtilityTabs : []}
         onOpenUtilityTab={onOpenUtilityTab}
         onCloseUtilityTab={onCloseUtilityTab}

@@ -1,7 +1,5 @@
 // 机器人配置存储键 — Chinese: bot config storage key
 export const BOT_CONFIG_KEY = 'bot.config.v1';
-// 遗留微信桥接 URL 默认值 — Chinese: legacy WeChat bridge URL default
-export const LEGACY_WEIXIN_BRIDGE_URL = 'http://127.0.0.1:18790/api/v1/admin/rpc';
 // 微信桥接默认 URL（动态推断） — Chinese: WeChat bridge default URL (dynamic)
 export const DEFAULT_WEIXIN_BRIDGE_URL = defaultWeixinBridgeUrl();
 
@@ -251,19 +249,6 @@ function normalizeWeixinBridgeUrl(_value: unknown): string {
   return value || DEFAULT_WEIXIN_BRIDGE_URL;
 }
 
-// 运行时规范化微信桥接 URL（从遗留默认值迁移到新推断值） — Chinese: runtime normalize WeChat bridge URL
-export function normalizeRuntimeWeixinBridgeUrl(config: BotConfig): BotConfig {
-  if (config.weixin.bridgeMode !== 'desktop_managed') return config;
-  if (config.weixin.bridgeUrl !== LEGACY_WEIXIN_BRIDGE_URL) return config;
-  if (DEFAULT_WEIXIN_BRIDGE_URL === LEGACY_WEIXIN_BRIDGE_URL) return config;
-  return {
-    ...config,
-    weixin: {
-      ...config.weixin,
-      bridgeUrl: DEFAULT_WEIXIN_BRIDGE_URL,
-    },
-  };
-}
 
 function normalizeWeixinBridgeMode(value: unknown): WeixinBridgeMode {
   return value === 'external_rpc' ? 'external_rpc' : 'desktop_managed';

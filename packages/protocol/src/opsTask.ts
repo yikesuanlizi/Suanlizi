@@ -196,8 +196,6 @@ export interface OpsKnowledgeScope {
   indexVersion?: string;
   /** 服务端在排队前生成的固定检索收据；模型不能自行替换。 */
   queryReceiptId?: string;
-  /** Legacy compatibility only; personal knowledge selection never uses workspaceId. */
-  workspaceId?: string;
   maxHits?: number;
   maxContextTokens?: number;
 }
@@ -443,7 +441,6 @@ const opsKnowledgeScopeSchema = z.object({
   snapshotIds: z.array(z.string().trim().min(1)),
   indexVersion: z.string().trim().min(1).optional(),
   queryReceiptId: z.string().trim().min(1).optional(),
-  workspaceId: z.string().trim().min(1).optional(),
   maxHits: z.number().int().positive().max(100).optional(),
   maxContextTokens: z.number().int().positive().max(1_000_000).optional(),
 }).strict();

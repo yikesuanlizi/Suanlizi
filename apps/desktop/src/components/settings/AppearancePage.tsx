@@ -84,6 +84,17 @@ export function AppearancePage({ locale, config, setConfig, markDirty, dirtyFiel
           />
         </label>
       </div>
+      <label className="settingLabel">
+        <span>{locale === 'zh' ? '固定活动与智能体标签' : 'Pin activity and agents tabs'}</span>
+        <input
+          checked={config.workbenchPinnedTabs !== false}
+          onChange={(event) => {
+            setConfig((current) => ({ ...current, workbenchPinnedTabs: event.target.checked }));
+            markDirty('workbenchPinnedTabs', true);
+          }}
+          type="checkbox"
+        />
+      </label>
       <div className={`avatarSettingsPanel ${avatarDirty ? 'panelDirty' : ''}`}>
         <div className="avatarSettingsHeader">
           <div>

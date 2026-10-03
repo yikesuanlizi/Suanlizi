@@ -146,16 +146,6 @@ export const recommendedMcps: RecommendedMcp[] = [
     descriptionEn: 'Read design context, variables, and visual specs.',
     draft: { name: 'figma', command: 'npx', args: 'figma-developer-mcp@latest', enabled: false },
   },
-  {
-    type: 'mcp',
-    id: 'mcp-gitnexus',
-    name: 'gitnexus',
-    titleZh: 'GitNexus MCP',
-    titleEn: 'GitNexus MCP',
-    descriptionZh: '代码知识图谱、符号上下文、影响面和调用链分析。',
-    descriptionEn: 'Code graph intelligence, symbol context, impact analysis, and call tracing.',
-    draft: { name: 'gitnexus', command: 'npx', args: '-y gitnexus@latest mcp', enabled: true },
-  },
 ];
 
 export const recommendedPluginCatalog: RecommendedPlugin[] = [

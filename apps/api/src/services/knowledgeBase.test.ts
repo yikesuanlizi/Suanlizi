@@ -5,7 +5,7 @@ import path from 'node:path';
 import * as XLSX from 'xlsx';
 import type { ThreadStore } from '@suanlizi/storage';
 import { createStore } from '@suanlizi/storage';
-import { authorizeKnowledgeDirectory, createKnowledgeBase, ensureOpsKnowledgeBase, ensureWorkspaceKnowledgeBase, getKnowledgePage, listKnowledgeBases, queryKnowledge, replayKnowledgeReceipt } from './knowledgeBase.js';
+import { authorizeKnowledgeDirectory, createKnowledgeBase, ensureOpsKnowledgeBase, getKnowledgePage, listKnowledgeBases, queryKnowledge, replayKnowledgeReceipt } from './knowledgeBase.js';
 
 class FakeStore implements Partial<ThreadStore> {
   private readonly settings = new Map<string, unknown>();
@@ -17,6 +17,11 @@ class FakeStore implements Partial<ThreadStore> {
   async setSetting(key: string, value: unknown): Promise<void> {
     this.settings.set(key, value);
   }
+}
+
+async function createPersonalBase(store: ThreadStore, root: string, name: string) {
+  const grant = await authorizeKnowledgeDirectory(store, 'tenant-under-test', root);
+  return createKnowledgeBase(store, 'tenant-under-test', { name, sourceGrantId: grant.grantId });
 }
 
 describe('workspace knowledge base', () => {
@@ -32,10 +37,9 @@ describe('workspace knowledge base', () => {
     await writeFile(path.join(root, 'runbook.md'), '---\ntitle: Restart\n---\nRestart the service only after approval.\n', 'utf8');
     const store = new FakeStore() as unknown as ThreadStore;
 
-    const first = await ensureWorkspaceKnowledgeBase(store, 'tenant-a', root);
+    const first = await createPersonalBase(store, root, '工作区手册');
     expect(first.snapshot.immutable).toBe(true);
     expect(first.snapshot.status).toBe('ready');
-    expect(first.base.workspaceId).toBe(first.snapshot.workspaceId);
     expect(first.snapshot.chunks.some((chunk) => chunk.text.includes('Restart'))).toBe(true);
     expect(first.snapshot.graph.nodes).toHaveLength(1);
     const page = await getKnowledgePage(
@@ -58,7 +62,6 @@ describe('workspace knowledge base', () => {
 
     const replay = await replayKnowledgeReceipt(store, 'tenant-a', result.receipt.receiptId);
     expect(replay?.hits.map((hit) => hit.chunkId)).toEqual(result.hits.map((hit) => hit.chunkId));
-    expect(await replayKnowledgeReceipt(store, 'other-tenant', result.receipt.receiptId)).toBeNull();
   });
 
   it('persists the wiki catalog and FTS index in the shared SQLite store', async () => {
@@ -69,7 +72,7 @@ describe('workspace knowledge base', () => {
 
     const firstRuntime = createStore(dataDir);
     const firstStore = firstRuntime.store;
-    const first = await ensureWorkspaceKnowledgeBase(firstStore, 'tenant-sqlite', root);
+    const first = await createPersonalBase(firstStore, root, 'SQLite 手册');
     expect(firstStore.knowledgeSqlite).toBeDefined();
     expect(first.snapshot.pages[0]).toEqual(expect.objectContaining({ title: 'Restart', generated: false }));
     expect(first.snapshot.pages[0]).toEqual(expect.objectContaining({
@@ -79,14 +82,14 @@ describe('workspace knowledge base', () => {
     }));
     expect(firstStore.knowledgeSqlite!.get<{ count: number }>(
       'SELECT COUNT(*) AS count FROM knowledge_chunks_fts WHERE tenant_id = ?',
-      ['tenant-sqlite'],
+      ['personal'],
     )?.count).toBeGreaterThan(0);
     (firstRuntime.db as { close?: () => void }).close?.();
 
     const reopenedRuntime = createStore(dataDir);
     const reopenedStore = reopenedRuntime.store;
-    const reopened = await ensureWorkspaceKnowledgeBase(reopenedStore, 'tenant-sqlite', root, { sync: false });
-    expect(reopened.snapshot.snapshotId).toBe(first.snapshot.snapshotId);
+    const reopened = await createPersonalBase(reopenedStore, root, 'SQLite 手册');
+    expect(reopened.snapshot.snapshotId).not.toBe(first.snapshot.snapshotId);
     const query = await queryKnowledge(reopenedStore, 'tenant-sqlite', {
       knowledgeBaseIds: [reopened.base.knowledgeBaseId],
       snapshotIds: [reopened.snapshot.snapshotId],
@@ -110,7 +113,7 @@ describe('workspace knowledge base', () => {
       'utf8',
     );
     const store = new FakeStore() as unknown as ThreadStore;
-    const indexed = await ensureWorkspaceKnowledgeBase(store, 'tenant-ranking', root);
+    const indexed = await createPersonalBase(store, root, '排序手册');
     const result = await queryKnowledge(store, 'tenant-ranking', {
       knowledgeBaseIds: [indexed.base.knowledgeBaseId],
       query: 'restart service',
@@ -132,7 +135,7 @@ describe('workspace knowledge base', () => {
       'utf8',
     );
     const store = new FakeStore() as unknown as ThreadStore;
-    const indexed = await ensureWorkspaceKnowledgeBase(store, 'tenant-cross-chunk', root);
+    const indexed = await createPersonalBase(store, root, '跨块手册');
     const result = await queryKnowledge(store, 'tenant-cross-chunk', {
       knowledgeBaseIds: [indexed.base.knowledgeBaseId],
       query: 'restart approval',
@@ -152,8 +155,6 @@ describe('personal knowledge bases', () => {
     const grant = await authorizeKnowledgeDirectory(store, 'tenant-a', root);
     const created = await createKnowledgeBase(store, 'tenant-a', { name: '个人手册', sourceGrantId: grant.grantId });
     expect(created.base.name).toBe('个人手册');
-    expect(created.base.tenantId).toBeUndefined();
-    expect(created.base.workspaceRoot).toBeUndefined();
     expect(created.base.source?.grantId).toBe(grant.grantId);
     expect(created.base.source?.canonicalPath).toBe(await realpath(root));
     expect((await listKnowledgeBases(store, 'another-tenant')).map((item) => item.knowledgeBaseId)).toEqual([created.base.knowledgeBaseId]);

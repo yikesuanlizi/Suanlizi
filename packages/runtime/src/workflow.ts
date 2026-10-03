@@ -1,8 +1,7 @@
 import { BUILTIN_TOOLS, type ToolDefinition, type ToolParamSchema } from '@suanlizi/tools';
 
 export type WorkflowStepStatus = 'pending' | 'running' | 'completed' | 'failed' | 'blocked';
-// Blueprint 静态流程的旧运行状态；Script Workflow 的 `WorkflowRunStatus` 已收敛到 @suanlizi/protocol/task。
-// Legacy Blueprint run status; the Script-Workflow `WorkflowRunStatus` now lives in @suanlizi/protocol/task.
+// Blueprint 静态流程的运行状态；Script Workflow 的 `WorkflowRunStatus` 在 @suanlizi/protocol/task。
 export type BlueprintRunStatus = 'planned' | 'running' | 'completed' | 'failed' | 'blocked' | 'cancelled';
 export type WorkflowExecutorKind = 'prompt' | 'tool' | 'subagent' | 'human' | 'condition' | 'code' | 'template' | 'parameter_extractor' | 'control';
 export type WorkflowApprovalMode = 'none' | 'required';

@@ -47,7 +47,7 @@ import {
 import { extractWorkflowProposal, WORKFLOW_CONTINUATION_HINT } from './workflowProposal.js';
 
 // HarnessRuntimeRegistry 用于区分 pause 与真正 cancel 的稳定 abort reason。
-// 保留 suspendSignal 参数是为了兼容已有 runtime 单测和直接调用方；生产路径使用 signal.reason。
+// runtime 通过 registry abort reason 区分暂停与真正取消。
 const SUSPEND_ABORT_TYPE = 'suanlizi-harness-suspend';
 
 function isSuspendAbort(signal?: AbortSignal): boolean {
@@ -282,12 +282,9 @@ export class TaskHarnessEngine {
       harnessRunId?: string;
       /** P6：Goal × Workflow 组合选项；缺省时行为零变化。 */
       workflow?: HarnessWorkflowOptions;
-      /** P2 生命周期修复：pause 的 suspend 意图信号；abort 但非本信号 → 正常 cancel 终态。 */
-      suspendSignal?: AbortSignal;
     },
   ): Promise<HarnessResult> {
     const signal = options?.signal;
-    const suspendSignal = options?.suspendSignal;
     // Gap 1: 支持调用方预生成 harnessRunId，使 API 可立即返回
     // — English: accept caller-provided harnessRunId so API can return immediately
     const goalTracker = new GoalTracker(threadId, options?.harnessRunId);
@@ -500,7 +497,7 @@ export class TaskHarnessEngine {
       // P2 取消链：abort 在循环顶部退出且尚未收敛出 active → 落 cancelled 可追溯终态。
       // 已经因迭代上限 / 无进展收敛的情况仍按原结论返回（不覆盖真实终态）。
       if (signal?.aborted && goalTracker.getState().status === 'active') {
-        await this.settleTerminalState(threadId, goalTracker, ledger, { aborted: true, signal, suspendSignal });
+        await this.settleTerminalState(threadId, goalTracker, ledger, { aborted: true, signal });
         return this.buildResult('cancelled', goalTracker, ledger, result, threadId);
       }
 
@@ -519,7 +516,7 @@ export class TaskHarnessEngine {
       // P2 取消链：abort 引发的抛错（runTurn / evaluator）收敛为 cancelled 终态，
       // 调用方拿到可追溯结果而不是未捕获拒绝；非取消异常保持原有抛出语义。
       if (signal?.aborted && goalTracker.getState().status === 'active') {
-        await this.settleTerminalState(threadId, goalTracker, ledger, { aborted: true, signal, suspendSignal });
+        await this.settleTerminalState(threadId, goalTracker, ledger, { aborted: true, signal });
         return this.buildResult('cancelled', goalTracker, ledger, result, threadId);
       }
       loopError = err;
@@ -529,7 +526,6 @@ export class TaskHarnessEngine {
       await this.settleTerminalState(threadId, goalTracker, ledger, {
         aborted: !!signal?.aborted,
         signal,
-        suspendSignal,
         error: loopError,
       });
     }
@@ -547,13 +543,12 @@ export class TaskHarnessEngine {
     threadId: ThreadId,
     goalTracker: GoalTracker,
     ledger: EvidenceLedger,
-    reason: { aborted: boolean; signal?: AbortSignal; suspendSignal?: AbortSignal; error?: unknown },
+    reason: { aborted: boolean; signal?: AbortSignal; error?: unknown },
   ): Promise<void> {
     if (goalTracker.getState().status !== 'active') return;
     // P2 生命周期修复：pause 的 suspend 意图不落 cancelled 终态，保持 active + activeHarnessRunId，
-    // 让后续 resumeHarness（显式 harnessRunId）可以从同一状态续跑（§21）。生产路径通过
-    // registry 的 signal.reason 传递 suspend；suspendSignal 仅保留向后兼容。
-    if (reason.aborted && (isSuspendAbort(reason.signal) || reason.suspendSignal?.aborted)) {
+    // 让后续 resumeHarness（显式 harnessRunId）可以从同一状态续跑（§21）。
+    if (reason.aborted && isSuspendAbort(reason.signal)) {
       await goalTracker.persist(this.store);
       this.notifyStateChange(threadId, goalTracker, ledger);
       return;
@@ -583,7 +578,7 @@ export class TaskHarnessEngine {
    */
   async resumeHarness(
     threadId: ThreadId,
-    options?: { signal?: AbortSignal; suspendSignal?: AbortSignal; workflow?: HarnessWorkflowOptions; harnessRunId?: string },
+    options?: { signal?: AbortSignal; workflow?: HarnessWorkflowOptions; harnessRunId?: string },
   ): Promise<HarnessResult> {
     const goalTracker = new GoalTracker(threadId, options?.harnessRunId);
     const state = await goalTracker.load(this.store);
@@ -633,7 +628,6 @@ export class TaskHarnessEngine {
     // P2 取消链：与 runHarness 同构 —— 循环整体包 try/catch/finally，
     // abort / 异常退出时仍把 GoalTracker 终态与 ledger 汇总落盘一次。
     const signal = options?.signal;
-    const suspendSignal = options?.suspendSignal;
     let loopError: unknown;
     try {
       while (goalTracker.canContinue()) {
@@ -766,7 +760,7 @@ export class TaskHarnessEngine {
 
       // P2 取消链：resume 续跑被 abort → cancelled 可追溯终态（不留 active 孤儿）
       if (signal?.aborted && goalTracker.getState().status === 'active') {
-        await this.settleTerminalState(threadId, goalTracker, ledger, { aborted: true, signal, suspendSignal });
+        await this.settleTerminalState(threadId, goalTracker, ledger, { aborted: true, signal });
         return this.buildResult('cancelled', goalTracker, ledger, result, threadId);
       }
 
@@ -779,7 +773,7 @@ export class TaskHarnessEngine {
     } catch (err) {
       // P2 取消链：abort 引发的抛错收敛为 cancelled，不留未捕获拒绝
       if (signal?.aborted && goalTracker.getState().status === 'active') {
-        await this.settleTerminalState(threadId, goalTracker, ledger, { aborted: true, signal, suspendSignal });
+        await this.settleTerminalState(threadId, goalTracker, ledger, { aborted: true, signal });
         return this.buildResult('cancelled', goalTracker, ledger, result, threadId);
       }
       loopError = err;
@@ -788,8 +782,7 @@ export class TaskHarnessEngine {
       await this.settleTerminalState(threadId, goalTracker, ledger, {
         aborted: !!signal?.aborted,
         signal,
-        suspendSignal,
-        error: loopError,
+          error: loopError,
       });
     }
   }

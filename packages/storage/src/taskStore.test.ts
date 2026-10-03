@@ -35,6 +35,7 @@ function baseTask(overrides: Partial<Task> = {}): Task {
     createdAt: NOW,
     updatedAt: NOW,
     version: 0,
+    origin: 'harness_shadow',
     ...overrides,
   };
 }
@@ -161,15 +162,12 @@ describe('SqliteTaskStore tasks', () => {
     await expect(taskStore.listTasks({ origin: ['harness_shadow'] })).resolves.toEqual([]);
   });
 
-  it('defaults legacy or invalid origins to harness shadows and filters explicit Goals at the store boundary', async () => {
+  it('normalizes invalid origins to harness shadows and filters explicit Goals at the store boundary', async () => {
     const { taskStore } = makeTaskStore();
     await taskStore.createTask(baseTask({ id: 'goal-1', origin: 'explicit_goal' }));
-    // 缺失来源是旧数据语义，必须保守地落到 shadow，不得进入 Goal UI。
-    await taskStore.createTask(baseTask({ id: 'legacy-1' }));
-    // 存储层也不信任运行时绕过 TypeScript 的非法值。
+    // 存储层不信任运行时绕过 TypeScript 的非法值。
     await taskStore.createTask(baseTask({ id: 'invalid-1', origin: 'untrusted_source' as never }));
 
-    await expect(taskStore.getTask('legacy-1')).resolves.toMatchObject({ origin: 'harness_shadow' });
     await expect(taskStore.getTask('invalid-1')).resolves.toMatchObject({ origin: 'harness_shadow' });
     await expect(taskStore.listTasks({ origin: ['explicit_goal'] })).resolves.toMatchObject([
       { id: 'goal-1', origin: 'explicit_goal' },
@@ -177,7 +175,6 @@ describe('SqliteTaskStore tasks', () => {
     const shadowTasks = await taskStore.listTasks({ origin: ['harness_shadow'] });
     expect(shadowTasks).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: 'invalid-1', origin: 'harness_shadow' }),
-      expect.objectContaining({ id: 'legacy-1', origin: 'harness_shadow' }),
     ]));
   });
 

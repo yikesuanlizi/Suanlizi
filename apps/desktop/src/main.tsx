@@ -806,7 +806,7 @@ function App() {
       thread?: ThreadMeta;
       turns?: TurnMeta[];
       items: ThreadItem[];
-      config?: Partial<RunConfig>;
+      config?: RunConfig;
       usage?: ThreadUsage;
     };
     let runtimeState: RuntimeStateSnapshot | null = null;
@@ -872,14 +872,15 @@ function App() {
       if (busyDecision.clearPreparingTurn) setPreparingTurn(null);
     }
     if (data.config) {
-      const { workspaceRoot, themeMode, userAvatarId, customUserAvatarDataUrl, ...threadConfig } = data.config;
+      const { themeMode, userAvatarId, customUserAvatarDataUrl, ...threadConfig } = data.config;
       void themeMode;
       void userAvatarId;
       void customUserAvatarDataUrl;
       setConfig(() => ({
         ...globalConfigRef.current,
         ...threadConfig,
-        workspaceRoot: workspaceRoot ?? '',
+        hasWorkspace: threadConfig.hasWorkspace !== false,
+        workspaceRoot: threadConfig.hasWorkspace === false ? '' : threadConfig.workspaceRoot,
       }));
     }
     if (guard && !guard.isCurrent()) return;
@@ -990,10 +991,37 @@ function App() {
       const preSnapshotMessages: MessageEvent[] = [];
       let lastEventSequence = 0;
       let connectionFailedBeforeSubscription = false;
+      const reconnectLimit = Math.max(0, Math.floor(config.eventStreamReconnectLimit ?? 5));
+      const offlineReconnectLimit = Math.max(0, Math.floor(config.offlineReconnectLimit ?? 5));
+      const offlineBackoffMs = Math.max(500, config.streamIdleTimeoutSeconds ? 1_000 : 1_000);
+      let preSubscriptionReconnects = 0;
+      let offlineTimer: number | null = null;
+      const closeForOfflineRetry = () => {
+        if (offlineTimer !== null) return;
+        source.close();
+        eventSourceRef.current = null;
+        offlineTimer = window.setTimeout(() => {
+          offlineTimer = null;
+          void loadThread(id);
+        }, offlineBackoffMs);
+      };
       source.onmessage = (message) => {
         if (isCurrent()) preSnapshotMessages.push(message);
       };
       source.onerror = () => {
+        if (navigator.onLine === false) {
+          if (preSubscriptionReconnects < offlineReconnectLimit) {
+            preSubscriptionReconnects += 1;
+            closeForOfflineRetry();
+            return;
+          }
+          connectionFailedBeforeSubscription = true;
+          return;
+        }
+        if (preSubscriptionReconnects < reconnectLimit) {
+          preSubscriptionReconnects += 1;
+          return;
+        }
         connectionFailedBeforeSubscription = true;
       };
       source.addEventListener('thread.replay.gap', () => {
@@ -1202,10 +1230,12 @@ function App() {
         }
       };
       let recovering = connectionFailedBeforeSubscription;
+      let reconnectAttempts = 0;
       source.onopen = () => {
         if (!threadLoadGuardRef.current.isCurrent(sourceGeneration) || eventSourceRef.current !== source) return;
         const wasRecovering = recovering;
         recovering = false;
+        reconnectAttempts = 0;
         if (wasRecovering) {
           void reloadThreadSnapshot(id, {
             isCurrent: () => threadLoadGuardRef.current.isCurrent(sourceGeneration),
@@ -1215,6 +1245,22 @@ function App() {
       };
       source.onerror = () => {
         if (!threadLoadGuardRef.current.isCurrent(sourceGeneration) || eventSourceRef.current !== source) return;
+        reconnectAttempts += 1;
+        if (navigator.onLine === false && reconnectAttempts <= offlineReconnectLimit) {
+          closeForOfflineRetry();
+          return;
+        }
+        if (reconnectAttempts > reconnectLimit) {
+          source.close();
+          eventSourceRef.current = null;
+          addEvent({
+            kind: 'events',
+            title: config.locale === 'zh' ? '连接已停止重试' : 'Reconnect stopped',
+            detail: config.locale === 'zh' ? `事件连接重试 ${reconnectLimit} 次后停止；刷新或重新选择对话可恢复。` : `Stopped after ${reconnectLimit} reconnect attempts. Reload or reopen the thread.`,
+            tone: 'danger',
+          });
+          return;
+        }
         if (!recovering) {
           recovering = true;
           addEvent({
@@ -1644,7 +1690,12 @@ function App() {
     setStatus(t(config.locale, 'creating'));
     try {
       const runConfig = { ...runtimeConfigPayload(globalConfigRef.current) };
-      if (conversationKind === 'chat') runConfig.workspaceRoot = '';
+      if (conversationKind === 'chat') {
+        runConfig.hasWorkspace = false;
+        runConfig.workspaceRoot = '';
+      } else {
+        runConfig.hasWorkspace = Boolean(workspaceRoot.trim());
+      }
       if (conversationKind === 'project') {
         setRememberedWorkspaceRoots((current) => rememberWorkspaceRoots(current, [workspaceRoot]));
       }
@@ -1737,11 +1788,11 @@ function App() {
     const clearingCurrent = normalize(previousWorkspaceRoot) === target;
     if (clearingCurrent) {
       setConfig((current) => {
-        globalConfigRef.current = { ...globalConfigRef.current, workspaceRoot: '' };
-        return { ...current, workspaceRoot: '' };
+        globalConfigRef.current = { ...globalConfigRef.current, hasWorkspace: false, workspaceRoot: '' };
+        return { ...current, hasWorkspace: false, workspaceRoot: '' };
       });
       try {
-        await saveGlobalDefaults({ workspaceRoot: '' });
+        await saveGlobalDefaults({ hasWorkspace: false, workspaceRoot: '' });
       } catch {
         // 后端不可达时本地仍会清空；refreshThreads 后全局 effect 不会再恢复旧根。
       }
@@ -1788,8 +1839,8 @@ function App() {
       setRememberedWorkspaceRoots(saveRememberedWorkspaceRoots(previousRemembered));
       if (clearingCurrent) {
         setConfig((current) => {
-          globalConfigRef.current = { ...globalConfigRef.current, workspaceRoot: previousWorkspaceRoot };
-          return { ...current, workspaceRoot: previousWorkspaceRoot };
+          globalConfigRef.current = { ...globalConfigRef.current, hasWorkspace: true, workspaceRoot: previousWorkspaceRoot };
+          return { ...current, hasWorkspace: true, workspaceRoot: previousWorkspaceRoot };
         });
       }
       if (previousThreadId) await loadThread(previousThreadId);
@@ -3323,6 +3374,7 @@ function App() {
                   busy={hasActiveThread && busy}
                   threadChildren={hasActiveThread ? threadChildren : []}
                   externalPreviewRequest={previewRequest}
+                  config={config}
                   locale={config.locale}
                   runtimeItems={hasActiveThread ? items : []}
                   workspaceRoot={activeWorkspaceRoot}

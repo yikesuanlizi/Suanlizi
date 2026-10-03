@@ -76,14 +76,14 @@ export { composeRuntimeMiddleware } from './middleware.js';
 // manual compaction uses the same window/strategy as automatic compaction.
 export {
   compactionOptionsForModelContext,
-  compactionOptionsForRunProfile,
+  contextBudget,
+  defaultCompactionOptions,
   compactionOptionsForThreshold,
   normalizeCompactionThreshold,
   DEFAULT_COMPACTION_THRESHOLD,
   MIN_COMPACTION_THRESHOLD,
   MAX_COMPACTION_THRESHOLD,
-  normalizeRunProfile,
-} from './runProfile.js';
+} from './compactionPolicy.js';
 
 // ─── 模型输出合法性校验 ────────────────────────────────────────────────
 export { leaksToolProtocol, validateModelOutputItems, validateThreadItemsForPersistence } from './modelOutput.js';

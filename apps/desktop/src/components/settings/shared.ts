@@ -17,7 +17,7 @@ export type ModelPresetSaveResult = { id?: string; config: ModelPresetConfig };
 export function modelPresetMatchesRunConfig(preset: ModelPreset, config: RunConfig): boolean {
   const entries = Object.entries(preset.config) as Array<[keyof RunConfig, RunConfig[keyof RunConfig] | undefined]>;
   return entries.length > 0 && entries.every(([key, value]) => {
-    // 旧版手填窗口不再决定“使用中”标记；重新选择时会清掉它。
+    // 手填窗口不决定“使用中”标记；重新选择时会清掉它。
     if (key === 'modelContextTokens') return true;
     if (key === 'modelMaxOutputTokens') {
       return config[key] === value;
@@ -132,6 +132,9 @@ export const RUNTIME_SETTING_KEYS = [
   'maxSubagentDepth',
   'toolTimeoutSeconds',
   'modelTimeoutSeconds',
+  'streamIdleTimeoutSeconds',
+  'eventStreamReconnectLimit',
+  'offlineReconnectLimit',
   'compactionThreshold',
 ] as const satisfies ReadonlyArray<keyof RunConfig>;
 // Provider 下拉分组：自定义 / 本地 / 中国 / 国际 / 通用。已注册的 custom_* 作为独立厂商展示。

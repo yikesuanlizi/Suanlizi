@@ -15,7 +15,6 @@ import type { SandboxLevel } from '@suanlizi/sandbox';
 import type { ToolContext, ToolDefinition, ToolResult } from '@suanlizi/tools';
 import type { Locale } from '@suanlizi/i18n';
 import type { ThreadStateManager } from './state.js';
-import type { RunProfile } from './runProfile.js';
 import type { WebSearchMode } from './webSearchPolicy.js';
 import type {
   AgentContext,
@@ -34,7 +33,6 @@ export interface RuntimeTurnContext {
   userInput: UserInput;
   workspaceRoot: string;
   locale: Locale;
-  runProfile: RunProfile;
   webSearchMode: WebSearchMode;
   runtimeState: ThreadRuntimeState;
   checkpoint: Checkpoint;

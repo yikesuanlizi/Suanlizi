@@ -140,8 +140,8 @@ export const fileChangeHunkSchema = z.object({
   endLine: z.number().int().min(1).optional(),
   addedLines: z.number().int().min(0),
   removedLines: z.number().int().min(0),
-  // 实际新增/删除的行内容（不含 +/- 前缀）；旧数据无此字段时降级为空数组
-  // — English: actual added/removed line content (without +/- prefix); absent in legacy data
+  // 实际新增/删除的行内容（不含 +/- 前缀）；字段缺失时降级为空数组
+  // — English: actual added/removed line content (without +/- prefix); absent when unavailable
   addedLinesContent: z.array(z.string()).optional(),
   removedLinesContent: z.array(z.string()).optional(),
   summary: z.string().optional(),
@@ -870,7 +870,7 @@ export const approvalRequiredEventSchema = z.object({
     .optional(),
 });
 
-// 上下文压缩完成事件 schema（旧版）
+// 上下文压缩完成事件 schema
 export const compactedEventSchema = z.object({
   type: z.literal('thread.compacted'),
   threadId: threadIdSchema,
@@ -945,7 +945,6 @@ export const taskRuntimeUpdatedEventSchema = z.object({
   turnId: turnIdSchema.optional(),
   phase: z.enum(['before_turn', 'model', 'tool', 'compact', 'after_turn', 'idle']),
   status: z.enum(['running', 'completed', 'failed', 'interrupted']),
-  runProfile: z.enum(['cache_first', 'runtime_os']),
   compactionThreshold: z.number().min(0.3).max(0.95).optional(),
   checkpoint: z.boolean().optional(),
   resumable: z.boolean().optional(),

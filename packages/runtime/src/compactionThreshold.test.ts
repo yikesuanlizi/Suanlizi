@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compactionOptionsForThreshold, compactionOptionsForModelContext, normalizeCompactionThreshold, DEFAULT_COMPACTION_THRESHOLD } from './runProfile.js';
+import { compactionOptionsForThreshold, compactionOptionsForModelContext, normalizeCompactionThreshold, DEFAULT_COMPACTION_THRESHOLD } from './compactionPolicy.js';
 
 describe('compaction threshold', () => {
   it('uses the user threshold as the hard ratio', () => {
@@ -22,14 +22,17 @@ describe('compaction threshold', () => {
   });
 
   it('carries the threshold through the model-context helper', () => {
-    const o = compactionOptionsForModelContext('runtime_os', 128000, 0.6) as { maxTokens?: number; hardCompactRatio: number };
+    const o = compactionOptionsForModelContext(128000, 0.6) as { maxTokens?: number; hardCompactRatio: number };
     expect(o.maxTokens).toBe(128000);
     expect(o.hardCompactRatio).toBe(0.6);
   });
 
-  it('no longer exposes two distinct profiles', () => {
-    const a = compactionOptionsForModelContext('cache_first', 100000);
-    const b = compactionOptionsForModelContext('runtime_os', 100000);
-    expect(a).toEqual(b);
+  it('uses one model-context policy without a profile switch', () => {
+    expect(compactionOptionsForModelContext(100000)).toEqual({
+      maxTokens: 100000,
+      softCompactRatio: 0.5,
+      hardCompactRatio: 0.8,
+      strategy: 'llm',
+    });
   });
 });

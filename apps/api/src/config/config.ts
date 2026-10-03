@@ -19,7 +19,6 @@ import {
   type ModelPresetConfig,
   type PermissionPresetId,
   type ReasoningEffort,
-  type RunProfile,
   type ThreadId,
   type ThreadRunConfigOverrides,
   type WebSearchMode,
@@ -34,7 +33,7 @@ export type WebProviderMode = 'native_fetch' | 'firecrawl';
 export type SecretSource = 'config' | 'env';
 // 界面主题：深色 | 浅色 | 跟随系统 — Chinese: UI theme mode
 export type ThemeMode = 'dark' | 'light' | 'system';
-export type { PermissionPresetId, ReasoningEffort, RunProfile, WebSearchMode } from '@suanlizi/protocol';
+export type { PermissionPresetId, ReasoningEffort, WebSearchMode } from '@suanlizi/protocol';
 
 // Codex 风格的子 Agent 角色档案（以 agent_type 为键） — Chinese: agent role profiles
 export type AgentRoleProfiles = Record<string, {
@@ -51,6 +50,8 @@ export type AgentRoleProfiles = Record<string, {
 }>;
 
 export interface AgentRunConfig {
+  /** 工作区认证只看这个布尔标记；workspaceRoot 只是位置数据。 */
+  hasWorkspace: boolean;
   workspaceRoot: string;
   provider: string;
   model: string;
@@ -82,8 +83,6 @@ export interface AgentRunConfig {
   maxIterations: number;
   /** 全局同时运行的顶层任务数；同一线程仍由 runtime 保证串行。 */
   maxActiveTasks?: number;
-  /** Legacy desktop alias; normalized to maxActiveTasks. */
-  maxConcurrency?: number;
   /** 每个 Agent 步骤允许并行的只读工具数；写入和浏览器工具始终串行。 */
   maxParallelReadonlyTools?: number;
   /** 子 Agent 最大嵌套深度，服务端硬上限为 2。 */
@@ -96,11 +95,14 @@ export interface AgentRunConfig {
   modelMaxOutputTokens?: number;
   /** 模型单次响应超时（秒）；覆盖 model-gateway 的默认 120 秒。 */
   modelTimeoutSeconds?: number;
+  /** 模型流式空闲超时（秒）；每收到一帧都会重置。 */
+  streamIdleTimeoutSeconds?: number;
+  /** 事件流正常断开后允许的重连次数；0 表示不重连。 */
+  eventStreamReconnectLimit?: number;
+  /** 浏览器离线状态下的重连次数；0 表示不重连。 */
+  offlineReconnectLimit?: number;
   /** 单次工具执行超时（秒）；覆盖内置工具默认值。 */
   toolTimeoutSeconds?: number;
-  /** Runtime trade-off profile: cache hit stability or long-running traceability. */
-  /** 中文：运行时折中方案 — 缓存命中稳定性或长期可追溯 */
-  runProfile: RunProfile;
   /** 上下文压缩阈值：占模型上下文窗口的比例（0.3 ~ 0.95）。 */
   compactionThreshold?: number;
   /** Codex-style subagent role profiles keyed by agent_type. */
@@ -121,8 +123,6 @@ export interface AgentRunConfig {
   episodeRerankEnabled: boolean;
   /** Whether system monitor (CPU/memory/disk) throttling is enabled. */
   /** 中文：是否启用系统监控（CPU/内存/磁盘）限流 */
-  systemMonitorEnabled: boolean;
-  /** 是否采集性能样本。旧 systemMonitorEnabled=true 会迁移为 true。 */
   systemMonitorSamplingEnabled?: boolean;
   /** 是否把监控事件写入运行轨迹。 */
   systemMonitorLogRecordingEnabled?: boolean;
@@ -175,8 +175,6 @@ export const WEB_PROVIDER_SECRETS_KEY = 'webProvider.secrets.v1';
 export const ACCESS_POLICY_KEY = 'accessPolicy.v1';
 export const THREAD_CONFIG_KEY_PREFIX = 'thread-config:';
 export const THREAD_CONFIG_OVERRIDES_KEY_PREFIX = 'thread-config-overrides:';
-/** Metadata that distinguishes explicit thread model limits from legacy snapshots. */
-export const THREAD_CONFIG_OVERRIDES_META_KEY_PREFIX = 'thread-config-overrides-meta:';
 export const THREAD_ACCESS_POLICY_KEY_PREFIX = 'thread-access-policy:';
 // A2A 协议配置存储 key — Chinese: A2A protocol config storage key
 export const A2A_CONFIG_KEY = 'suanlizi.a2aConfig';
@@ -185,7 +183,7 @@ export const A2A_CONFIG_KEY = 'suanlizi.a2aConfig';
 // 否则切换线程时会被全局配置或线程旧快照覆盖。
 export type ThreadConfigOverrides = Pick<
   ThreadRunConfigOverrides,
-  'provider' | 'model' | 'baseUrl' | 'modelContextTokens' | 'modelMaxOutputTokens' | 'permissions' | 'reasoningEffort' | 'runProfile' | 'compactionThreshold'
+  'hasWorkspace' | 'provider' | 'model' | 'baseUrl' | 'modelContextTokens' | 'modelMaxOutputTokens' | 'permissions' | 'reasoningEffort' | 'compactionThreshold'
 >;
 
 // modelContextTokens/modelMaxOutputTokens are valid only in the dedicated
@@ -197,14 +195,8 @@ const THREAD_TAG_OVERRIDE_KEYS: Array<keyof ThreadConfigOverrides> = [
   'baseUrl',
   'permissions',
   'reasoningEffort',
-  'runProfile',
   'compactionThreshold',
 ];
-
-type ThreadConfigOverrideMeta = {
-  modelContextTokens?: true;
-  modelMaxOutputTokens?: true;
-};
 
 export interface WebProviderSecrets {
   firecrawlApiKey?: string;
@@ -282,6 +274,7 @@ export interface WebProviderRuntimeConfig {
 }
 
 export const defaultConfig: AgentRunConfig = {
+  hasWorkspace: true,
   workspaceRoot: process.cwd(),
   provider: 'ollama',
   model: 'qwen2.5-coder:7b',
@@ -301,12 +294,13 @@ export const defaultConfig: AgentRunConfig = {
   reasoningEffort: 'medium',
   maxIterations: 100,
   maxActiveTasks: 4,
-  maxConcurrency: 4,
   maxParallelReadonlyTools: 2,
   maxSubagentDepth: 1,
   modelTimeoutSeconds: 120,
+  streamIdleTimeoutSeconds: 300,
+  eventStreamReconnectLimit: 5,
+  offlineReconnectLimit: 5,
   toolTimeoutSeconds: 120,
-  runProfile: 'runtime_os',
   compactionThreshold: 0.8,
   themeMode: 'light',
   agentRoles: {},
@@ -323,7 +317,6 @@ export const defaultConfig: AgentRunConfig = {
   episodeColdAfterDays: DEFAULT_EPISODE_MEMORY_SETTINGS.episodeColdAfterDays,
   episodeFtsCandidateLimit: DEFAULT_EPISODE_MEMORY_SETTINGS.episodeFtsCandidateLimit,
   episodeRerankEnabled: DEFAULT_EPISODE_MEMORY_SETTINGS.episodeRerankEnabled,
-  systemMonitorEnabled: false,
   systemMonitorSamplingEnabled: false,
   systemMonitorLogRecordingEnabled: false,
   systemMonitorGuardEnabled: false,
@@ -343,8 +336,11 @@ export function hiddenChatWorkspaceRoot(dataDir: string): string {
 }
 
 export function resolveConfig(patch: Partial<AgentRunConfig> = {}): AgentRunConfig {
-  const merged = { ...defaultConfig, ...patch };
-  merged.workspaceRoot = path.resolve(merged.workspaceRoot);
+  const merged = { ...defaultConfig, ...patch } as AgentRunConfig;
+  // 是否有工作区只看显式布尔标记；旧数据没有该字段时只能表示“初始有工作区”。
+  merged.hasWorkspace = merged.hasWorkspace !== false;
+  // 无工作区时路径只是可能残留的位置数据，禁止 resolve 成进程 cwd。
+  merged.workspaceRoot = merged.hasWorkspace ? path.resolve(merged.workspaceRoot) : '';
   merged.dataDir = path.resolve(merged.dataDir);
   if (!merged.skillsRoot) {
     merged.skillsRoot = defaultConfig.skillsRoot;
@@ -364,11 +360,10 @@ export function resolveConfig(patch: Partial<AgentRunConfig> = {}): AgentRunConf
   merged.maxIterations = Number.isFinite(maxIterations)
     ? Math.max(1, Math.min(1000, Math.floor(maxIterations)))
     : defaultConfig.maxIterations;
-  const maxActiveTasks = Number(merged.maxActiveTasks ?? (patch as Partial<AgentRunConfig> & { maxConcurrency?: number }).maxConcurrency);
+  const maxActiveTasks = Number(merged.maxActiveTasks);
   merged.maxActiveTasks = Number.isFinite(maxActiveTasks)
     ? Math.max(1, Math.min(64, Math.floor(maxActiveTasks)))
     : defaultConfig.maxActiveTasks;
-  merged.maxConcurrency = merged.maxActiveTasks;
   const maxParallelReadonlyTools = Number(merged.maxParallelReadonlyTools);
   merged.maxParallelReadonlyTools = Number.isFinite(maxParallelReadonlyTools)
     ? Math.max(1, Math.min(16, Math.floor(maxParallelReadonlyTools)))
@@ -380,6 +375,19 @@ export function resolveConfig(patch: Partial<AgentRunConfig> = {}): AgentRunConf
   normalizeOptionalPositiveIntegerField(merged, 'modelContextTokens');
   normalizeOptionalPositiveIntegerField(merged, 'modelMaxOutputTokens');
   const modelTimeoutSeconds = Number(merged.modelTimeoutSeconds);
+  const streamIdleTimeoutSeconds = Number(merged.streamIdleTimeoutSeconds);
+  merged.streamIdleTimeoutSeconds = Number.isFinite(streamIdleTimeoutSeconds)
+    ? Math.max(5, Math.min(3600, Math.floor(streamIdleTimeoutSeconds)))
+
+    : defaultConfig.streamIdleTimeoutSeconds;
+  const eventStreamReconnectLimit = Number(merged.eventStreamReconnectLimit);
+  merged.eventStreamReconnectLimit = Number.isFinite(eventStreamReconnectLimit)
+    ? Math.max(0, Math.min(20, Math.floor(eventStreamReconnectLimit)))
+    : defaultConfig.eventStreamReconnectLimit;
+  const offlineReconnectLimit = Number(merged.offlineReconnectLimit);
+  merged.offlineReconnectLimit = Number.isFinite(offlineReconnectLimit)
+    ? Math.max(0, Math.min(20, Math.floor(offlineReconnectLimit)))
+    : defaultConfig.offlineReconnectLimit;
   merged.modelTimeoutSeconds = Number.isFinite(modelTimeoutSeconds)
     ? Math.max(10, Math.min(3600, Math.floor(modelTimeoutSeconds)))
     : defaultConfig.modelTimeoutSeconds;
@@ -387,13 +395,6 @@ export function resolveConfig(patch: Partial<AgentRunConfig> = {}): AgentRunConf
   merged.toolTimeoutSeconds = Number.isFinite(toolTimeoutSeconds)
     ? Math.max(10, Math.min(600, Math.floor(toolTimeoutSeconds)))
     : defaultConfig.toolTimeoutSeconds;
-  // harness 不再是有效 RunProfile，旧值自动降级为 runtime_os
-  if ((merged.runProfile as string) === 'harness') {
-    merged.runProfile = 'runtime_os';
-  }
-  if (!['cache_first', 'runtime_os'].includes(merged.runProfile)) {
-    merged.runProfile = defaultConfig.runProfile;
-  }
   // 压缩阈值：越界值收敛到允许区间，非法值回退默认。
   merged.compactionThreshold = normalizeCompactionThreshold(merged.compactionThreshold);
   if (!['dark', 'light', 'system'].includes(merged.themeMode)) {
@@ -432,15 +433,9 @@ export function resolveConfig(patch: Partial<AgentRunConfig> = {}): AgentRunConf
   merged.episodeColdAfterDays = episode.episodeColdAfterDays;
   merged.episodeFtsCandidateLimit = episode.episodeFtsCandidateLimit;
   merged.episodeRerankEnabled = episode.episodeRerankEnabled;
-  // 兼容旧版单一开关：旧值只在新字段不存在时迁移，避免覆盖用户已关闭的 guard。
-  const legacyMonitorEnabled = merged.systemMonitorEnabled === true;
-  merged.systemMonitorSamplingEnabled = (patch.systemMonitorSamplingEnabled === undefined
-    ? legacyMonitorEnabled
-    : merged.systemMonitorSamplingEnabled === true);
+  merged.systemMonitorSamplingEnabled = merged.systemMonitorSamplingEnabled === true;
   merged.systemMonitorLogRecordingEnabled = merged.systemMonitorLogRecordingEnabled === true;
-  merged.systemMonitorGuardEnabled = (patch.systemMonitorGuardEnabled === undefined
-    ? legacyMonitorEnabled
-    : merged.systemMonitorGuardEnabled === true);
+  merged.systemMonitorGuardEnabled = merged.systemMonitorGuardEnabled === true;
   const defaultThresholds = defaultConfig.systemMonitorThresholds ?? {
     cpuLight: 85,
     cpuModerate: 92,
@@ -464,7 +459,6 @@ export function resolveConfig(patch: Partial<AgentRunConfig> = {}): AgentRunConf
       diskSevereBytes: boundedThreshold(thresholds.diskSevereBytes, defaultThresholds.diskSevereBytes, 1, 1024 ** 5),
     };
   }
-  merged.systemMonitorEnabled = merged.systemMonitorSamplingEnabled;
   const inputPolicy = normalizeAccessPolicyConfig(merged.accessPolicy);
   const modeFromPermissions = merged.permissions === 'danger_full_access'
     ? 'danger_full_access'
@@ -474,9 +468,14 @@ export function resolveConfig(patch: Partial<AgentRunConfig> = {}): AgentRunConf
   merged.accessPolicy = normalizeAccessPolicyConfig({
     ...inputPolicy,
     mode: modeFromPermissions,
-    workspaceRoot: inputPolicy.workspaceRoot || merged.workspaceRoot,
+    workspaceRoot: merged.hasWorkspace
+      ? (inputPolicy.workspaceRoot || merged.workspaceRoot)
+      : '',
     temporaryGrants: [],
   });
+  if (!merged.hasWorkspace && merged.permissions !== 'danger_full_access') {
+    merged.accessPolicy.mode = 'chat';
+  }
   return merged;
 }
 
@@ -664,13 +663,6 @@ export function createConfigRepository(store: ThreadStore) {
     try {
       const { skillsRoot: _skillsRoot, ...config } = JSON.parse(raw) as Partial<AgentRunConfig>;
       const sanitized = stripThreadOnlyGlobalAppearance(config);
-      // Older builds persisted the entire effective RunConfig in thread tags.
-      // Ignore that legacy snapshot so stale model limits cannot override the
-      // current global configuration. New snapshots contain only explicit
-      // thread override fields.
-      // UI-only appearance fields are removed before this check so a legacy
-      // snapshot containing theme/avatar metadata can still retain legitimate
-      // model overrides.
       if (Object.keys(sanitized).some((key) => !THREAD_TAG_OVERRIDE_KEYS.includes(key as keyof ThreadConfigOverrides))) return null;
       return sanitized;
     } catch {
@@ -689,7 +681,7 @@ export function createConfigRepository(store: ThreadStore) {
 
   function publicThreadRunConfig(config: AgentRunConfig, thread: { tags?: Record<string, string> } | null): AgentRunConfig {
     const publicConfig = publicRunConfig(config);
-    return isPlainChatThread(thread) ? { ...publicConfig, workspaceRoot: '' } : publicConfig;
+    return isPlainChatThread(thread) ? { ...publicConfig, hasWorkspace: false, workspaceRoot: '' } : publicConfig;
   }
 
   async function getThreadRunConfig(threadId: ThreadId): Promise<AgentRunConfig> {
@@ -703,13 +695,18 @@ export function createConfigRepository(store: ThreadStore) {
     // metadata as the runtime default unless an explicit thread access policy
     // has a different root; otherwise a newly created task silently falls back
     // to the global workspace and its harness operates on the wrong repository.
-    const threadWorkspaceRoot = !isPlainChatThread(thread) ? thread?.workspaceRoot?.trim() : undefined;
-    const workspaceRoot = path.resolve(
-      threadAccessPolicy?.workspaceRoot
-        || threadWorkspaceRoot
-        || globalAccessPolicy.workspaceRoot
-        || base.workspaceRoot,
-    );
+    const hasWorkspace = !isPlainChatThread(thread)
+      && threadConfig?.hasWorkspace !== false
+      && overrides.hasWorkspace !== false
+      && (thread?.hasWorkspace !== false);
+    const workspaceRoot = hasWorkspace
+      ? path.resolve(
+          threadAccessPolicy?.workspaceRoot
+            || thread?.workspaceRoot?.trim()
+            || globalAccessPolicy.workspaceRoot
+            || base.workspaceRoot,
+        )
+      : '';
     const accessPolicy = normalizePersistentAccessPolicy({
       ...(threadAccessPolicy ?? globalAccessPolicy),
       mode: threadAccessPolicy?.mode ?? globalAccessPolicy.mode,
@@ -721,7 +718,14 @@ export function createConfigRepository(store: ThreadStore) {
       temporaryGrants: [],
     });
     return applyThreadKindRuntimeWorkspace(
-      resolveConfig({ ...base, ...(threadConfig ?? {}), ...overrides, workspaceRoot, accessPolicy }),
+      resolveConfig({
+        ...base,
+        ...(threadConfig ?? {}),
+        ...overrides,
+        hasWorkspace,
+        workspaceRoot,
+        accessPolicy,
+      }),
       thread,
     );
   }
@@ -758,19 +762,6 @@ export function createConfigRepository(store: ThreadStore) {
     return `${THREAD_CONFIG_OVERRIDES_KEY_PREFIX}${threadId}`;
   }
 
-  function threadConfigOverridesMetaKey(threadId: string): string {
-    return `${THREAD_CONFIG_OVERRIDES_META_KEY_PREFIX}${threadId}`;
-  }
-
-  function threadConfigOverrideMetaFrom(input: unknown): ThreadConfigOverrideMeta {
-    if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
-    const value = input as Record<string, unknown>;
-    return {
-      ...(value.modelContextTokens === true ? { modelContextTokens: true } : {}),
-      ...(value.modelMaxOutputTokens === true ? { modelMaxOutputTokens: true } : {}),
-    };
-  }
-
   function threadAccessPolicyKey(threadId: string): string {
     return `${THREAD_ACCESS_POLICY_KEY_PREFIX}${threadId}`;
   }
@@ -791,9 +782,6 @@ export function createConfigRepository(store: ThreadStore) {
     }
     const effort = normalizeReasoningEffort(input.reasoningEffort);
     if (effort) result.reasoningEffort = effort;
-    if (input.runProfile === 'cache_first' || input.runProfile === 'runtime_os') {
-      result.runProfile = input.runProfile;
-    }
     if (typeof input.compactionThreshold === 'number') {
       result.compactionThreshold = normalizeCompactionThreshold(input.compactionThreshold);
     }
@@ -803,21 +791,7 @@ export function createConfigRepository(store: ThreadStore) {
   async function getThreadConfigOverrides(threadId: string): Promise<ThreadConfigOverrides> {
     const stored = await store.getSetting<Record<string, unknown>>(threadConfigOverridesKey(threadId));
     if (!stored) return {};
-    const result = threadConfigOverridesFrom(stored);
-    const metadata = threadConfigOverrideMetaFrom(await store.getSetting<unknown>(threadConfigOverridesMetaKey(threadId)));
-    let migrated = false;
-    // Before the explicit marker existed, context/output values were written
-    // by every turn request. They must not override the current global model.
-    for (const key of ['modelContextTokens', 'modelMaxOutputTokens'] as const) {
-      if (result[key] !== undefined && metadata[key] !== true) {
-        delete result[key];
-        migrated = true;
-      }
-    }
-    if (migrated) {
-      await store.setSetting(threadConfigOverridesKey(threadId), result);
-    }
-    return result;
+    return threadConfigOverridesFrom(stored);
   }
 
   async function updateThreadConfigOverrides(
@@ -829,18 +803,12 @@ export function createConfigRepository(store: ThreadStore) {
       const current = await getThreadConfigOverrides(threadId);
       const safe = threadConfigOverridesFrom(input);
       const merged = threadConfigOverridesFrom({ ...current, ...safe });
-      const metadata = threadConfigOverrideMetaFrom(await store.getSetting<unknown>(threadConfigOverridesMetaKey(threadId)));
-      for (const key of ['modelContextTokens', 'modelMaxOutputTokens'] as const) {
-        if (typeof safe[key] === 'number') metadata[key] = true;
-      }
       for (const key of ['modelContextTokens', 'modelMaxOutputTokens'] as const) {
         if (Object.hasOwn(input, key) && input[key] === null) {
           delete merged[key];
-          delete metadata[key];
         }
       }
       await store.setSetting(threadConfigOverridesKey(threadId), merged);
-      await store.setSetting(threadConfigOverridesMetaKey(threadId), metadata);
       return merged;
     });
     threadConfigOverrideQueues.set(threadId, operation);

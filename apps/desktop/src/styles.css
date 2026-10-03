@@ -1,3 +1,138 @@
+
+/* ─── 工具调用：终端式命令输出与原生展开详情 ─── */
+.appShell .commandExecOutput > pre,
+.appShell .commandExecOutputShort {
+  color: #d8e1ea;
+}
+
+.appShell .commandExecOutput > pre,
+.appShell .commandExecOutputShort,
+.appShell .toolPayloadValue {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-variant-ligatures: none;
+}
+
+.appShell .commandExecOutput > pre span,
+.appShell .commandExecOutputShort span { color: inherit; }
+.appShell .commandExecOutput .fg-red, .appShell .commandExecOutputShort .fg-red { color: #ff7b72; }
+.appShell .commandExecOutput .fg-green, .appShell .commandExecOutputShort .fg-green { color: #7ee787; }
+.appShell .commandExecOutput .fg-yellow, .appShell .commandExecOutputShort .fg-yellow { color: #e3b341; }
+.appShell .commandExecOutput .fg-blue, .appShell .commandExecOutputShort .fg-blue { color: #79c0ff; }
+.appShell .commandExecOutput .fg-magenta, .appShell .commandExecOutputShort .fg-magenta { color: #d2a8ff; }
+.appShell .commandExecOutput .fg-cyan, .appShell .commandExecOutputShort .fg-cyan { color: #76e3ea; }
+.appShell .commandExecOutput .fg-white, .appShell .commandExecOutputShort .fg-white { color: #f0f6fc; }
+.appShell .commandExecOutput .fg-black, .appShell .commandExecOutputShort .fg-black { color: #8b949e; }
+.appShell .commandExecOutput .bold, .appShell .commandExecOutputShort .bold { font-weight: 650; }
+.appShell .commandExecOutput .underline, .appShell .commandExecOutputShort .underline { text-decoration: underline; }
+
+.appShell .toolSummaryStatus.in_progress {
+  display: inline-grid;
+  width: 12px;
+  height: 12px;
+  place-items: center;
+}
+
+.appShell .toolSummaryStatus.in_progress .statusSpinner {
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid color-mix(in srgb, #b88a35 38%, transparent);
+  border-top-color: #b88a35;
+  border-radius: 50%;
+  animation: toolStatusSpin .9s linear infinite;
+}
+
+.appShell .toolPayloadDetails {
+  display: grid;
+  margin: 4px 0 0 10px;
+  padding-top: 4px;
+  border-top: 1px solid var(--nx-control-border);
+  gap: 4px;
+}
+
+.appShell .toolPayloadRow {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  gap: 7px;
+  align-items: start;
+}
+
+.appShell .toolPayloadKey {
+  padding-top: 3px;
+  overflow: hidden;
+  color: var(--nx-text-faint);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+}
+
+.appShell .toolPayloadValue {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--nx-text-primary);
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+@keyframes toolStatusSpin { to { transform: rotate(360deg); } }
+
+/* ─── 右侧活动/智能体标签固定控件 ─── */
+.appShell .workbenchPrimaryTabWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
+}
+
+.appShell .workbenchPrimaryTabWrap > button {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.appShell .workbenchPrimaryTabs .workbenchPrimaryTabPin {
+  flex: 0 0 0 !important;
+  width: 0 !important;
+  min-width: 0 !important;
+  height: 22px;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 solid transparent !important;
+  border-radius: 6px;
+  overflow: hidden;
+  background: transparent;
+  color: var(--nx-text-primary);
+  cursor: pointer;
+  opacity: 0;
+  transition: width .12s ease, margin .12s ease, opacity .12s ease, background .12s ease, border-color .12s ease, color .12s ease;
+}
+
+.appShell .workbenchPrimaryTabPin svg {
+  flex: 0 0 auto;
+  width: 11px;
+  height: 11px;
+}
+
+.appShell .workbenchPrimaryTabWrap:hover .workbenchPrimaryTabPin,
+.appShell .workbenchPrimaryTabPin:focus-visible {
+  flex: 0 0 19px !important;
+  width: 19px !important;
+  margin-left: 2px !important;
+  border-width: 1px !important;
+  border-color: var(--nx-control-border) !important;
+  background: var(--nx-surface-raised);
+  opacity: 1;
+}
+
+.appShell .workbenchPrimaryTabPin:hover {
+  background: var(--nx-accent-soft);
+  color: var(--nx-text-primary);
+}
 @import "tailwindcss";
 @import "./plugin-mcp.css";
 
@@ -94,7 +229,7 @@
     @apply h-[18px] w-[18px] fill-none stroke-current;
     stroke-linecap: round;
     stroke-linejoin: round;
-    stroke-width: 1.8;
+    stroke-width: 1.3;
   }
 
   h1,
@@ -1041,8 +1176,7 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
   }
 
   main.appShell:is(.theme-light, .theme-dark, .theme-system) :is(
-    .settingsHelpSectionNum, .settingsHelpListItem::before,
-    .gitNexusHelpModalWelcome, .gitNexusHelpTips .gitNexusHelpSectionTitle
+    .settingsHelpSectionNum, .settingsHelpListItem::before
   ) {
     background-color: var(--final-ui-hover) !important;
     border-color: var(--final-ui-border) !important;
@@ -11409,1229 +11543,168 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
   word-break: break-word;
 }
 
-/* GitNexus 结果展示 */
-.gitNexusResult {
-  margin: 8px 0;
-  border: 1px solid var(--nx-border, #e2e8f0);
-  border-radius: 8px;
-  background: var(--nx-panel, #ffffff);
-  color: var(--nx-text, #0f172a);
-  overflow: hidden;
-}
 
-.gitNexusHeader {
-  padding: 8px 12px;
-  font-size: 13px;
-  font-weight: 600;
-  border-bottom: 1px solid var(--nx-border, #e2e8f0);
-  background: var(--nx-panel, #ffffff);
-}
 
-.gitNexusGroups {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--nx-border, #e2e8f0);
-}
 
-.gitNexusGroupTag {
-  display: inline-block;
-  padding: 2px 8px;
-  font-size: 11px;
-  border-radius: 10px;
-  background: rgba(2, 132, 199, 0.1);
-  color: var(--nx-accent, #0284c7);
-}
 
-.gitNexusGraph {
-  height: 360px;
-  width: 100%;
-  position: relative;
-}
 
-.gitNexusGraphPreviewButton {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 4;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 30px;
-  padding: 0 10px;
-  border: 1px solid rgba(148, 163, 184, 0.42);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.94);
-  color: #334155;
-  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.12);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 600;
-}
 
-.gitNexusGraphPreviewButton:hover {
-  background: #f8fafc;
-  border-color: rgba(37, 99, 235, 0.45);
-  color: #1d4ed8;
-}
 
-.gitNexusGraphPreviewButton svg {
-  width: 15px;
-  height: 15px;
-  stroke: currentColor;
-  fill: none;
-  stroke-width: 2;
-}
 
-.gitNexusGraph .gitNexusGraphDetailPanel {
-  top: 50px;
-}
 
 @media (max-width: 640px) {
-  .gitNexusGraph {
-    height: 280px;
-  }
 }
 
-.gitNexusList {
-  max-height: 360px;
-  overflow: auto;
-}
 
-.gitNexusList table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12px;
-}
 
-.gitNexusList th,
-.gitNexusList td {
-  padding: 6px 10px;
-  text-align: left;
-  border-bottom: 1px solid var(--nx-border, #e2e8f0);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 240px;
-}
 
-.gitNexusList th {
-  font-weight: 600;
-  background: var(--nx-panel, #ffffff);
-  position: sticky;
-  top: 0;
-  z-index: 1;
-}
 
-.gitNexusNodeMeta {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: var(--nx-accent, #0284c7);
-}
 
-.gitNexusEmpty {
-  padding: 24px 12px;
-  text-align: center;
-  color: var(--nx-muted, #64748b);
-  font-size: 13px;
-}
 
-.gitNexusNodeLabel {
-  min-width: 158px;
-  max-width: 190px;
-  overflow: hidden;
-  font-size: 12px;
-  line-height: 1.25;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  letter-spacing: 0;
-}
 
-.gitNexusNodeTitle {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 600;
-  color: var(--nx-text, #0f172a);
-}
 
-.gitNexusNodeSubtitle {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 10px;
-  font-weight: 400;
-  color: var(--nx-muted, #64748b);
-}
 
-.gitNexusGraph .react-flow__node.gitNexusNode {
-  border: 1px solid rgba(100, 116, 139, 0.55);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
-  padding: 8px 10px;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-}
 
-.gitNexusGraph .react-flow__node.gitNexusNode-center {
-  border-color: rgba(37, 99, 235, 0.7);
-  background: rgba(239, 246, 255, 0.98);
-}
 
-.gitNexusGraph .react-flow__node.gitNexusLaneNode {
-  background: transparent;
-  border: 0;
-  box-shadow: none;
-  padding: 0;
-  pointer-events: none;
-}
 
-.gitNexusLaneLabel {
-  display: inline-flex;
-  align-items: center;
-  height: 24px;
-  padding: 0 10px;
-  border: 1px solid rgba(148, 163, 184, 0.45);
-  border-radius: 6px;
-  background: rgba(248, 250, 252, 0.94);
-  color: #334155;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1;
-  white-space: nowrap;
-}
 
-.gitNexusGraph .react-flow__edge.gitNexusFlowEdge .react-flow__edge-path {
-  stroke: rgba(100, 116, 139, 0.42);
-  stroke-width: 1.35;
-}
 
-.gitNexusGraph .react-flow__controls {
-  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.14);
-  border: 1px solid rgba(148, 163, 184, 0.28);
-  overflow: hidden;
-}
 
-.gitNexusGraph .react-flow__controls-button {
-  color: #334155;
-}
 
-.gitNexusGraph .react-flow__minimap {
-  opacity: 0.72;
-}
 
-.gitNexusGraphDetailPanel {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 5;
-  width: min(320px, calc(100% - 24px));
-  max-height: calc(100% - 24px);
-  overflow: auto;
-  border: 1px solid rgba(148, 163, 184, 0.35);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.97);
-  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.18);
-  padding: 12px;
-  color: var(--nx-text, #0f172a);
-}
 
-.gitNexusGraphDetailClose {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 24px;
-  height: 24px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--nx-muted, #64748b);
-  cursor: pointer;
-  font-size: 18px;
-  line-height: 1;
-}
 
-.gitNexusGraphDetailClose:hover {
-  background: rgba(148, 163, 184, 0.16);
-}
 
-.gitNexusGraphDetailTitle {
-  padding-right: 28px;
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.3;
-}
 
-.gitNexusGraphDetailMeta {
-  margin-top: 4px;
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--nx-muted, #64748b);
-  word-break: break-all;
-}
 
-.gitNexusDetailRelationGroup {
-  margin-top: 10px;
-}
 
-.gitNexusDetailRelationTitle {
-  margin-bottom: 5px;
-  font-size: 11px;
-  font-weight: 700;
-  color: #475569;
-}
 
-.gitNexusDetailRelation {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 8px;
-  align-items: center;
-  padding: 5px 0;
-  border-top: 1px solid rgba(226, 232, 240, 0.8);
-  font-size: 11px;
-}
 
-.gitNexusDetailRelationType {
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: rgba(37, 99, 235, 0.1);
-  color: #1d4ed8;
-  font-weight: 700;
-}
 
-.gitNexusDetailRelationNode {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
-.gitNexusDetailEmpty {
-  font-size: 11px;
-  color: var(--nx-muted, #64748b);
-}
 
-/* GitNexus 独立面板 */
-.workspaceFilesHeaderActions {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
 
 .workspaceFilesHeaderActions .miniIconButton.active {
   background: var(--nx-blue, #2563eb);
   color: #fff;
 }
 
-.workspaceGitNexusView {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.gitNexusPanel {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-}
-
-.gitNexusPanelHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--nx-border, #e2e8f0);
-  gap: 8px;
-}
-
-.gitNexusPanelHeader h2 {
-  font-size: 14px;
-  font-weight: 600;
-  margin: 0;
-  color: var(--nx-text, #0f172a);
-}
-
-.gitNexusPanelHeader p {
-  font-size: 12px;
-  margin: 2px 0 0;
-  color: var(--nx-muted, #64748b);
-  max-width: 240px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.gitNexusProjectSection {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--nx-border, #e2e8f0);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.gitNexusProjectRow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.gitNexusLabel {
-  font-size: 12px;
-  color: var(--nx-muted, #64748b);
-  white-space: nowrap;
-}
-
-.gitNexusPathSelect {
-  flex: 1;
-  padding: 4px 8px;
-  font-size: 12px;
-  border: 1px solid var(--nx-border, #e2e8f0);
-  border-radius: 4px;
-  background: var(--nx-panel, #ffffff);
-  color: var(--nx-text, #0f172a);
-  min-width: 0;
-}
-
-.gitNexusAnalyzeRow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.gitNexusAnalyzeBtn {
-  padding: 5px 12px;
-  font-size: 12px;
-  font-weight: 500;
-  border: none;
-  border-radius: 4px;
-  background: var(--nx-blue, #2563eb);
-  color: #fff;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.gitNexusAnalyzeBtn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.gitNexusStatus {
-  font-size: 12px;
-  color: var(--nx-success, #16a34a);
-}
-
-.gitNexusError {
-  font-size: 12px;
-  color: var(--nx-error, #dc2626);
-}
-
-.gitNexusTabs {
-  display: flex;
-  border-bottom: 1px solid var(--nx-border, #e2e8f0);
-  padding: 0 8px;
-  background: var(--nx-panel, #ffffff);
-}
-
-.gitNexusTabs button {
-  padding: 8px 12px;
-  font-size: 12px;
-  border: none;
-  background: transparent;
-  color: var(--nx-muted, #64748b);
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  white-space: nowrap;
-}
-
-.gitNexusTabs button.active {
-  color: var(--nx-accent, #0284c7);
-  border-bottom-color: var(--nx-accent, #0284c7);
-  font-weight: 500;
-}
-
-.gitNexusTabItem {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.gitNexusHelpIcon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  border: 1px solid currentColor;
-  font-size: 10px;
-  margin-left: 4px;
-  cursor: pointer;
-  line-height: 1;
-  opacity: 0.6;
-  transition: opacity 0.2s;
-}
-
-.gitNexusHelpIcon:hover {
-  opacity: 1;
-}
-
-.gitNexusHelpPopover {
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  margin-top: 8px;
-  width: 280px;
-  padding: 12px;
-  background: var(--nx-panel, #ffffff);
-  border: 1px solid var(--nx-border, #e2e8f0);
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  z-index: 100;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--nx-text, #0f172a);
-}
-
-.gitNexusHelpPopover::before {
-  content: '';
-  position: absolute;
-  top: -6px;
-  left: 50%;
-  transform: translateX(-50%) rotate(45deg);
-  width: 10px;
-  height: 10px;
-  background: var(--nx-panel, #ffffff);
-  border-left: 1px solid var(--nx-border, #e2e8f0);
-  border-top: 1px solid var(--nx-border, #e2e8f0);
-}
-
-.gitNexusHelpPopoverTitle {
-  font-weight: 600;
-  font-size: 13px;
-  margin-bottom: 8px;
-  color: var(--nx-text, #0f172a);
-}
-
-.gitNexusHelpPopoverRow {
-  margin-bottom: 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.gitNexusHelpPopoverRow:last-child {
-  margin-bottom: 0;
-}
-
-.gitNexusHelpPopoverRow strong {
-  color: var(--nx-muted, #64748b);
-  font-weight: 600;
-  font-size: 11px;
-}
-
-.gitNexusHelpPopoverRow span {
-  color: var(--nx-text, #0f172a);
-}
-
-.gitNexusToolBody {
-  flex: 1;
-  overflow: auto;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.gitNexusToolForm {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.gitNexusInputRow {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.gitNexusInputRow input {
-  flex: 1;
-  padding: 6px 10px;
-  font-size: 12px;
-  border: 1px solid var(--nx-border, #e2e8f0);
-  border-radius: 4px;
-  background: var(--nx-panel, #ffffff);
-  color: var(--nx-text, #0f172a);
-  min-width: 0;
-}
-
-.gitNexusInputRow input:focus {
-  outline: none;
-  border-color: var(--nx-blue, #2563eb);
-}
-
-.gitNexusInputRow button {
-  padding: 6px 12px;
-  font-size: 12px;
-  font-weight: 500;
-  border: none;
-  border-radius: 4px;
-  background: var(--nx-blue, #2563eb);
-  color: #fff;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.gitNexusInputRow button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.gitNexusArrow {
-  color: var(--nx-muted, #64748b);
-  font-size: 14px;
-}
-
-.gitNexusLoading,
-.gitNexusEmptyHint {
-  text-align: center;
-  padding: 24px 12px;
-  color: var(--nx-muted, #64748b);
-  font-size: 12px;
-}
-
-/* GitNexus 概览 */
-.gitNexusOverview {
-  flex: 1;
-  overflow: auto;
-  padding: 8px;
-}
-
-.gitNexusOverviewGraphHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-
-.gitNexusOverviewGraphTabs {
-  display: flex;
-  gap: 4px;
-}
-
-.gitNexusOverviewGraphTabs button {
-  padding: 4px 10px;
-  font-size: 12px;
-  border: 1px solid var(--nx-border, rgba(255, 255, 255, 0.08));
-  background: transparent;
-  color: var(--nx-muted, #94a3b8);
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.gitNexusOverviewGraphTabs button.active {
-  background: var(--nx-blue, #2563eb);
-  color: #fff;
-  border-color: var(--nx-blue, #2563eb);
-}
-
-.gitNexusGraphRefreshBtn {
-  padding: 4px 10px;
-  font-size: 12px;
-  border: 1px solid var(--nx-border, rgba(255, 255, 255, 0.08));
-  background: var(--nx-card-bg, rgba(255, 255, 255, 0.03));
-  color: var(--nx-muted, #94a3b8);
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.gitNexusGraphRefreshBtn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.gitNexusGraphShell {
-  position: relative;
-}
-
-.gitNexusForceGraph {
-  width: 100%;
-}
-
-.gitNexusForceGraphLegend {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.gitNexusForceGraphStat {
-  font-size: 11px;
-  color: var(--nx-muted, #64748b);
-  letter-spacing: 0.01em;
-}
-
-.gitNexusGraphModePill {
-  display: inline-flex;
-  align-items: center;
-  min-height: 22px;
-  padding: 0 9px;
-  border: 1px solid rgba(56, 189, 248, 0.22);
-  border-radius: 999px;
-  background: rgba(14, 165, 233, 0.08);
-  color: #0369a1;
-  font-size: 11px;
-  font-weight: 650;
-}
-
-[data-theme='dark'] .gitNexusGraphModePill {
-  color: #bae6fd;
-  background: rgba(14, 165, 233, 0.13);
-  border-color: rgba(125, 211, 252, 0.26);
-}
-
-.gitNexusForceGraphGroups {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 8px;
-}
-
-.gitNexusForceGraphGroupTag {
-  font-size: 11px;
-  color: var(--nx-muted, #94a3b8);
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.gitNexusForceGraphGroupDot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  display: inline-block;
-}
-
-.gitNexusForceGraphCanvasWrap {
-  position: relative;
-  width: 100%;
-  border: 1px solid rgba(203, 213, 225, 0.68);
-  border-radius: 14px;
-  overflow: hidden;
-  background: #f8fafc;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.68), 0 10px 28px rgba(15, 23, 42, 0.06);
-  cursor: grab;
-}
-
-[data-theme='dark'] .gitNexusForceGraphCanvasWrap {
-  border-color: rgba(203, 213, 225, 0.64);
-  background: #f8fafc;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.64), 0 18px 42px rgba(0, 0, 0, 0.2);
-}
-
-.gitNexusForceGraphCanvasWrap:active {
-  cursor: grabbing;
-}
-
-.gitNexusForceGraphCanvasWrap canvas {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-
-.gitNexusGraphInspector {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 2;
-  width: min(300px, calc(100% - 24px));
-  padding: 12px 14px;
-  border: 1px solid rgba(125, 211, 252, 0.22);
-  border-radius: 14px;
-  background: rgba(15, 23, 42, 0.86);
-  color: #e5f0ff;
-  box-shadow: 0 20px 48px rgba(2, 6, 23, 0.26);
-  backdrop-filter: blur(14px);
-  pointer-events: none;
-}
-
-.gitNexusGraphInspectorEyebrow {
-  margin-bottom: 5px;
-  color: #93c5fd;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.gitNexusGraphInspector strong {
-  display: block;
-  color: #f8fafc;
-  font-size: 13px;
-  line-height: 1.35;
-}
-
-.gitNexusGraphInspector span {
-  display: block;
-  margin-top: 4px;
-  color: #bfdbfe;
-  font-size: 11px;
-  line-height: 1.45;
-  word-break: break-all;
-}
-
-.gitNexusGraphInspector dl {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin: 10px 0 0;
-}
-
-.gitNexusGraphInspector div {
-  min-width: 0;
-}
-
-.gitNexusGraphInspector dt {
-  color: #93a4bd;
-  font-size: 10px;
-}
-
-.gitNexusGraphInspector dd {
-  margin: 2px 0 0;
-  overflow: hidden;
-  color: #eff6ff;
-  font-size: 12px;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.gitNexusOverviewStats {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.gitNexusStatCard {
-  background: var(--nx-card-bg, rgba(255, 255, 255, 0.03));
-  border: 1px solid var(--nx-border, rgba(255, 255, 255, 0.08));
-  border-radius: 8px;
-  padding: 10px 8px;
-  text-align: center;
-}
-
-.gitNexusStatValue {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--nx-blue, #2563eb);
-  line-height: 1.2;
-}
-
-.gitNexusStatLabel {
-  font-size: 11px;
-  color: var(--nx-muted, #94a3b8);
-  margin-top: 4px;
-}
-
-.gitNexusOverviewRelations {
-  margin-top: 12px;
-}
-
-.gitNexusOverviewSectionTitle {
-  margin: 0 0 8px 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--nx-text, #e2e8f0);
-}
-
-.gitNexusRelationGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 6px;
-}
-
-.gitNexusRelationItem {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: var(--nx-card-bg, rgba(255, 255, 255, 0.03));
-  border: 1px solid var(--nx-border, rgba(255, 255, 255, 0.08));
-  border-radius: 6px;
-  padding: 6px 10px;
-  font-size: 11px;
-}
-
-.gitNexusRelationName {
-  color: var(--nx-muted, #94a3b8);
-}
-
-.gitNexusRelationCount {
-  font-weight: 600;
-  color: var(--nx-text, #e2e8f0);
-}
-
-.gitNexusOverviewGroups {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.gitNexusOverviewGroup {
-  background: var(--nx-card-bg, rgba(255, 255, 255, 0.03));
-  border: 1px solid var(--nx-border, rgba(255, 255, 255, 0.08));
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.gitNexusOverviewGroupTitle {
-  margin: 0;
-  padding: 8px 12px;
-  font-size: 13px;
-  font-weight: 600;
-  background: var(--nx-card-header, rgba(255, 255, 255, 0.04));
-  border-bottom: 1px solid var(--nx-border, rgba(255, 255, 255, 0.08));
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.gitNexusOverviewCount {
-  font-size: 11px;
-  font-weight: 400;
-  color: var(--nx-muted, #64748b);
-  background: var(--nx-badge-bg, rgba(255, 255, 255, 0.08));
-  padding: 1px 7px;
-  border-radius: 10px;
-}
-
-.gitNexusOverviewEmpty {
-  padding: 8px 12px;
-  color: var(--nx-muted, #64748b);
-  font-size: 12px;
-  margin: 0;
-}
-
-.gitNexusOverviewList {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.gitNexusOverviewItem {
-  padding: 6px 12px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-  transition: background 0.12s;
-}
-
-.gitNexusOverviewItem:hover {
-  background: rgba(59, 130, 246, 0.08);
-}
-
-.gitNexusOverviewItemName {
-  font-weight: 500;
-  color: var(--nx-text, #e2e8f0);
-  white-space: nowrap;
-}
-
-.gitNexusOverviewItemKind {
-  font-size: 10px;
-  color: var(--nx-muted, #64748b);
-  background: rgba(255, 255, 255, 0.06);
-  padding: 1px 5px;
-  border-radius: 3px;
-  white-space: nowrap;
-}
-
-.gitNexusOverviewItemFile {
-  color: var(--nx-muted, #64748b);
-  font-size: 11px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex: 1;
-}
-
-.gitNexusOverviewMore {
-  padding: 6px 12px;
-  color: var(--nx-muted, #64748b);
-  font-size: 11px;
-  font-style: italic;
-}
-
-.gitNexusReloadBtn {
-  margin-left: 8px;
-  font-size: 11px;
-  padding: 2px 10px;
-  border: 1px solid var(--nx-border, rgba(255, 255, 255, 0.12));
-  border-radius: 4px;
-  background: transparent;
-  color: var(--nx-text, #e2e8f0);
-  cursor: pointer;
-}
-
-.gitNexusReloadBtn:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.gitNexusResultError {
-  padding: 12px;
-  background: rgba(220, 38, 38, 0.08);
-  border: 1px solid rgba(220, 38, 38, 0.2);
-  border-radius: 6px;
-  color: var(--nx-error, #dc2626);
-  font-size: 12px;
-}
-
-.gitNexusPanel .gitNexusResult {
-  margin: 0;
-}
-
-.gitNexusGraphExpandBtn {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  font-size: 12px;
-  border: 1px solid var(--nx-border, rgba(255, 255, 255, 0.08));
-  background: var(--nx-card-bg, rgba(255, 255, 255, 0.03));
-  color: var(--nx-muted, #94a3b8);
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.gitNexusGraphExpandBtn:hover:not(:disabled) {
-  background: var(--nx-blue, #2563eb);
-  color: #fff;
-  border-color: var(--nx-blue, #2563eb);
-}
-
-.gitNexusGraphExpandBtn--floating {
-  position: absolute;
-  top: 44px;
-  right: 12px;
-  z-index: 4;
-  width: 34px;
-  height: 34px;
-  border-radius: 12px;
-  background: rgba(15, 23, 42, 0.78);
-  color: #e5f0ff;
-  border-color: rgba(125, 211, 252, 0.24);
-  box-shadow: 0 14px 32px rgba(2, 6, 23, 0.26);
-  backdrop-filter: blur(12px);
-}
-
-.gitNexusGraphExpandBtn--floating:hover:not(:disabled) {
-  background: rgba(37, 99, 235, 0.9);
-  border-color: rgba(191, 219, 254, 0.46);
-}
-
-.gitNexusGraphModalBackdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.38);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 12px;
-  z-index: 1000;
-}
-
-.gitNexusGraphModal {
-  position: relative;
-  width: min(96vw, 1680px);
-  height: min(94vh, 1040px);
-  background: #f8fafc;
-  border-radius: 20px;
-  border: 1px solid rgba(203, 213, 225, 0.78);
-  overflow: hidden;
-  box-shadow: 0 26px 72px rgba(15, 23, 42, 0.24);
-}
-
-.gitNexusGraphModalClose {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 32px;
-  height: 32px;
-  border-radius: 999px;
-  background: #ffffff;
-  border: 1px solid #dbe4f0;
-  color: #0f172a;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 10;
-}
-
-.gitNexusGraphModalClose:hover {
-  background: #eef4fb;
-}
-
-.gitNexusGraphModalTitle {
-  position: absolute;
-  top: 12px;
-  left: 20px;
-  color: #0f172a;
-  font-size: 14px;
-  font-weight: 600;
-  z-index: 10;
-}
-
-.gitNexusGraphCanvasBg {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  display: none;
-}
-
-.gitNexusGraphContent {
-  position: relative;
-  z-index: 1;
-  height: 100%;
-  padding: 44px 16px 16px;
-  display: flex;
-  flex-direction: column;
-}
-
-.gitNexusGraphContent .gitNexusForceGraph {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
-.gitNexusGraphContent .gitNexusForceGraphCanvasWrap {
-  flex: 1;
-  background: #f8fafc;
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.75);
-}
-
-.gitNexusHelpModalBackdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.gitNexusHelpModal {
-  position: relative;
-  width: 600px;
-  max-width: 90vw;
-  max-height: 85vh;
-  background: var(--nx-panel, #ffffff);
-  border-radius: 12px;
-  border: 1px solid var(--nx-border, #e2e8f0);
-  overflow: hidden;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-  display: flex;
-  flex-direction: column;
-}
-
-.gitNexusHelpModalClose {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  background: transparent;
-  border: none;
-  color: var(--nx-muted, #64748b);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 10;
-}
-
-.gitNexusHelpModalClose:hover {
-  background: var(--nx-hover, #f1f5f9);
-  color: var(--nx-text, #0f172a);
-}
-
-.gitNexusHelpModalClose svg {
-  width: 18px;
-  height: 18px;
-}
-
-.gitNexusHelpModalContent {
-  padding: 24px 28px;
-  overflow-y: auto;
-  flex: 1;
-}
-
-.gitNexusHelpModalTitle {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--nx-text, #0f172a);
-  margin: 0 0 12px 0;
-  padding-right: 40px;
-}
-
-.gitNexusHelpModalWelcome {
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--nx-muted, #64748b);
-  margin: 0 0 20px 0;
-  padding: 12px 16px;
-  background: var(--nx-blue-soft, #dbeafe);
-  border-radius: 8px;
-  border-left: 3px solid var(--nx-blue, #2563eb);
-}
-
-.gitNexusHelpSection {
-  margin-bottom: 20px;
-}
-
-.gitNexusHelpSectionTitle {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--nx-text, #0f172a);
-  margin: 0 0 8px 0;
-}
-
-.gitNexusHelpList {
-  margin: 0;
-  padding-left: 20px;
-  font-size: 13px;
-  line-height: 1.7;
-  color: var(--nx-muted, #64748b);
-}
-
-.gitNexusHelpList li {
-  margin-bottom: 4px;
-}
-
-.gitNexusHelpTips {
-  margin-top: 24px;
-  padding-top: 20px;
-  border-top: 1px solid var(--nx-border, #e2e8f0);
-}
-
-.gitNexusHelpTips .gitNexusHelpSectionTitle {
-  color: var(--nx-blue, #2563eb);
-}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 /* Settings Help Guide - Manual style */
 .settingsHelpDialog {
@@ -17305,14 +16378,6 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
 
 /* Error evidence is persistent. This rule intentionally comes after legacy
    dismiss animations so later compatibility blocks cannot hide it. */
-.appShell :is(.message.error, .assistantTurnError, .childActivityError, .workspaceFileError, .gitNexusError, .gitNexusResultError) {
-  animation: none !important;
-  opacity: 1 !important;
-  max-height: none !important;
-  margin-block: 8px !important;
-  overflow: visible !important;
-  pointer-events: auto !important;
-}
 
 /* Chat transcript must adapt to the available column instead of being clipped
    by legacy fixed-width blocks or nested scroll containers. */
@@ -17432,13 +16497,6 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
 .settingsInlineStatusIcon.danger { color: #d05252; }
 
 /* Errors are persisted transcript evidence and must remain visible. */
-.appShell :is(.message.error, .assistantTurnError, .childActivityError, .workspaceFileError, .gitNexusError, .gitNexusResultError) {
-  animation: none !important;
-  opacity: 1 !important;
-  max-height: none !important;
-  overflow: visible !important;
-  pointer-events: auto !important;
-}
 
 /* 输入框使用显式拖拽条，避免浏览器右下角缩放角标被发送按钮遮挡。 */
 .appShell .composer .composerResizeHandle {
@@ -18657,11 +17715,6 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
 .appShell:not(.theme-light) .workbenchPanel,
 .appShell:not(.theme-light) .composer,
 .appShell:not(.theme-light) .appDialog,
-.appShell:not(.theme-light) .gitNexusGraphModal {
-  background: var(--nx-surface-raised);
-  border-color: var(--nx-control-border);
-  color: var(--nx-text-primary);
-}
 
 .appShell:not(.theme-light) .commandInputRow,
 .appShell:not(.theme-light) .dropdownMenu,
@@ -19984,12 +19037,17 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
     gap: 2px !important;
   }
 
-  .appShell .workbenchPane .workbenchPrimaryTabs > button {
+  .appShell .workbenchPane .workbenchPrimaryTabs .workbenchPrimaryTabWrap,
+  .appShell .workbenchPane .workbenchPrimaryTabs .workbenchPrimaryTabWrap > button {
     flex: 0 0 34px !important;
     width: 34px !important;
     min-width: 34px !important;
     padding-inline: 0 !important;
     justify-content: center;
+  }
+
+  .appShell .workbenchPane .workbenchPrimaryTabPin {
+    display: none !important;
   }
 
   .appShell .workbenchPane .workbenchTabs button > span:not(.workbenchTabBadge),
@@ -23905,14 +22963,6 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .runExplorer :is(.run
 }
 
 /* Terminal error evidence must stay available for copying and retry decisions. */
-.appShell :is(.message.error, .assistantTurnError, .childActivityError, .workspaceFileError, .gitNexusError, .gitNexusResultError) {
-  animation: none !important;
-  opacity: 1 !important;
-  max-height: none !important;
-  margin-block: 8px !important;
-  overflow: visible !important;
-  pointer-events: auto !important;
-}
 
 .appShell .workspaceGroupList { display: block !important; gap: 0 !important; padding: 2px 7px 13px !important; }
 .appShell :is(.threadModule, .workspaceGroup) { margin: 5px 0 10px !important; }
@@ -25568,8 +24618,8 @@ html[data-suanlizi-theme='dark'] .searchDialogInput {
 .appShell .messageBlock.user > .message.user {
   border: 0 !important;
   border-radius: 18px !important;
-  background: #202124 !important;
-  color: #f7f8fa !important;
+  background: #e9eaec !important;
+  color: #1a1c1f !important;
   box-shadow: none !important;
 }
 
@@ -25732,9 +24782,6 @@ html[data-suanlizi-theme='dark'] .searchDialogInput {
   color: var(--nx-text-primary);
 }
 
-.appShell:is(.theme-dark, .theme-system) :is(.composer, .commandInputRow, .message, .toastNotice, .toolBatchDetails, .internalItemDetails, .workspaceFileError, .gitNexusError, .gitNexusResultError) {
-  border-width: 1px !important;
-}
 
 .appShell:is(.theme-dark, .theme-system) .composer,
 .appShell:is(.theme-dark, .theme-system) .commandInputRow {
@@ -25814,13 +24861,6 @@ html[data-suanlizi-theme='dark'] .searchDialogInput {
   stroke-width: 2.25;
 }
 
-.appShell :is(.workspaceFileError, .gitNexusError, .gitNexusResultError) {
-  border: 1px solid var(--nx-chat-line) !important;
-  border-radius: 10px !important;
-  background: var(--nx-chat-field) !important;
-  color: var(--nx-chat-ink) !important;
-  animation: suanliziErrorNoticeDismiss 5.8s ease forwards;
-}
 
 @keyframes suanliziErrorNoticeDismiss {
   0%, 72% { opacity: 1; max-height: 180px; margin-block: 8px; overflow: hidden; }
@@ -25927,7 +24967,6 @@ html[data-suanlizi-theme='dark'] .searchDialogInput {
   background: rgba(16, 18, 20, .72) !important;
 }
 
-/* 深色收口前的旧淡出规则只覆盖会话错误；保留 workspace/GitNexus 的行为不变。 */
 
 
 /* 全局深色主题收口：设置层、工作台控件和旧兼容样式统一使用深灰，不再泄露蓝黑色。 */
@@ -27658,14 +26697,6 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .settingsLayer .setti
 }
 
 /* Error evidence must remain visible after all legacy compatibility rules. */
-.appShell :is(.message.error, .assistantTurnError, .childActivityError, .workspaceFileError, .gitNexusError, .gitNexusResultError) {
-  animation: none !important;
-  opacity: 1 !important;
-  max-height: none !important;
-  margin-block: 8px !important;
-  overflow: visible !important;
-  pointer-events: auto !important;
-}
 
 /* 自定义厂商图标：用户注册的 custom_* 渠道使用浏览器 favicon。 */
 /* English: custom provider icons use the favicon captured from a browser tab. */
@@ -28071,6 +27102,7 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .settingsLayer .setti
 .settingsLayer .modelProviderRow > strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .settingsLayer .modelProviderCount { color: var(--settings-text-muted); font-size: 11px; }
 .settingsLayer .modelProviderGroup .modelPresetRow { grid-template-columns: minmax(0,1fr) auto auto; margin-left: 32px; min-height: 34px; padding: 5px 8px; }
+.settingsLayer .modelProviderGroup .modelPresetRow .modelPresetRowActions { grid-column: 3; justify-self: end; }
 .settingsLayer .modelProviderGroup .modelPresetRowText strong { color: var(--settings-text-sub); font-weight: 500; }
 .settingsLayer .modelProviderRow .miniIconButton { display: inline-grid; place-items: center; width: 28px; height: 28px; }
 
@@ -28259,10 +27291,10 @@ main.appShell:is(.theme-light, .theme-dark, .theme-system) .settingsLayer .setti
   word-break: break-word;
 }
 
-/* 模型列表限定宽度并放入低对比边框，厂商与模型操作共用右对齐基线。 */
+/* 模型列表与页头共用设置区宽度，左右边缘严格对齐。 */
 .settingsLayer .modelPresetSection .modelPresetList {
-  width: min(780px, 100%);
-  margin: 14px auto 0;
+  width: 100%;
+  margin: 14px 0 0;
   padding: 4px 0;
   border: 1px solid var(--nx-settings-border, #dce2eb);
   border-radius: 10px;
@@ -28324,4 +27356,42 @@ main.appShell.theme-light .miniIconButton svg {
   stroke: #1f2937 !important;
   fill: none !important;
   opacity: 1 !important;
+}
+
+  .traceInspector__titleWrap {
+    min-width: 0;
+    flex: 0 1 auto;
+  }
+
+  .traceInspector__actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+
+  .inspectorField__label--zh {
+    text-transform: none;
+    font-family: inherit;
+    letter-spacing: 0;
+  }
+
+/* Reasoning streams stay one line; full text renders only after manual expand. */
+.appShell .reasoningPreview {
+  min-width: 0;
+  max-width: min(72ch, 56vw);
+  overflow: hidden;
+  color: var(--nx-text-muted);
+  font-size: 11px;
+  font-weight: 450;
+  letter-spacing: normal;
+  text-overflow: ellipsis;
+  text-transform: none;
+  white-space: nowrap;
+}
+.appShell .reasoningDetails[data-expanded="true"] .reasoningPreview { display: none; }
+.appShell .reasoningDetailsBody.reasoningPlainText {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }

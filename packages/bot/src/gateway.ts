@@ -214,6 +214,7 @@ export class BotGateway {
       threadId,
       tenantId: this.tenantId,
       title,
+      hasWorkspace: Boolean(this.defaultWorkspaceRoot),
       workspaceRoot: this.defaultWorkspaceRoot,
       status: 'active',
       turnCount: 0,

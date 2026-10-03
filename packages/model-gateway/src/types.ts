@@ -2,11 +2,6 @@
 import type { InputPart, RetryPolicy } from '@suanlizi/protocol';
 
 // ─── Model Provider Configuration ───────────────────────────────────────────
-/** @deprecated Use string provider ids from the ProviderRegistry instead. */
-// 旧版 provider 类型别名：保留只为兼容，推荐直接使用字符串
-// 英文说明：Use string provider ids from the ProviderRegistry instead
-export type ModelProviderKind = string;
-
 // 单个模型配置：完整描述一次模型调用所需的全部参数
 // 英文说明：ModelConfig describes the full set of parameters needed for a model call
 export interface ModelConfig {
@@ -40,6 +35,8 @@ export interface ModelConfig {
   extraHeaders?: Record<string, string>;
   /** 请求超时（毫秒），默认 120000 */
   timeoutMs?: number;
+  /** 流式空闲超时（毫秒）：等待下一帧的最大时间，默认 300000。 */
+  streamIdleTimeoutMs?: number;
   /** 自定义重试策略（部分覆盖默认） */
   retry?: Partial<RetryPolicy>;
   /** 缓存策略：auto 时按 provider/model 自动推断 */
@@ -123,19 +120,6 @@ export interface TokenEstimate {
   imageCount: number;      // 图片数
   charCount: number;       // 字符数
 }
-
-/** @deprecated Use ProviderRegistry instead. */
-// 旧版默认 baseURL 表：保留只为兼容；推荐使用 providers.ts 的注册表
-// 英文说明：Use ProviderRegistry instead of this hardcoded map
-export const DEFAULT_BASE_URLS: Record<string, string> = {
-  ollama: 'http://localhost:11434/v1',
-  lmstudio: 'http://localhost:1234/v1',
-  vllm: 'http://localhost:8000/v1',
-  llama_cpp: 'http://localhost:8080/v1',
-  giteeai: 'https://ai.gitee.com/v1',
-  openai_compatible: 'http://localhost:8080/v1',
-  anthropic: 'https://api.anthropic.com/v1',
-};
 
 /** Which API protocol the provider uses (falls back to 'openai'). */
 // 判断 provider 使用哪种协议；只有 anthropic 走独立分支，其它都按 OpenAI 处理
@@ -397,9 +381,4 @@ export function inputPartsToContent(parts: InputPart[]): MultimodalContent[] {
     }
     return { type: 'image_url', image_url: { url: `file://${part.path}`, detail: 'auto' } };
   });
-}
-
-// 解析出最终生效的 baseURL：优先用配置，否则用旧版默认表
-export function resolveBaseUrl(config: ModelConfig): string {
-  return config.baseUrl || DEFAULT_BASE_URLS[config.provider];
 }

@@ -17,7 +17,6 @@ describe('Task Runtime 事件 schema（第 2 步骨架）', () => {
       turnId: 'turn-1',
       phase: 'before_turn',
       status: 'running',
-      runProfile: 'runtime_os',
       timestamp: new Date().toISOString(),
     };
     expect(threadEventSchema.parse(event)).toEqual(event);

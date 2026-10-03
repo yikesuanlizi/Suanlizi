@@ -88,7 +88,7 @@ export type TaskInteractionMode = (typeof TASK_INTERACTION_MODES)[number];
 /**
  * Task 的来源。`explicit_goal` 是用户明确创建的 Goal，`explicit_workflow` 是用户明确
  * 创建的 Script Workflow；`harness_shadow` 是普通 Agent/Harness 的内部运行镜像，不能作为
- * Goal 或 Dynamic Workflow 的入口。历史记录缺失该字段时一律按 `harness_shadow` 处理。
+ * Goal 或 Dynamic Workflow 的入口。
  */
 export const TASK_ORIGINS = ['explicit_goal', 'explicit_workflow', 'harness_shadow'] as const;
 export type TaskOrigin = (typeof TASK_ORIGINS)[number];
@@ -119,11 +119,8 @@ export interface Task {
   version: number;
   /** 协议占位：第一版默认 supervised。/ Reserved: defaults to supervised in v1. */
   interactionMode?: TaskInteractionMode;
-  /**
-   * 创建来源。字段缺失只可能来自旧数据，读取时必须等同于 `harness_shadow`。
-   * Provenance is immutable after creation; absent legacy data is a Harness shadow.
-   */
-  origin?: TaskOrigin;
+  /** 创建来源。来源在创建后不可变。 */
+  origin: TaskOrigin;
 }
 
 // ─── TaskRun 过程态 ──────────────────────────────────────────────────────────
@@ -808,7 +805,7 @@ export const taskSchema: z.ZodType<Task> = z
     pendingInput: pendingUserInputSchema.optional(),
     version: nonNegativeInt,
     interactionMode: taskInteractionModeSchema.optional(),
-    origin: taskOriginSchema.optional(),
+    origin: taskOriginSchema,
   })
   .strict();
 

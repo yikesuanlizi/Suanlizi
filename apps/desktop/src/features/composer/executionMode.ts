@@ -11,7 +11,6 @@ export type ComposerThinkingMode = 'no' | 'medium' | 'high' | 'xhigh' | 'max' | 
 export const HIGH_AUTONOMY_OVERRIDES = {
   permissions: 'danger_full_access',
   reasoningEffort: 'max',
-  runProfile: 'runtime_os',
 } as const;
 
 /**

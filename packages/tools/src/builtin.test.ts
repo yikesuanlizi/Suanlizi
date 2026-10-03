@@ -7,7 +7,6 @@ import {
   BUILTIN_TOOLS,
   applyPatchTool,
   currentTimeTool,
-  gitNexusAnalyzeTool,
   listFilesTool,
   readDocumentTool,
   readFileTool,
@@ -69,7 +68,6 @@ describe('builtin tool parallel safety', () => {
     expect(writeFileTool.supportsParallelToolCalls).not.toBe(true);
     expect(shellCommandTool.supportsParallelToolCalls).not.toBe(true);
     expect(applyPatchTool.supportsParallelToolCalls).not.toBe(true);
-    expect(gitNexusAnalyzeTool.supportsParallelToolCalls).not.toBe(true);
   });
 });
 
@@ -97,48 +95,6 @@ describe('requestUserDecisionTool', () => {
     }, { workspaceRoot: process.cwd(), threadId: 'thread', turnId: 'turn', approved: false, requestUserDecision });
     expect(rejected.error?.code).toBe('INVALID_ARGUMENTS');
     expect(requestUserDecision).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe('gitNexusAnalyzeTool', () => {
-  it('is registered as an approval-gated workspace write tool', () => {
-    expect(gitNexusAnalyzeTool.name).toBe('gitnexus_analyze');
-    expect(gitNexusAnalyzeTool.requiredPolicy).toBe('workspace_write');
-    expect(gitNexusAnalyzeTool.requiresApproval).toBe(true);
-    expect(BUILTIN_TOOLS).toContain(gitNexusAnalyzeTool);
-  });
-
-  it('runs npx -y gitnexus@latest analyze in the workspace root', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-gitnexus-analyze-'));
-    const binDir = await fs.mkdtemp(path.join(os.tmpdir(), 'suanlizi-fake-npx-'));
-    const logPath = path.join(root, 'npx-call.json');
-    await installFakeNpx(binDir);
-
-    const originalPath = process.env.PATH;
-    const originalLogPath = process.env.SUANLIZI_FAKE_NPX_LOG;
-    process.env.PATH = `${binDir}${path.delimiter}${originalPath ?? ''}`;
-    process.env.SUANLIZI_FAKE_NPX_LOG = logPath;
-    try {
-      const result = await gitNexusAnalyzeTool.execute(
-        {},
-        { workspaceRoot: root, threadId: 'thread', turnId: 'turn', approved: true },
-      );
-
-      expect(result.status).toBe('completed');
-      expect(result.output).toContain('indexed ok');
-      expect(result.data).toMatchObject({
-        command: ['npx', '-y', 'gitnexus@latest', 'analyze'],
-        cwd: root,
-        exitCode: 0,
-      });
-      const call = JSON.parse(await fs.readFile(logPath, 'utf-8'));
-      expect(call.cwd).toBe(root);
-      expect(call.argv).toEqual(['-y', 'gitnexus@latest', 'analyze']);
-    } finally {
-      process.env.PATH = originalPath;
-      if (originalLogPath === undefined) delete process.env.SUANLIZI_FAKE_NPX_LOG;
-      else process.env.SUANLIZI_FAKE_NPX_LOG = originalLogPath;
-    }
   });
 });
 

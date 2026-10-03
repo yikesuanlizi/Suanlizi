@@ -97,28 +97,6 @@ export function TraceTimeline({
             <span className="traceTimeline__runTitle">{zh ? '选择一个运行' : 'Select a run'}</span>
           </div>
         )}
-        {selectedRun && controlCapabilities && (
-          <div className="traceTimeline__controls">
-            <button
-              type="button"
-              className="traceControlBtn"
-              disabled={!controlCapabilities.interrupt.enabled}
-              title={controlCapabilities.interrupt.reason || (zh ? '中断' : 'Interrupt')}
-              onClick={() => onControlRun('interrupt')}
-            >
-              {zh ? '中断' : 'Interrupt'}
-            </button>
-            <button
-              type="button"
-              className="traceControlBtn"
-              disabled={!controlCapabilities.resume.enabled}
-              title={controlCapabilities.resume.reason || (zh ? '恢复' : 'Resume')}
-              onClick={() => onControlRun('resume')}
-            >
-              {zh ? '恢复' : 'Resume'}
-            </button>
-          </div>
-        )}
       </div>
       <TraceFilters
         categories={allCategories}

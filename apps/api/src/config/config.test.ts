@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import type { ThreadId, ThreadMeta } from '@suanlizi/protocol';
 import type { ThreadStore } from '@suanlizi/storage';
 import { describe, expect, it } from 'vitest';
-import { createConfigRepository, defaultConfig, publicRunConfig, publicWebProviderConfig, resolveConfig, resolveWebProviderRuntimeConfig, THREAD_CONFIG_OVERRIDES_KEY_PREFIX, THREAD_CONFIG_OVERRIDES_META_KEY_PREFIX } from './config.js';
+import { createConfigRepository, DEFAULT_RUN_CONFIG_KEY, defaultConfig, publicRunConfig, publicWebProviderConfig, resolveConfig, resolveWebProviderRuntimeConfig, THREAD_CONFIG_OVERRIDES_KEY_PREFIX } from './config.js';
 
 class FakeThreadStore {
   settings = new Map<string, unknown>();
@@ -60,21 +60,6 @@ describe('AgentRunConfig skillsRoot', () => {
   });
 });
 
-describe('AgentRunConfig runProfile', () => {
-  it('defaults to the long-running Runtime OS profile', () => {
-    expect(defaultConfig.runProfile).toBe('runtime_os');
-  });
-
-  it('accepts cache_first and falls back invalid values to runtime_os', () => {
-    expect(resolveConfig({ runProfile: 'cache_first' }).runProfile).toBe('cache_first');
-    expect(resolveConfig({ runProfile: 'bad-value' as never }).runProfile).toBe('runtime_os');
-  });
-
-  it('legacy harness profile auto-downgrades to runtime_os', () => {
-    // harness 不再是 RunProfile，已降级为 runtime 底座能力
-    expect(resolveConfig({ runProfile: 'harness' as never }).runProfile).toBe('runtime_os');
-  });
-});
 
 
 describe('AgentRunConfig compactionThreshold', () => {
@@ -144,16 +129,6 @@ describe('AgentRunConfig runtime limits and monitor migration', () => {
     expect(resolveConfig({ modelTimeoutSeconds: 9_999 } as never).modelTimeoutSeconds).toBe(3600);
   });
 
-  it('migrates the legacy monitor switch without enabling data collection by default', () => {
-    expect(resolveConfig({}).systemMonitorSamplingEnabled).toBe(false);
-    expect(resolveConfig({}).systemMonitorGuardEnabled).toBe(false);
-    expect(resolveConfig({ systemMonitorEnabled: true })).toMatchObject({
-      systemMonitorSamplingEnabled: true,
-      systemMonitorGuardEnabled: true,
-      systemMonitorEnabled: true,
-    });
-  });
-
   it('normalizes threshold values on the server', () => {
     expect(resolveConfig({
       systemMonitorThresholds: { cpuLight: -1, cpuModerate: 101, cpuSevere: Number.NaN, memLight: 50, memModerate: 60, memSevere: 70, diskSevereBytes: 10 ** 30 },
@@ -205,6 +180,37 @@ describe('AgentRunConfig web provider', () => {
   });
 });
 
+describe('AgentRunConfig default workspace', () => {
+  it('uses hasWorkspace as the explicit workspace marker', async () => {
+    const store = new FakeThreadStore();
+    const repo = createConfigRepository(store as unknown as ThreadStore);
+
+    await repo.saveDefaultRunConfig({ hasWorkspace: false, workspaceRoot: '' });
+    expect(store.settings.get(DEFAULT_RUN_CONFIG_KEY)).toMatchObject({
+      hasWorkspace: false,
+      workspaceRoot: '',
+    });
+
+    await repo.saveDefaultRunConfig({ model: 'other-model' });
+    expect(store.settings.get(DEFAULT_RUN_CONFIG_KEY)).toMatchObject({
+      hasWorkspace: false,
+      workspaceRoot: '',
+    });
+    const config = await repo.getDefaultRunConfig();
+    expect(config.hasWorkspace).toBe(false);
+    expect(config.workspaceRoot).toBe('');
+    expect(config.accessPolicy.workspaceRoot).toBe('');
+    expect(config.accessPolicy.mode).toBe('chat');
+    expect(config.model).toBe('other-model');
+  });
+
+  it('treats missing hasWorkspace as an existing workspace', () => {
+    const config = resolveConfig({ workspaceRoot: 'E:/old/project' } as never);
+    expect(config.hasWorkspace).toBe(true);
+    expect(config.workspaceRoot).toBe(path.resolve('E:/old/project'));
+  });
+});
+
 describe('AgentRunConfig access policy', () => {
   it('normalizes access policy from workspace defaults', () => {
     const config = resolveConfig({
@@ -219,7 +225,7 @@ describe('AgentRunConfig access policy', () => {
     });
   });
 
-  it('maps legacy read_only permissions to chat-like read policy without writing legacy permissions as source of truth', () => {
+  it('maps read-only permissions to chat-like read policy', () => {
     const config = resolveConfig({
       permissions: 'read_only',
       workspaceRoot: 'E:\\langchain\\Suanlizi',
@@ -253,7 +259,7 @@ describe('AgentRunConfig access policy', () => {
 });
 
 describe('thread appearance persistence', () => {
-  it('ignores legacy thread-level themeMode and resolves from global defaults', async () => {
+  it('ignores thread-level themeMode and resolves from global defaults', async () => {
     const store = new FakeThreadStore();
     const repo = createConfigRepository(store as unknown as ThreadStore);
     const threadId = 'thread-1' as ThreadId;
@@ -295,28 +301,7 @@ describe('thread appearance persistence', () => {
     expect(parsed).not.toHaveProperty('customUserAvatarDataUrl');
   });
 
-  it('ignores a legacy full thread snapshot so it cannot override the global context window', async () => {
-    const store = new FakeThreadStore();
-    const repo = createConfigRepository(store as unknown as ThreadStore);
-    const threadId = 'thread-legacy-context' as ThreadId;
 
-    store.threads.set(threadId, fakeThread(threadId, {
-      tags: {
-        runConfig: JSON.stringify({
-          workspaceRoot: 'D:\\legacy',
-          provider: 'llama_cpp',
-          model: 'local-model',
-          modelContextTokens: 24_576,
-          permissions: 'workspace',
-        }),
-      },
-    }));
-    await repo.saveDefaultRunConfig({ modelContextTokens: 65_536 });
-
-    await expect(repo.getThreadRunConfig(threadId)).resolves.toMatchObject({
-      modelContextTokens: 65_536,
-    });
-  });
 });
 
 describe('model preset persistence', () => {
@@ -402,8 +387,7 @@ describe('thread config overrides', () => {
       baseUrl: 'https://api.anthropic.com',
       permissions: 'workspace',
       reasoningEffort: 'high',
-      runProfile: 'runtime_os',
-    });
+        });
 
     const stored = await repo.getThreadConfigOverrides(threadId);
     expect(stored).toEqual({
@@ -412,8 +396,7 @@ describe('thread config overrides', () => {
       baseUrl: 'https://api.anthropic.com',
       permissions: 'workspace',
       reasoningEffort: 'high',
-      runProfile: 'runtime_os',
-    });
+        });
   });
 
   it('merges concurrent partial updates instead of dropping fields', async () => {
@@ -451,7 +434,7 @@ describe('thread config overrides', () => {
     expect(config.accessPolicy.workspaceRoot).toBe(path.resolve('E:/thread-workspace'));
   });
 
-  it('normalizes legacy reasoning effort presets', async () => {
+  it('normalizes reasoning effort presets', async () => {
     const store = new FakeThreadStore();
     const repo = createConfigRepository(store as unknown as ThreadStore);
     const threadId = 'thread-overrides-effort-normalized' as ThreadId;
@@ -475,8 +458,7 @@ describe('thread config overrides', () => {
       model: 'gpt-5',
       permissions: 'danger_full_access',
       reasoningEffort: 'high',
-      runProfile: 'runtime_os',
-    });
+        });
 
     const config = await repo.getThreadRunConfig(threadId);
 
@@ -484,40 +466,19 @@ describe('thread config overrides', () => {
     expect(config.model).toBe('gpt-5');
     expect(config.permissions).toBe('danger_full_access');
     expect(config.reasoningEffort).toBe('high');
-    expect(config.runProfile).toBe('runtime_os');
   });
 
-  it('drops legacy model limits that were written without an explicit marker', async () => {
-    const store = new FakeThreadStore();
-    const repo = createConfigRepository(store as unknown as ThreadStore);
-    const threadId = 'thread-overrides-legacy-window' as ThreadId;
-    store.settings.set(`${THREAD_CONFIG_OVERRIDES_KEY_PREFIX}${threadId}`, {
-      provider: 'llama_cpp',
-      model: 'local-model',
-      modelContextTokens: 24_576,
-    });
 
-    await expect(repo.getThreadConfigOverrides(threadId)).resolves.toEqual({
-      provider: 'llama_cpp',
-      model: 'local-model',
-    });
-    expect(store.settings.get(`${THREAD_CONFIG_OVERRIDES_KEY_PREFIX}${threadId}`)).toEqual({
-      provider: 'llama_cpp',
-      model: 'local-model',
-    });
-  });
 
-  it('keeps a model window only after an explicit thread setting and clears its marker on unset', async () => {
+  it('keeps an explicitly set model window and clears it on unset', async () => {
     const store = new FakeThreadStore();
     const repo = createConfigRepository(store as unknown as ThreadStore);
     const threadId = 'thread-overrides-explicit-window' as ThreadId;
 
     await repo.updateThreadConfigOverrides(threadId, { modelContextTokens: 65_536 });
     await expect(repo.getThreadConfigOverrides(threadId)).resolves.toMatchObject({ modelContextTokens: 65_536 });
-    expect(store.settings.get(`${THREAD_CONFIG_OVERRIDES_META_KEY_PREFIX}${threadId}`)).toEqual({ modelContextTokens: true });
 
     await repo.updateThreadConfigOverrides(threadId, { modelContextTokens: null });
     await expect(repo.getThreadConfigOverrides(threadId)).resolves.not.toHaveProperty('modelContextTokens');
-    expect(store.settings.get(`${THREAD_CONFIG_OVERRIDES_META_KEY_PREFIX}${threadId}`)).toEqual({});
   });
 });

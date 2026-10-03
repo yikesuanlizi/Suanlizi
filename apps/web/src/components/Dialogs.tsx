@@ -154,70 +154,15 @@ export function SettingsHelpDialog({ locale, onClose }: { locale: Locale; onClos
       ],
     },
     {
-      num: 2,
-      title: zh ? 'GitNexus 代码分析' : 'GitNexus Code Analysis',
-      items: [
-        zh
-          ? {
-              name: '概览',
-              desc: '展示项目整体架构概览，包括代码统计、依赖关系力导向图、模块分布。支持文件级和符号级两种视图。',
-            }
-          : {
-              name: 'Overview',
-              desc: 'Shows overall project architecture with code statistics, force-directed dependency graph, and module distribution. File-level and symbol-level views.',
-            },
-        zh
-          ? {
-              name: '智能搜索',
-              desc: '用自然语言搜索相关代码，基于语义理解找到匹配的代码片段。适合想找某个功能但不知道具体文件名的场景。',
-            }
-          : {
-              name: 'Smart Search',
-              desc: 'Search code using natural language. Finds matching snippets based on semantic understanding. Great for locating features by description.',
-            },
-        zh
-          ? {
-              name: '符号上下文',
-              desc: '查看某个符号（类/方法/函数）的完整上下文，包括定义位置、所有引用点、依赖关系和调用链。',
-            }
-          : {
-              name: 'Symbol Context',
-              desc: 'View complete context of a symbol (class/method/function): definition, all references, dependencies, and call chains.',
-            },
-        zh
-          ? {
-              name: '影响分析',
-              desc: '分析修改某个符号可能影响的范围，包括上游调用者和下游依赖，帮助评估改动风险。',
-            }
-          : {
-              name: 'Impact Analysis',
-              desc: 'Analyze the impact scope of changing a symbol, including upstream callers and downstream dependencies, to assess change risk.',
-            },
-        zh
-          ? {
-              name: '调用路径',
-              desc: '查找从入口函数到目标符号的调用路径，或两个符号之间的调用链路，帮助理解代码执行流程。',
-            }
-          : {
-              name: 'Call Trace',
-              desc: 'Find call paths from entry functions to target symbols, or between two symbols, helping understand code execution flow.',
-            },
-      ],
-    },
-    {
       num: 3,
       title: zh ? '使用小贴士' : 'Tips & Tricks',
       items: zh
         ? [
-            '项目首次使用 GitNexus 需要先点击"开始分析"构建代码索引',
-            '索引构建完成后会自动缓存，源码未改动时无需重新分析',
             '力导向图支持节点拖拽，点击节点可查看详细信息',
             '点击图右上角的"放大"按钮可全屏查看依赖关系图',
             '每个功能标签右侧的问号图标可查看该功能的详细说明',
           ]
         : [
-            'First time using GitNexus? Click "Analyze" to build the code index',
-            'Index is cached automatically — no re-analysis needed if source is unchanged',
             'Drag nodes on the force graph; click to see details',
             'Click the expand button for a full-screen dependency graph view',
             'The question mark icon next to each tab shows detailed feature info',

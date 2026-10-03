@@ -153,7 +153,7 @@ describe('RunMonitorDrawer', () => {
       payload: {
         toolName: 'mcp_call_tool',
         callId: 'call-mcp',
-        server: 'gitnexus',
+        server: 'example-mcp',
         tool: 'search_code',
         argsSummary: { query: 'resource detail' },
       },
@@ -187,7 +187,7 @@ describe('RunMonitorDrawer', () => {
     expect(mcpHtml).toContain('resourceKind');
     expect(mcpHtml).toContain('MCP');
     expect(mcpHtml).toContain('server');
-    expect(mcpHtml).toContain('gitnexus');
+    expect(mcpHtml).toContain('example-mcp');
     expect(mcpHtml).toContain('search_code');
     expect(skillHtml).toContain('resourceKind');
     expect(skillHtml).toContain('Skill');

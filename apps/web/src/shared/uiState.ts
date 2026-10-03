@@ -40,36 +40,36 @@ export function useToastNotice(timeoutMs = 1800) {
 export function useRightPaneSizing(visible: boolean, mode: RightPaneSizingMode = 'standard') {
   const [width, setWidth] = useState(() => {
     if (mode === 'files') {
-      const stored = Number(localStorage.getItem('nexus.filesPaneWidth') ?? 0);
+      const stored = Number(localStorage.getItem('suanlizi.filesPaneWidth') ?? 0);
       return clampRightPaneWidth(stored || defaultFilesPaneWidth(), FILES_RIGHT_PANE_MIN);
     }
     if (mode === 'terminal') {
-      const stored = Number(localStorage.getItem('nexus.terminalPaneWidth') ?? 0);
+      const stored = Number(localStorage.getItem('suanlizi.terminalPaneWidth') ?? 0);
       return clampRightPaneWidth(stored || defaultTerminalPaneWidth(), TERMINAL_RIGHT_PANE_MIN);
     }
     if (mode !== 'workflow') {
-      const stored = Number(localStorage.getItem('nexus.standardPaneWidth') ?? 0);
+      const stored = Number(localStorage.getItem('suanlizi.standardPaneWidth') ?? 0);
       return clampRightPaneWidth(stored || defaultStandardPaneWidth(), STANDARD_RIGHT_PANE_MIN);
     }
-    const stored = Number(localStorage.getItem('nexus.workflowPaneWidth') ?? 0);
+    const stored = Number(localStorage.getItem('suanlizi.workflowPaneWidth') ?? 0);
     return clampRightPaneWidth(stored || defaultWorkflowPaneWidth(), WORKFLOW_RIGHT_PANE_MIN);
   });
 
   useEffect(() => {
     setWidth(() => {
       if (mode === 'workflow') {
-        const stored = Number(localStorage.getItem('nexus.workflowPaneWidth') ?? 0);
+        const stored = Number(localStorage.getItem('suanlizi.workflowPaneWidth') ?? 0);
         return clampRightPaneWidth(stored || defaultWorkflowPaneWidth(), WORKFLOW_RIGHT_PANE_MIN);
       }
       if (mode === 'files') {
-        const stored = Number(localStorage.getItem('nexus.filesPaneWidth') ?? 0);
+        const stored = Number(localStorage.getItem('suanlizi.filesPaneWidth') ?? 0);
         return clampRightPaneWidth(stored || defaultFilesPaneWidth(), FILES_RIGHT_PANE_MIN);
       }
       if (mode === 'terminal') {
-        const stored = Number(localStorage.getItem('nexus.terminalPaneWidth') ?? 0);
+        const stored = Number(localStorage.getItem('suanlizi.terminalPaneWidth') ?? 0);
         return clampRightPaneWidth(stored || defaultTerminalPaneWidth(), TERMINAL_RIGHT_PANE_MIN);
       }
-      const stored = Number(localStorage.getItem('nexus.standardPaneWidth') ?? 0);
+      const stored = Number(localStorage.getItem('suanlizi.standardPaneWidth') ?? 0);
       return clampRightPaneWidth(stored || defaultStandardPaneWidth(), STANDARD_RIGHT_PANE_MIN);
     });
   }, [mode]);
@@ -88,10 +88,10 @@ export function useRightPaneSizing(visible: boolean, mode: RightPaneSizingMode =
     function move(moveEvent: PointerEvent) {
       const next = startWidth - (moveEvent.clientX - startX);
       const nextWidth = Math.min(max, Math.max(resizeMin, next));
-      if (mode === 'workflow') localStorage.setItem('nexus.workflowPaneWidth', String(Math.round(nextWidth)));
-      if (mode === 'files') localStorage.setItem('nexus.filesPaneWidth', String(Math.round(nextWidth)));
-      if (mode === 'terminal') localStorage.setItem('nexus.terminalPaneWidth', String(Math.round(nextWidth)));
-      if (mode === 'standard') localStorage.setItem('nexus.standardPaneWidth', String(Math.round(nextWidth)));
+      if (mode === 'workflow') localStorage.setItem('suanlizi.workflowPaneWidth', String(Math.round(nextWidth)));
+      if (mode === 'files') localStorage.setItem('suanlizi.filesPaneWidth', String(Math.round(nextWidth)));
+      if (mode === 'terminal') localStorage.setItem('suanlizi.terminalPaneWidth', String(Math.round(nextWidth)));
+      if (mode === 'standard') localStorage.setItem('suanlizi.standardPaneWidth', String(Math.round(nextWidth)));
       setWidth(nextWidth);
     }
     function up() {

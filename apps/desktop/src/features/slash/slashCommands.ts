@@ -180,10 +180,7 @@ export function parseSlashCommand(input: string): SlashCommand {
   }
 
   if (command === '/ops') {
-    const knownLegacySubcommand = subcommand === 'diagnose' || subcommand === 'log_analysis' || subcommand === 'logs';
-    return { kind: 'ops', preset: 'ops', args: knownLegacySubcommand
-      ? stripCommandPrefix(normalized, rawCommand, rawSubcommand)
-      : stripCommandPrefix(normalized, rawCommand) };
+    return { kind: 'ops', preset: 'ops', args: stripCommandPrefix(normalized, rawCommand) };
   }
 
   if (command === '/plan' || command === '/review' || command === '/debug' || command === '/frontend') {

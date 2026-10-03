@@ -38,7 +38,7 @@ describe('workbenchState thread isolation', () => {
     });
   });
 
-  it('does not fall back to legacy global dynamic tabs for a scoped thread', () => {
+  it('ignores unsupported global dynamic tabs', () => {
     values.set('suanlizi.workbench.state.v1', JSON.stringify({
       activeTab: 'browser',
       openUtilityTabs: ['browser'],

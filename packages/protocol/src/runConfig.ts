@@ -5,11 +5,10 @@ import { accessPolicyConfigSchema } from './accessPolicySchemas.js';
 export type PermissionPresetId = 'read_only' | 'workspace' | 'danger_full_access';
 export type WebSearchMode = 'auto' | 'on' | 'off';
 export type ReasoningEffort = 'no' | 'medium' | 'high' | 'xhigh' | 'max';
-export type RunProfile = 'cache_first' | 'runtime_os';
 export type ApiMode = 'chat' | 'responses' | 'completion';
 export type ReasoningMode = 'disabled' | 'auto' | 'adaptive' | 'enabled';
 
-/** 归一历史输入和新 UI 的思考档：low 家族关闭思考，ultra 家族映射最高档。 */
+/** 归一输入和新 UI 的思考档：low 家族关闭思考，ultra 家族映射最高档。 */
 export function normalizeReasoningEffort(value: unknown): ReasoningEffort | undefined {
   if (typeof value !== 'string') return undefined;
   const effort = value.trim().toLowerCase().replace(/[_-]+/g, '');
@@ -21,6 +20,7 @@ export function normalizeReasoningEffort(value: unknown): ReasoningEffort | unde
 }
 
 export interface ThreadRunConfigOverrides {
+  hasWorkspace?: boolean;
   workspaceRoot?: string;
   provider?: string;
   model?: string;
@@ -31,12 +31,12 @@ export interface ThreadRunConfigOverrides {
   accessPolicy?: AccessPolicyConfig;
   webSearchMode?: WebSearchMode;
   reasoningEffort?: ReasoningEffort;
-  runProfile?: RunProfile;
   /** 上下文压缩阈值：占模型上下文窗口的比例（0.3 ~ 0.95）。 */
   compactionThreshold?: number;
 }
 
 export const THREAD_RUN_CONFIG_KEYS = [
+  'hasWorkspace',
   'workspaceRoot',
   'provider',
   'model',
@@ -47,7 +47,6 @@ export const THREAD_RUN_CONFIG_KEYS = [
   'accessPolicy',
   'webSearchMode',
   'reasoningEffort',
-  'runProfile',
   'compactionThreshold',
 ] as const;
 
@@ -58,7 +57,8 @@ export interface ThreadConfigUpdate {
   unset?: ThreadRunConfigKey[];
 }
 
-const threadRunConfigOverridesSchemaLegacy = z.object({
+const threadRunConfigOverridesSchema = z.object({
+  hasWorkspace: z.boolean().optional(),
   workspaceRoot: z.string().trim().min(1).optional(),
   provider: z.string().trim().min(1).optional(),
   model: z.string().trim().min(1).optional(),
@@ -69,12 +69,11 @@ const threadRunConfigOverridesSchemaLegacy = z.object({
   accessPolicy: accessPolicyConfigSchema.optional(),
   webSearchMode: z.enum(['auto', 'on', 'off']).optional(),
   reasoningEffort: z.preprocess(normalizeReasoningEffort, z.enum(['no', 'medium', 'high', 'xhigh', 'max']).optional()),
-  runProfile: z.enum(['cache_first', 'runtime_os']).optional(),
   compactionThreshold: z.number().min(0.3).max(0.95).optional(),
 }).strict();
 
 export const threadConfigUpdateSchema = z.object({
-  set: threadRunConfigOverridesSchemaLegacy.optional(),
+  set: threadRunConfigOverridesSchema.optional(),
   unset: z.array(z.enum(THREAD_RUN_CONFIG_KEYS)).max(THREAD_RUN_CONFIG_KEYS.length).optional(),
 }).strict().superRefine((value, context) => {
   if (!value.set && !value.unset?.length) {
@@ -101,6 +100,8 @@ export function threadRunConfigOverridesFrom(input: Record<string, unknown>): Th
     } else if (key === 'compactionThreshold'
       && typeof value === 'number' && Number.isFinite(value) && value > 0) {
       (result as Record<string, number>)[key] = Math.min(0.95, Math.max(0.3, value));
+    } else if (key === 'hasWorkspace' && typeof value === 'boolean') {
+      result.hasWorkspace = value;
     } else if (key === 'accessPolicy' && value && typeof value === 'object' && !Array.isArray(value)) {
       result.accessPolicy = accessPolicyConfigSchema.parse(value);
     }
@@ -162,6 +163,9 @@ export const GlobalRunConfigDefaultsSchema = z.object({
   webSearchMode: z.enum(['auto', 'on', 'off']).default('auto'),
   webSearchMaxResults: z.number().int().min(1).max(20).default(5),
   maxSteps: z.number().int().min(1).max(100).default(25),
+  streamIdleTimeoutSeconds: z.number().int().min(5).max(3600).default(300),
+  eventStreamReconnectLimit: z.number().int().min(0).max(20).default(5),
+  offlineReconnectLimit: z.number().int().min(0).max(20).default(5),
   planMode: z.enum(['disabled', 'on', 'auto']).default('auto'),
   includeMemory: z.boolean().default(true),
   modelContextTokens: z.number().int().positive().optional(),
@@ -209,6 +213,9 @@ export interface ResolvedRunConfig {
   webSearchMode: WebSearchMode;
   webSearchMaxResults: number;
   maxSteps: number;
+  streamIdleTimeoutSeconds?: number;
+  eventStreamReconnectLimit?: number;
+  offlineReconnectLimit?: number;
   planMode: 'disabled' | 'on' | 'auto';
   includeMemory: boolean;
   modelContextTokens?: number;

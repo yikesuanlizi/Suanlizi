@@ -16,7 +16,6 @@ import {
   type NormalizedUsage,
   type TokenEstimate,
   type ToolCall,
-  resolveBaseUrl,
   protocolFor,
 } from './types.js';
 // 引入 provider 注册表与 API key 解析
@@ -30,7 +29,7 @@ import {
   parseResponsesStream,
   type ResponsesRequest,
 } from './responsesClient.js';
-import { ModelRequestTimeoutError } from './errors.js';
+import { ModelRequestTimeoutError, ModelStreamIdleTimeoutError } from './errors.js';
 
 /** Core model gateway — unified interface over OpenAI-compatible + Anthropic APIs. */
 // 核心模型网关：在 OpenAI 兼容协议和 Anthropic API 之上统一成一个对外接口
@@ -55,7 +54,7 @@ export class ModelGateway {
     };
     // 解析 provider 条目
     const providerEntry = getProvider(normalizedConfig.provider);
-    const resolvedBaseUrl = normalizedConfig.baseUrl || providerEntry?.baseUrl || resolveBaseUrl(normalizedConfig);
+    const resolvedBaseUrl = normalizedConfig.baseUrl;
     const resolvedApiKey = resolveApiKey(normalizedConfig.provider, normalizedConfig.apiKey);
 
     this.profile = resolveProviderProfile({
@@ -104,13 +103,12 @@ export class ModelGateway {
     req: Omit<ChatCompletionRequest, 'model' | 'stream'>,
     options?: ModelRequestOptions,
   ): AsyncGenerator<StreamEvent> {
-    if (this.protocol === 'anthropic') {
-      yield* this.anthropicChatStream(req, options);
-    } else if (this.profile.transport === 'openai_responses') {
-      yield* this.openaiResponsesStream(req, options);
-    } else {
-      yield* this.openaiChatStream(req, options);
-    }
+    const stream = this.protocol === 'anthropic'
+      ? this.anthropicChatStream(req, options)
+      : this.profile.transport === 'openai_responses'
+        ? this.openaiResponsesStream(req, options)
+        : this.openaiChatStream(req, options);
+    yield* this.withStreamIdleWatchdog(stream, options);
   }
 
   getProfile(): ProviderProfile {
@@ -411,6 +409,51 @@ export class ModelGateway {
     yield* parseResponsesStream(reader, this.cacheStrategy);
   }
 
+  /**
+   * 流式空闲看门狗：只在等待下一帧时计时。任何 delta/tool/usage 帧都会重置；
+   * 长思考不应被旧的“总响应超时”误杀。
+   */
+  private async *withStreamIdleWatchdog(
+    stream: AsyncGenerator<StreamEvent>,
+    options?: ModelRequestOptions,
+  ): AsyncGenerator<StreamEvent> {
+    const idleTimeoutMs = Math.max(1_000, this.config.streamIdleTimeoutMs ?? 300_000);
+    const controller = new AbortController();
+    const parentSignal = options?.signal;
+    const abortFromParent = () => controller.abort(parentSignal?.reason);
+    if (parentSignal) {
+      if (parentSignal.aborted) abortFromParent();
+      else parentSignal.addEventListener('abort', abortFromParent, { once: true });
+    }
+    let idleTimer: ReturnType<typeof setTimeout> | null = null;
+    const armIdleTimer = () => {
+      if (idleTimer !== null) clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        controller.abort(new ModelStreamIdleTimeoutError(idleTimeoutMs));
+      }, idleTimeoutMs);
+    };
+    const iterator = stream[Symbol.asyncIterator]();
+    armIdleTimer();
+    try {
+      while (true) {
+        let result: IteratorResult<StreamEvent>;
+        try {
+          result = await iterator.next();
+        } catch (error) {
+          const idleError = controller.signal.reason;
+          if (controller.signal.aborted && idleError instanceof ModelStreamIdleTimeoutError) throw idleError;
+          throw error;
+        }
+        if (result.done) return;
+        armIdleTimer();
+        yield result.value;
+      }
+    } finally {
+      if (idleTimer !== null) clearTimeout(idleTimer);
+      parentSignal?.removeEventListener('abort', abortFromParent);
+      await iterator.return?.(undefined).catch(() => undefined);
+    }
+  }
   /** POST /responses for remote OpenAI-compatible gateways and llama-server. */
   private openaiResponsesFetch(body: ResponsesRequest, options?: ModelRequestOptions): Promise<Response> {
     if (this.profile.id === 'llama_cpp') {

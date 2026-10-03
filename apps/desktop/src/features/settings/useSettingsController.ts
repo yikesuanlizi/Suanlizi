@@ -10,7 +10,7 @@ import { fetchThreadConfigOverrides, patchThreadConfigOverrides } from '../../ap
 import type { SettingsScope, SettingsScopeInfo, SettingsSaveState } from '../../components/settings/SettingsShell.js';
 import { formatSuanliziErrorMessage } from '@suanlizi/protocol';
 import { listBrowserTabFavicons, readActiveBrowserTabFavicon } from '../../api/desktopBridge.js';
-import { isLegacyGuessedProviderIcon, matchingProviderTabFavicon, type ProviderBrowserTab } from '@suanlizi/protocol';
+import { isGuessedProviderIcon, matchingProviderTabFavicon, type ProviderBrowserTab } from '@suanlizi/protocol';
 
 export interface UseSettingsControllerOptions {
   locale: Locale;
@@ -295,12 +295,12 @@ export function useSettingsController(options: UseSettingsControllerOptions): Us
 
   // 已有自定义厂商也能在打开设置时补录：仅匹配当前线程、同站点 Tab。
   useEffect(() => {
-    if (!activeThreadId || !providers.some((provider) => provider.id.startsWith('custom_') && (!provider.iconUrl || isLegacyGuessedProviderIcon(provider.baseUrl, provider.iconUrl)))) return;
+    if (!activeThreadId || !providers.some((provider) => provider.id.startsWith('custom_') && (!provider.iconUrl || isGuessedProviderIcon(provider.baseUrl, provider.iconUrl)))) return;
     let cancelled = false;
     void listBrowserTabFavicons({ threadId: activeThreadId }).then(async (tabs) => {
       let updated = false;
       for (const provider of providers) {
-        if (cancelled || !provider.id.startsWith('custom_') || (provider.iconUrl && !isLegacyGuessedProviderIcon(provider.baseUrl, provider.iconUrl))) continue;
+        if (cancelled || !provider.id.startsWith('custom_') || (provider.iconUrl && !isGuessedProviderIcon(provider.baseUrl, provider.iconUrl))) continue;
         const iconUrl = matchingProviderTabFavicon(provider.baseUrl, tabs);
         if (!iconUrl || iconUrl === provider.iconUrl) continue;
         const response = await fetch(`/api/providers/${encodeURIComponent(provider.id)}`, {
@@ -690,7 +690,6 @@ export function useSettingsController(options: UseSettingsControllerOptions): Us
       const samplingEnabled = patch.systemMonitorSamplingEnabled ?? config.systemMonitorSamplingEnabled;
       const monitorPatch = {
         monitorPanelVisible: patch.monitorPanelVisible ?? config.monitorPanelVisible,
-        systemMonitorEnabled: samplingEnabled,
         systemMonitorSamplingEnabled: samplingEnabled,
         systemMonitorLogRecordingEnabled: patch.systemMonitorLogRecordingEnabled ?? config.systemMonitorLogRecordingEnabled,
         systemMonitorGuardEnabled: patch.systemMonitorGuardEnabled ?? config.systemMonitorGuardEnabled,

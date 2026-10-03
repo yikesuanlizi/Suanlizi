@@ -65,8 +65,6 @@ const zh = {
     '- 执行命令前先说明你打算做什么。\n' +
     '- 如果工具需要审批，等待通过——绝不绕过。\n' +
     '- 本地代码分析以 list_files/read_file/search_content 等内置工具为主；它们始终是可用的基础路径。\n' +
-    '- 将 GitNexus 视为结构化增强：当任务涉及调用关系、影响面、调用链、路由图或依赖图时，如果 GitNexus MCP 可用，结合 GitNexus 工具（context、impact、trace、cypher）与内置工具一起使用。\n' +
-    '- 如果 GitNexus 不可用、未索引或失败，继续使用内置工具完成分析；需要索引且权限允许时，调用 gitnexus_analyze 构建索引。\n' +
     '- browser_pages 只能列出页面和 pageId，既不接收 URL，也不会打开网页。用户要求打开地址时，调用 browser_navigate 并传入 url；about:blank 表示尚未打开网页，导航成功前不得声称页面已打开。\n' +
     '- 浏览器操作按线程串行。用户已提供 URL 时，首个浏览器调用直接使用 browser_navigate 打开该 URL；不要先调用 browser_pages，也不要与 shell_command 或其他可能等待审批的工具放在同一批调用中。导航需要审批时，等待审批结果后再继续观察或操作。\n' +
     '- 禁止使用 window.THREE、@ts-nocheck、或假设浏览器全局变量。\n' +
@@ -82,8 +80,6 @@ const zh = {
     '- If a tool requires approval, wait for it — never bypass.\n' +
     '- For simple date/time questions, use the current_time tool instead of shell_command.\n' +
     '- For local code analysis, keep list_files/read_file/search_content as the primary path; these built-in tools remain the source of truth.\n' +
-    '- Treat GitNexus as a structured enhancement: for call relationships, impact analysis, traces, route maps, or dependency graphs, combine GitNexus tools with built-in tools when the GitNexus MCP is available.\n' +
-    '- If GitNexus is unavailable, unindexed, or fails, continue with built-in tools; when an index is needed and permissions allow it, use gitnexus_analyze to build the index.\n' +
     '- browser_pages only lists pages and pageIds: it accepts no URL and never opens a page. When the user asks to open an address, call browser_navigate with url; about:blank means no webpage has opened, so do not claim success before navigation succeeds.\n' +
     '- Browser operations are serialized per thread. When the user has provided a URL, make browser_navigate the first browser call; do not first call browser_pages or batch it with shell_command or another tool that may wait for approval. If navigation needs approval, wait for that result before observing or acting.\n' +
     '- Do NOT use window.THREE, @ts-nocheck, or assume browser globals.\n' +
@@ -155,8 +151,6 @@ const en: Record<keyof typeof zh, string> = {
     '- If a tool requires approval, wait for it — never bypass.\n' +
     '- For simple date/time questions, use the current_time tool instead of shell_command.\n' +
     '- For local code analysis, keep list_files/read_file/search_content as the primary path; these built-in tools remain the source of truth.\n' +
-    '- Treat GitNexus as a structured enhancement: for call relationships, impact analysis, traces, route maps, or dependency graphs, combine GitNexus tools with built-in tools when the GitNexus MCP is available.\n' +
-    '- If GitNexus is unavailable, unindexed, or fails, continue with built-in tools; when an index is needed and permissions allow it, use gitnexus_analyze to build the index.\n' +
     '- browser_pages only lists pages and pageIds: it accepts no URL and never opens a page. When the user asks to open an address, call browser_navigate with url; about:blank means no webpage has opened, so do not claim success before navigation succeeds.\n' +
     '- Browser operations are serialized per thread. When the user has provided a URL, make browser_navigate the first browser call; do not first call browser_pages or batch it with shell_command or another tool that may wait for approval. If navigation needs approval, wait for that result before observing or acting.\n' +
     '- Do NOT use window.THREE, @ts-nocheck, or assume browser globals.\n' +
@@ -171,8 +165,6 @@ const en: Record<keyof typeof zh, string> = {
     '- If a tool requires approval, wait for it — never bypass.\n' +
     '- For simple date/time questions, use the current_time tool instead of shell_command.\n' +
     '- For local code analysis, keep list_files/read_file/search_content as the primary path; these built-in tools remain the source of truth.\n' +
-    '- Treat GitNexus as a structured enhancement: for call relationships, impact analysis, traces, route maps, or dependency graphs, combine GitNexus tools with built-in tools when the GitNexus MCP is available.\n' +
-    '- If GitNexus is unavailable, unindexed, or fails, continue with built-in tools; when an index is needed and permissions allow it, use gitnexus_analyze to build the index.\n' +
     '- browser_pages only lists pages and pageIds: it accepts no URL and never opens a page. When the user asks to open an address, call browser_navigate with url; about:blank means no webpage has opened, so do not claim success before navigation succeeds.\n' +
     '- Browser operations are serialized per thread. When the user has provided a URL, make browser_navigate the first browser call; do not first call browser_pages or batch it with shell_command or another tool that may wait for approval. If navigation needs approval, wait for that result before observing or acting.\n' +
     '- Do NOT use window.THREE, @ts-nocheck, or assume browser globals.\n' +

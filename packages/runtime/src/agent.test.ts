@@ -18,7 +18,6 @@ import type {
 } from '@suanlizi/protocol';
 import { RUN_TRACE_VERSION } from '@suanlizi/protocol';
 import { AgentLoop } from './agent.js';
-import { compactionOptionsForRunProfile } from './runProfile.js';
 import { ThreadStateManager } from './state.js';
 import type { RunEvent, RunFeedback, RunRecord, ThreadStore } from '@suanlizi/storage';
 import { LocalHookRegistry, LocalSkillRegistry } from '@suanlizi/extensions';
@@ -2767,7 +2766,6 @@ describe('AgentLoop runtime middleware', () => {
       store,
       tenantId: 'tenant-runtime-context',
       webSearchMode: 'on',
-      runProfile: 'cache_first',
       dynamicContextProvider: async () => '远程助手绑定状态：weixin.enabled=true weixin.activeThreadMatched=true',
     });
 
@@ -2784,9 +2782,7 @@ describe('AgentLoop runtime middleware', () => {
     expect(serialized).toContain('tenantId=tenant-runtime-context');
     expect(serialized).toContain('工作区路径');
     expect(serialized).toContain('运行状态');
-    // 运行档位已收敛为统一策略，不再注入提示词噪音。
-    expect(serialized).not.toContain('runProfile=');
-    expect(serialized).toContain('webSearchMode=on');
+        expect(serialized).toContain('webSearchMode=on');
     expect(serialized).toContain('权限 preset=workspace');
     expect(serialized).toContain('最近上传/图片数量=1');
     expect(serialized).toContain('packages/runtime/src/agent.ts');
@@ -4069,7 +4065,6 @@ describe('AgentLoop message history', () => {
       sandbox: { level: 'workspace_write', workspaceRoot: process.cwd() },
       model: model as never,
       store,
-      runProfile: 'runtime_os',
     });
 
     const events: ThreadEvent[] = [];
@@ -4113,7 +4108,6 @@ describe('AgentLoop message history', () => {
       model: model as never,
       store,
       tools: createLargeOutputToolRegistry(hugeOutput),
-      runProfile: 'runtime_os',
       maxRepeatedToolCalls: 10,
     });
     const events: ThreadEvent[] = [];
@@ -4289,7 +4283,6 @@ describe('AgentLoop usage accounting', () => {
       sandbox: { level: 'workspace_write', workspaceRoot: process.cwd() },
       model: new SummaryAndMessageCapturingModel() as never,
       store,
-      runProfile: 'runtime_os',
     });
     const events: ThreadEvent[] = [];
     agent.onEvent((event) => events.push(event));
@@ -4328,7 +4321,7 @@ describe('AgentLoop usage accounting', () => {
     hooks.on('pre_compact', () => { throw new Error('compaction interrupted'); });
     const agent = new AgentLoop({
       workspaceRoot: process.cwd(), sandbox: { level: 'workspace_write', workspaceRoot: process.cwd() },
-      model: new SummaryAndMessageCapturingModel() as never, store, hooks, runProfile: 'runtime_os',
+      model: new SummaryAndMessageCapturingModel() as never, store, hooks,
     });
     const events: ThreadEvent[] = [];
     agent.onEvent((event) => events.push(event));
@@ -4385,7 +4378,6 @@ describe('AgentLoop usage accounting', () => {
       sandbox: { level: 'workspace_write', workspaceRoot: process.cwd() },
       model: new FakeModel() as never,
       store,
-      runProfile: 'runtime_os',
     });
     const events: ThreadEvent[] = [];
     agent.onEvent((event) => events.push(event));
@@ -4450,20 +4442,6 @@ describe('AgentLoop rollbackThread', () => {
     }, stateManager);
 
     await expect(agent.rollbackThread(threadId, 1)).rejects.toThrow(/pending/i);
-  });
-});
-
-describe('AgentLoop run profiles', () => {
-  it('uses one unified compaction policy instead of two run profiles', () => {
-    // 多运行状态已舍弃：两档 profile 现在产出同一套压缩策略。
-    expect(compactionOptionsForRunProfile('runtime_os')).toMatchObject({
-      softCompactRatio: 0.5,
-      hardCompactRatio: 0.8,
-      strategy: 'llm',
-    });
-    expect(compactionOptionsForRunProfile('cache_first')).toEqual(
-      compactionOptionsForRunProfile('runtime_os'),
-    );
   });
 });
 
@@ -4584,7 +4562,7 @@ describe('AgentLoop collaboration tools', () => {
     const agent = new AgentLoop({
       workspaceRoot: process.cwd(),
       sandbox: { level: 'workspace_write', workspaceRoot: process.cwd() },
-      model: new CollabCommandModel('spawn_agent', { prompt: 'do tenant work', agentRole: 'worker' }) as never,
+      model: new CollabCommandModel('spawn_agent', { prompt: 'do tenant work', agentRole: 'implementer' }) as never,
       store,
       tenantId: 'tenant-runtime-a',
     });

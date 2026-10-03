@@ -52,7 +52,7 @@ describe('settingsClient', () => {
       const fetcher = createMockFetcher();
       const update = {
         set: { model: 'thread-model', provider: 'thread-provider' },
-        unset: ['runProfile' as const],
+        unset: ['modelContextTokens' as const],
       };
 
       await saveActiveThreadConfig('thread-123', update, fetcher);
@@ -65,7 +65,7 @@ describe('settingsClient', () => {
 
       const body = JSON.parse(options?.body as string);
       expect(body.set).toEqual({ model: 'thread-model', provider: 'thread-provider' });
-      expect(body.unset).toEqual(['runProfile']);
+      expect(body.unset).toEqual(['modelContextTokens']);
     });
 
     it('should throw error on non-2xx response', async () => {

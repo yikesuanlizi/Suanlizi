@@ -359,7 +359,6 @@ function ThreadModuleView({
             <ThreadRow
               activity={activity}
               active={thread.threadId === activeThreadId}
-              iconName="messages"
               remoteBindings={remoteBindingsForThread(remoteBindings, thread.threadId)}
               key={thread.threadId}
               locale={locale}
@@ -429,7 +428,6 @@ function WorkflowProjectList({
           <ThreadRow
             activity={threadActivityFor(thread, activeThreadId, busy, runningTurnIds, unreadThreadIds)}
             active={thread.threadId === activeThreadId}
-            iconName="workflow"
             remoteBindings={remoteBindingsForThread(remoteBindings, thread.threadId)}
             key={thread.threadId}
             locale={locale}
@@ -516,7 +514,6 @@ function WorkspaceGroupView({
               <ThreadRow
                 activity={activity}
                 active={thread.threadId === activeThreadId}
-              iconName="messages"
                 remoteBindings={remoteBindingsForThread(remoteBindings, thread.threadId)}
                 key={thread.threadId}
                 locale={locale}
@@ -543,7 +540,6 @@ function WorkspaceGroupView({
 function ThreadRow({
   activity,
   active,
-  iconName,
   locale,
   remoteBindings,
   thread,
@@ -553,7 +549,6 @@ function ThreadRow({
 }: {
   activity: ThreadActivityState;
   active: boolean;
-  iconName: SidebarIconName;
   locale: Locale;
   remoteBindings: RemoteThreadBinding[];
   thread: ThreadMeta;
@@ -564,7 +559,6 @@ function ThreadRow({
   return (
     <div className={active ? 'workspaceThreadRow active' : 'workspaceThreadRow'}>
       <button className="workspaceThreadMain" type="button" title={thread.title} onClick={() => onSelectThread(thread.threadId)}>
-        <SidebarIcon className="row-icon" name={iconName} />
         <span className="workspaceThreadTitle">{thread.title || t(locale, 'untitled')}</span>
         <small>{formatTimestamp(thread.updatedAt, locale)}</small>
         {remoteBindings.map((binding) => (

@@ -5,8 +5,8 @@ import type { RunRecord, ThreadWithRuns } from '../../shared/types.js';
 import type { EventDraft } from '../chat/threadView.js';
 import { initialRunMonitorState, runMonitorReducer, selectSelectedTrace, type PendingTraceTarget, type TracePageInfo } from './runMonitorState.js';
 
-const AUTO_REFRESH_KEY = 'nexus.runMonitor.autoRefresh';
-const AUTO_REFRESH_INTERVAL_KEY = 'nexus.runMonitor.autoRefreshInterval';
+const AUTO_REFRESH_KEY = 'suanlizi.runMonitor.autoRefresh';
+const AUTO_REFRESH_INTERVAL_KEY = 'suanlizi.runMonitor.autoRefreshInterval';
 const DEFAULT_REFRESH_INTERVAL = 3000;
 const TRACE_FETCH_LIMIT = 200;
 

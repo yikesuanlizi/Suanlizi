@@ -20,6 +20,7 @@ const sampleTask: Task = {
   createdAt: '2026-09-19T00:00:00.000Z',
   updatedAt: '2026-09-19T00:00:00.000Z',
   version: 0,
+  origin: 'harness_shadow',
 };
 
 afterEach(() => {

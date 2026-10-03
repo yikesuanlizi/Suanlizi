@@ -15,7 +15,7 @@ import type { AgentDecisionAction, AgentDecisionRequest, ThreadExecutionStatus }
 // 线程唯一 ID，全局字符串
 export type ThreadId = string;
 
-/** 线程当前的交互入口；不改变底层 runProfile。 */
+/** 线程当前的交互入口。 */
 export type ThreadMode = 'chat' | 'ops';
 
 /** 线程最近选择的 Ops 任务预设；未进入 Ops 时为空。 */
@@ -26,12 +26,14 @@ export type ThreadTaskPresetId = ThreadTaskPreset;
 // 线程元信息，持久化到 SQLite
 export interface ThreadMeta {
   threadId: ThreadId;
-  /** 当前线程入口模式，旧数据缺失时按 chat 处理。 */
+  /** 工作区认证只看这个布尔标记；workspaceRoot 只是位置数据。 */
+  hasWorkspace?: boolean;
+  /** 当前线程入口模式。 */
   mode?: ThreadMode;
   /** 当前线程关联的 Ops 任务预设，普通聊天线程通常为空。 */
   taskPreset?: ThreadTaskPreset | null;
-  /** Legacy SQLite partition key retained for local data migration compatibility. */
-  // 旧 SQLite 分区字段，仅用于本地数据迁移兼容，运行时固定为 default
+  /** SQLite 分区键；单用户个人工作区固定为 default。 */
+  // SQLite 分区字段，运行时固定为 default
   tenantId?: string;
   /** Human-readable title (may be auto-generated). */
   // 人类可读的标题（可自动生成）
@@ -292,9 +294,9 @@ export interface FileChangeHunk {
   endLine?: number;
   addedLines: number;
   removedLines: number;
-  // 实际新增的行内容（不含 '+' 前缀）；旧数据无此字段时降级为空数组
+  // 实际新增的行内容（不含 '+' 前缀）；缺失时为空数组
   addedLinesContent: string[];
-  // 实际删除的行内容（不含 '-' 前缀）；旧数据无此字段时降级为空数组
+  // 实际删除的行内容（不含 '-' 前缀）；缺失时为空数组
   removedLinesContent: string[];
   summary?: string;
 }
@@ -1215,7 +1217,7 @@ export interface ApprovalRequiredEvent {
 }
 
 /** Emitted when context is compacted mid-conversation. */
-// 上下文压缩完成事件（旧版）
+// 上下文压缩完成事件
 export interface CompactedEvent {
   type: 'thread.compacted';
   threadId: ThreadId;
@@ -1317,8 +1319,6 @@ export interface HarnessStateUpdatedEvent {
 // 重要约束：
 // - 不发完整 system prompt
 // - 不发完整 context chunk content，只发 metadata
-// - 普通聊天也会发 task.runtime.updated，但不代表进入 harness
-// - task.loop.updated 兼容 harness loop，但不叫 harness
 // ----------------------------------------------------------------
 
 // 当前 turn / runtime phase 变化
@@ -1328,7 +1328,6 @@ export interface TaskRuntimeUpdatedEvent {
   turnId?: TurnId;
   phase: 'before_turn' | 'model' | 'tool' | 'compact' | 'after_turn' | 'idle';
   status: 'running' | 'completed' | 'failed' | 'interrupted';
-  runProfile: 'cache_first' | 'runtime_os';
   /** 上下文压缩阈值：占模型上下文窗口的比例。 */
   compactionThreshold?: number;
   checkpoint?: boolean;
@@ -1705,7 +1704,7 @@ export interface ThreadRuntimeState {
   checkpoint: Checkpoint | null;
   resumable: boolean;
   stale: boolean;
-  /** 线程执行生命周期，独立于历史兼容的 status 字段。 */
+  /** 线程执行生命周期，独立于兼容展示的 status 字段。 */
   executionStatus?: ThreadExecutionStatus;
   terminalStatus?: 'completed' | 'failed' | 'interrupted';
   decisionRequest?: AgentDecisionRequest | null;

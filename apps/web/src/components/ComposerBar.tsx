@@ -23,10 +23,10 @@ export type PaletteOption = SlashCommandOption & (
 
 // 输入历史在 localStorage 中的键。
 // Storage key for composer history in localStorage.
-export const COMPOSER_HISTORY_STORAGE_KEY = 'nexus.composer.history.v1';
+export const COMPOSER_HISTORY_STORAGE_KEY = 'suanlizi.composer.history.v1';
 // 输入草稿在 localStorage 中的键（用于刷新后恢复）。
 // Storage key for composer draft in localStorage (used to restore after refresh).
-export const COMPOSER_DRAFT_STORAGE_KEY = 'nexus.composer.draft.v1';
+export const COMPOSER_DRAFT_STORAGE_KEY = 'suanlizi.composer.draft.v1';
 // 保留的历史条目上限。
 // Maximum number of history entries to keep.
 const COMPOSER_HISTORY_LIMIT = 100;
@@ -168,13 +168,13 @@ export function ComposerBar({
     : executionMode === 'goal'
       ? { className: 'modeIndicatorGoal', label: 'Goal' }
       : null;
-  const thinkingOptions: Array<{ value: ComposerThinkingMode; label: string; icon: React.ReactNode }> = [
-    { value: 'no', label: config.locale === 'zh' ? '快速' : 'Fast', icon: <Icon name="gauge" /> },
-    { value: 'medium', label: config.locale === 'zh' ? '均衡' : 'Balanced', icon: <Icon name="balance" /> },
-    { value: 'high', label: config.locale === 'zh' ? '深度' : 'Deep', icon: <Icon name="layers" /> },
-    { value: 'xhigh', label: config.locale === 'zh' ? '更深' : 'Deeper', icon: <Icon name="brain" /> },
-    { value: 'max', label: config.locale === 'zh' ? '最高' : 'Max', icon: <Icon name="spark" /> },
-    { value: 'workflow', label: config.locale === 'zh' ? '动态工作流' : 'Dynamic Workflow', icon: <Icon name="workflow" /> },
+  const thinkingOptions: Array<{ value: ComposerThinkingMode; label: string }> = [
+    { value: 'no', label: 'Fast' },
+    { value: 'medium', label: 'Balanced' },
+    { value: 'high', label: 'Deep' },
+    { value: 'xhigh', label: 'Deeper' },
+    { value: 'max', label: 'Max' },
+    { value: 'workflow', label: 'Workflow' },
   ];
   const urlTokens = React.useMemo(() => extractUrlTokens(input), [input]);
   const commandInputClassName = [

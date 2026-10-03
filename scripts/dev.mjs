@@ -5,6 +5,7 @@ import path from 'node:path';
 import './link-workspaces.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const appDataRoot = path.join(root, 'app-data');
 const isWindows = process.platform === 'win32';
 const DEFAULT_WEIXIN_BRIDGE_PORT = 18790;
 const children = new Set();
@@ -113,7 +114,7 @@ initialBuild.on('exit', async (code) => {
     console.error(`[api] Stop the existing Suanlizi process first, or start with SUANLIZI_API_PORT=<free-port>.`);
     process.exit(1);
   }
-  const logDir = path.join(root, '.suanlizi', 'logs');
+  const logDir = path.join(appDataRoot, 'logs');
   const startWeixinBridge = shouldStartWeixinBridge();
   const weixinBridgePort = startWeixinBridge ? await chooseWeixinBridgePort() : Number(process.env.SUANLIZI_WEIXIN_BRIDGE_PORT || DEFAULT_WEIXIN_BRIDGE_PORT);
   const weixinBridgeUrl = process.env.SUANLIZI_WEIXIN_BRIDGE_URL ?? `http://127.0.0.1:${weixinBridgePort}/api/v1/admin/rpc`;

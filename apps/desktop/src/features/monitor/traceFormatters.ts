@@ -364,3 +364,26 @@ export function runStatusLabel(status: string, zh: boolean): string {
 }
 
 export { stringifyValue, truncate };
+
+const EVENT_NAME_LABELS: Record<string, string> = {
+  'run.started': '运行开始',
+  'run.completed': '运行完成',
+  'run.failed': '运行失败',
+  'run.cancelled': '运行取消',
+  'turn.started': '轮次开始',
+  'turn.completed': '轮次完成',
+  'turn.failed': '轮次失败',
+  'item.started': '消息条目开始',
+  'item.updated': '消息条目更新',
+  'item.completed': '消息条目完成',
+  'tool.started': '工具调用开始',
+  'tool.completed': '工具调用完成',
+  'tool.failed': '工具调用失败',
+  'middleware.beforeTool': '工具调用前中间件',
+  'middleware.afterTool': '工具调用后中间件',
+};
+
+export function traceEventNameLabel(name: string, zh = true): string {
+  if (!zh) return name;
+  return EVENT_NAME_LABELS[name] ?? name;
+}

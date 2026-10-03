@@ -287,7 +287,7 @@ describe('buildAgentWorkbench', () => {
       items: [{
         id: 'child-mcp-1',
         type: 'mcp_tool_call',
-        server: 'gitnexus',
+        server: 'example-mcp',
         tool: 'search_code',
         status: 'completed',
         timestamp: '2025-01-01T00:01:00Z',
@@ -319,7 +319,7 @@ describe('buildAgentWorkbench', () => {
       expect.objectContaining({
         itemId: 'child-mcp-1',
         agent: expect.objectContaining({ threadId: 'child-research', label: 'Research Agent' }),
-        resource: expect.objectContaining({ kind: 'MCP', label: 'gitnexus / search_code' }),
+        resource: expect.objectContaining({ kind: 'MCP', label: 'example-mcp / search_code' }),
       }),
     ]));
   });

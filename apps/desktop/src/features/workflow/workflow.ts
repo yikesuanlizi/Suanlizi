@@ -324,7 +324,7 @@ export async function createWorkflowThread(goal: string, workspaceRoot: string):
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       title: goal.slice(0, 60),
-      config: { workspaceRoot, runProfile: 'runtime_os', reasoningEffort: 'high' },
+      config: { workspaceRoot, reasoningEffort: 'high' },
       conversationKind: 'project',
       workflowProject: true,
     }),

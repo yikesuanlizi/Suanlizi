@@ -8,7 +8,7 @@ import type { MonitorSettingsPatch } from '../../components/settings/MonitorPage
 import { saveGlobalDefaults } from './settingsClient.js';
 import { fetchThreadConfigOverrides, patchThreadConfigOverrides } from '../../api/threadConfigClient.js';
 import { listBrowserTabFavicons, readActiveBrowserTabFavicon } from '../../api/desktopBridge.js';
-import { isLegacyGuessedProviderIcon, type ProviderBrowserTab } from '@suanlizi/protocol';
+import { isGuessedProviderIcon, type ProviderBrowserTab } from '@suanlizi/protocol';
 import type { SettingsScope, SettingsScopeInfo, SettingsSaveState } from '../../components/settings/SettingsShell.js';
 import { formatSuanliziErrorMessage } from '@suanlizi/protocol';
 
@@ -687,7 +687,6 @@ export function useSettingsController(options: UseSettingsControllerOptions): Us
       const samplingEnabled = patch.systemMonitorSamplingEnabled ?? config.systemMonitorSamplingEnabled;
       const monitorPatch = {
         monitorPanelVisible: patch.monitorPanelVisible ?? config.monitorPanelVisible,
-        systemMonitorEnabled: samplingEnabled,
         systemMonitorSamplingEnabled: samplingEnabled,
         systemMonitorLogRecordingEnabled: patch.systemMonitorLogRecordingEnabled ?? config.systemMonitorLogRecordingEnabled,
         systemMonitorGuardEnabled: patch.systemMonitorGuardEnabled ?? config.systemMonitorGuardEnabled,

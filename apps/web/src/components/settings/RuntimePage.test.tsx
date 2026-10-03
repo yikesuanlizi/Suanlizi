@@ -40,7 +40,6 @@ describe('runtime settings pages', () => {
     for (const src of [runtime, controller, dialogs]) {
       expect(src).not.toContain('缓存优先');
       expect(src).not.toContain('长运行');
-      expect(src).not.toContain('runProfileLabel');
     }
   });
 

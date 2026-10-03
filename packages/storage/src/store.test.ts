@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createStore } from './index.js';
@@ -340,7 +340,7 @@ describe('LocalThreadStore threads', () => {
     await expect(tenantB.listThreadSpawnChildren(threadA.threadId, 'open')).resolves.toEqual([]);
   });
 
-  it('uses tenant rollout paths and reads legacy default rollouts compatibly', async () => {
+  it('uses tenant rollout paths', async () => {
     const dataDir = mkdtempSync(join(tmpdir(), 'suanlizi-storage-'));
     const { store } = createStore(dataDir);
     const tenantA = store.scope!('tenantA');
@@ -355,73 +355,6 @@ describe('LocalThreadStore threads', () => {
       expect.objectContaining({ id: 'item-a' }),
     ]);
     await expect(store.getItems('thread-rollout-tenant')).resolves.toEqual([]);
-
-    mkdirSync(join(dataDir, 'rollouts'), { recursive: true });
-    writeFileSync(
-      join(dataDir, 'rollouts', 'thread-legacy-default.jsonl'),
-      `${JSON.stringify({ id: 'legacy-item', type: 'agent_message', turnId: 'turn-legacy', text: 'legacy' })}
-`,
-      'utf-8',
-    );
-    await expect(store.getItems('thread-legacy-default')).resolves.toEqual([
-      expect.objectContaining({ id: 'legacy-item' }),
-    ]);
-  });
-
-  it('recovers missing thread and turn metadata from rollout JSONL', async () => {
-    const dataDir = mkdtempSync(join(tmpdir(), 'suanlizi-storage-'));
-    const threadId = 'thread-recover-test';
-    const turnId = 'turn-recover-test';
-    const now = '2026-06-08T10:00:00.000Z';
-
-    mkdirSync(join(dataDir, 'rollouts'), { recursive: true });
-    writeFileSync(
-      join(dataDir, 'rollouts', `${threadId}.jsonl`),
-      [
-        JSON.stringify({
-          type: '__checkpoint__',
-          threadId,
-          turnId,
-          itemIndex: 0,
-          timestamp: now,
-        }),
-        JSON.stringify({
-          id: `${turnId}_item_0`,
-          type: 'user_message',
-          turnId,
-          text: '恢复这个旧会话',
-        }),
-        JSON.stringify({
-          id: `${turnId}_item_1`,
-          type: 'agent_message',
-          turnId,
-          text: '已恢复。',
-        }),
-        '',
-      ].join('\n'),
-      'utf-8',
-    );
-
-    const { store } = createStore(dataDir);
-
-    await expect(store.listThreads()).resolves.toMatchObject([
-      {
-        threadId,
-        title: '恢复这个旧会话',
-        status: 'active',
-        turnCount: 1,
-      },
-    ]);
-    await expect(store.getTurns(threadId)).resolves.toMatchObject([
-      {
-        turnId,
-        threadId,
-        index: 0,
-        userInput: { type: 'text', text: '恢复这个旧会话' },
-        status: 'completed',
-      },
-    ]);
-    await expect(store.getItems(threadId)).resolves.toHaveLength(2);
   });
 
   it('deletes thread metadata, turns, and rollout items', async () => {

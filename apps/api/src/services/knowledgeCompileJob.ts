@@ -246,7 +246,7 @@ function publicJob(job: KnowledgeCompileJob): KnowledgeCompileJob {
 
 async function persistJob(store: ThreadStore, tenantId: string, job: KnowledgeCompileJob, patch: Partial<KnowledgeCompileJob> = {}): Promise<KnowledgeCompileJob> {
   return withCatalogLock(store, async () => {
-    const state = await loadState(store, tenantId);
+    const state = await loadState(store);
     const current = state.jobs[job.jobId] ?? job;
     if ((current.status === 'paused' || current.status === 'cancelled') && patch.status && patch.status !== current.status) return current;
     const updated = { ...current, ...patch, updatedAt: now() };
@@ -255,7 +255,7 @@ async function persistJob(store: ThreadStore, tenantId: string, job: KnowledgeCo
       const base = state.bases[updated.knowledgeBaseId];
       if (base?.status === 'syncing') state.bases[base.knowledgeBaseId] = { ...base, status: base.currentSnapshotId ? 'active' : 'blocked', updatedAt: updated.updatedAt, version: base.version + 1 };
     }
-    await saveState(store, state, tenantId, false, { rebuildIndex: false });
+    await saveState(store, state, { rebuildIndex: false });
     return updated;
   });
 }
@@ -410,8 +410,7 @@ function snapshotFromFiles(base: KnowledgeBaseRecord, root: string, files: Colle
   }
   return {
     snapshotId,
-    knowledgeBaseId: base.knowledgeBaseId,
-    sourceRoot: root,
+    knowledgeBaseId: base.knowledgeBaseId,
     status: 'ready',
     immutable: true,
     contentHash: hash([...sources.map((source) => `${source.relativePath}:${source.contentHash}`), ...pages.map((page) => `${page.slug}:${page.contentHash}`)].join('|')),
@@ -449,7 +448,7 @@ async function executeJob(runtime: JobRuntime): Promise<void> {
     (job.pendingFiles ?? []).map((file) => [file.relativePath, file] as const),
   );
   try {
-    const initialState = await loadState(runtime.store, runtime.tenantId);
+    const initialState = await loadState(runtime.store);
     const currentBase = initialState.bases[runtime.baseId];
     if (!currentBase || currentBase.status === 'deleted') {
       await finishJob(runtime.store, runtime.tenantId, job, 'cancelled');
@@ -550,12 +549,12 @@ async function executeJob(runtime: JobRuntime): Promise<void> {
     const snapshotId = `snap_${randomUUID()}`;
     const createdAt = now();
     await withCatalogLock(runtime.store, async () => {
-      const state = await loadState(runtime.store, runtime.tenantId);
+      const state = await loadState(runtime.store);
       const currentJob = state.jobs[runtime.jobId];
       const base = state.bases[runtime.baseId];
       if (!currentJob || currentJob.requestedAction === 'cancel' || currentJob.status === 'cancelled' || !base || base.status === 'deleted') {
         if (currentJob) state.jobs[runtime.jobId] = { ...currentJob, status: 'cancelled', stage: 'cancelled', currentFile: undefined, updatedAt: now(), completedAt: now() };
-        await saveState(runtime.store, state, runtime.tenantId, false, { rebuildIndex: false });
+        await saveState(runtime.store, state, { rebuildIndex: false });
         return;
       }
       const snapshot = snapshotFromFiles(base, runtime.root, runtime.files, runtime.stats, snapshotId, createdAt);
@@ -565,7 +564,7 @@ async function executeJob(runtime: JobRuntime): Promise<void> {
       state.bases[base.knowledgeBaseId] = updatedBase;
       state.jobs[runtime.jobId] = { ...currentJob, status: 'completed', stage: 'completed', currentFile: undefined, processedFiles: runtime.manifest.length, indexedFiles: runtime.files.length, indexedBytes: snapshot.indexStats?.indexedBytes ?? 0, skippedFiles: snapshot.indexStats?.skippedFiles ?? 0, skippedBytes: snapshot.indexStats?.skippedBytes ?? 0, truncated: snapshot.indexStats?.truncated ?? false, snapshotId, updatedAt: now(), completedAt: now(), ...(currentJob.persistPending ? { pendingFiles: [] } : {}) };
       void removed;
-      await saveState(runtime.store, state, runtime.tenantId, false, { appendSnapshotId: snapshotId, removeSnapshotIds: removed });
+      await saveState(runtime.store, state, { appendSnapshotId: snapshotId, removeSnapshotIds: removed });
     });
   } catch (error) {
     if (error instanceof JobControlError) {
@@ -610,7 +609,7 @@ function scheduleJob(store: ThreadStore, tenantId: string, job: KnowledgeCompile
 export async function recoverKnowledgeCompileJobs(store: ThreadStore, tenantId: string): Promise<void> {
   if (recoveredStores.has(store as object)) return;
   recoveredStores.add(store as object);
-  const state = await loadState(store, tenantId);
+  const state = await loadState(store);
   for (const job of Object.values(state.jobs)) {
     if (isTerminal(job.status) || job.status === 'paused') continue;
     const root = await grantRoot(state, job.sourceGrantId).catch(() => null);
@@ -629,7 +628,7 @@ export async function recoverKnowledgeCompileJobs(store: ThreadStore, tenantId: 
 
 export async function startKnowledgeBaseCreateJob(store: ThreadStore, tenantId: string, input: { name: string; sourceGrantId: string; persistPending?: boolean }): Promise<KnowledgeJobResult> {
   return withCatalogLock(store, async () => {
-    const state = await loadState(store, tenantId);
+    const state = await loadState(store);
     const grant = state.grants[input.sourceGrantId];
     if (!grant || grant.revokedAt) throw new Error('Knowledge directory authorization is unavailable');
     const root = await grantRoot(state, grant.grantId);
@@ -638,7 +637,7 @@ export async function startKnowledgeBaseCreateJob(store: ThreadStore, tenantId: 
     const job = createJob(base, grant, root, 'create', input.persistPending === true, timestamp);
     state.bases[base.knowledgeBaseId] = base;
     state.jobs[job.jobId] = job;
-    await saveState(store, state, tenantId, false, { rebuildIndex: false });
+    await saveState(store, state, { rebuildIndex: false });
     scheduleJob(store, tenantId, job, root);
     return { base, job: publicJob(job) };
   });
@@ -646,7 +645,7 @@ export async function startKnowledgeBaseCreateJob(store: ThreadStore, tenantId: 
 
 export async function startKnowledgeBaseSyncJob(store: ThreadStore, tenantId: string, knowledgeBaseId: string, persistPending = false): Promise<KnowledgeJobResult> {
   return withCatalogLock(store, async () => {
-    const state = await loadState(store, tenantId);
+    const state = await loadState(store);
     const base = state.bases[knowledgeBaseId];
     if (!base || base.status === 'deleted') throw new Error('KnowledgeBase not found');
     const grantId = base.source?.grantId;
@@ -663,25 +662,25 @@ export async function startKnowledgeBaseSyncJob(store: ThreadStore, tenantId: st
     const job = createJob(updatedBase, grant, root, 'sync', persistPending, timestamp);
     state.bases[knowledgeBaseId] = updatedBase;
     state.jobs[job.jobId] = job;
-    await saveState(store, state, tenantId, false, { rebuildIndex: false });
+    await saveState(store, state, { rebuildIndex: false });
     scheduleJob(store, tenantId, job, root);
     return { base: updatedBase, job: publicJob(job) };
   });
 }
 
 export async function getKnowledgeJob(store: ThreadStore, jobId: string, tenantId?: string): Promise<KnowledgeCompileJob | null> {
-  const state = await loadState(store, tenantId);
+  const state = await loadState(store);
   return state.jobs[jobId] ?? null;
 }
 
 export async function getKnowledgeBaseJob(store: ThreadStore, knowledgeBaseId: string, tenantId?: string): Promise<KnowledgeCompileJob | null> {
-  const state = await loadState(store, tenantId);
+  const state = await loadState(store);
   return Object.values(state.jobs).filter((job) => job.knowledgeBaseId === knowledgeBaseId).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
 }
 
 export async function actOnKnowledgeJob(store: ThreadStore, tenantId: string, jobId: string, action: KnowledgeCompileJobAction): Promise<KnowledgeCompileJob> {
   return withCatalogLock(store, async () => {
-    const state = await loadState(store, tenantId);
+    const state = await loadState(store);
     const job = state.jobs[jobId];
     if (!job) throw new Error('Knowledge compile job not found');
     if (action === 'pause') {
@@ -689,12 +688,12 @@ export async function actOnKnowledgeJob(store: ThreadStore, tenantId: string, jo
       if (!runners.has(job.jobId) && job.status === 'queued') {
         const paused = { ...job, status: 'paused' as const, stage: 'paused' as const, updatedAt: now() };
         state.jobs[jobId] = paused;
-        await saveState(store, state, tenantId, false, { rebuildIndex: false });
+        await saveState(store, state, { rebuildIndex: false });
         return paused;
       }
       const requested = { ...job, requestedAction: 'pause' as const, updatedAt: now() };
       state.jobs[jobId] = requested;
-      await saveState(store, state, tenantId, false, { rebuildIndex: false });
+      await saveState(store, state, { rebuildIndex: false });
       return requested;
     }
     if (action === 'cancel') {
@@ -703,7 +702,7 @@ export async function actOnKnowledgeJob(store: ThreadStore, tenantId: string, jo
       const cancelled = { ...job, status: 'cancelled' as const, stage: 'cancelled' as const, requestedAction: undefined, currentFile: undefined, updatedAt: now(), completedAt: now() };
       state.jobs[jobId] = cancelled;
       if (base && base.status !== 'deleted') state.bases[base.knowledgeBaseId] = { ...base, status: 'active', updatedAt: now(), version: base.version + 1 };
-      await saveState(store, state, tenantId, false, { rebuildIndex: false });
+      await saveState(store, state, { rebuildIndex: false });
       return cancelled;
     }
     if (job.status !== 'paused') throw new Error('Only a paused knowledge compile job can be resumed');
@@ -717,14 +716,14 @@ export async function actOnKnowledgeJob(store: ThreadStore, tenantId: string, jo
     const resumed = { ...job, status: 'queued' as const, stage: 'queued' as const, canonicalRoot: root, requestedAction: undefined, currentFile: undefined, processedFiles: 0, indexedFiles: checkpoint?.filter((file) => file.stage === 'indexed').length ?? 0, indexedBytes: checkpoint?.reduce((sum, file) => sum + (file.indexedBytes ?? 0), 0) ?? 0, skippedFiles: 0, skippedBytes: 0, truncated: false, pendingFiles: checkpoint, updatedAt: now(), completedAt: undefined };
     state.jobs[jobId] = resumed;
     state.bases[base.knowledgeBaseId] = { ...base, status: 'syncing', updatedAt: now(), version: base.version + 1 };
-    await saveState(store, state, tenantId, false, { rebuildIndex: false });
+    await saveState(store, state, { rebuildIndex: false });
     scheduleJob(store, tenantId, resumed, root);
     return resumed;
   });
 }
 
 export async function cancelKnowledgeJobsForBase(store: ThreadStore, tenantId: string, knowledgeBaseId: string): Promise<void> {
-  const state = await loadState(store, tenantId);
+  const state = await loadState(store);
   const jobs = Object.values(state.jobs).filter((job) => job.knowledgeBaseId === knowledgeBaseId && !isTerminal(job.status));
   for (const job of jobs) await actOnKnowledgeJob(store, tenantId, job.jobId, 'cancel');
 }

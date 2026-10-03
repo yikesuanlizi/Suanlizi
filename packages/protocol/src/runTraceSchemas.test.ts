@@ -102,7 +102,7 @@ describe('RunTrace schema — payload strict 校验', () => {
       toolName: 'mcp_call_tool',
       callId: 'call-1',
       resourceKind: 'mcp',
-      server: 'gitnexus',
+      server: 'example-mcp',
       tool: 'search_code',
     });
     expect(result.success).toBe(true);

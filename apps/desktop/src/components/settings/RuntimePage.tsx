@@ -57,6 +57,17 @@ export function RuntimePage({ locale, config, setConfig, markDirty, onSave }: Ru
             <div className="settingsInputWithSuffix"><input type="number" min={10} max={3600} value={config.modelTimeoutSeconds} onChange={(e) => update('modelTimeoutSeconds', Number(e.target.value))} /><span className="settingsInputSuffix">s</span></div>
           </label>
           <label className="settingsField">
+            <span className="settingsFieldLabel">{text(locale, '流式空闲超时', 'Stream idle timeout')}</span>
+            <div className="settingsInputWithSuffix"><input type="number" min={5} max={3600} value={config.streamIdleTimeoutSeconds} onChange={(e) => update('streamIdleTimeoutSeconds', Number(e.target.value))} /><span className="settingsInputSuffix">s</span></div>
+          </label>          <label className="settingsField">
+            <span className="settingsFieldLabel">{text(locale, '事件流重连次数', 'Event stream reconnects')}</span>
+            <input type="number" min={0} max={20} value={config.eventStreamReconnectLimit} onChange={(e) => update('eventStreamReconnectLimit', Number(e.target.value))} />
+          </label>
+          <label className="settingsField">
+            <span className="settingsFieldLabel">{text(locale, '断网重连次数', 'Offline reconnects')}</span>
+            <input type="number" min={0} max={20} value={config.offlineReconnectLimit} onChange={(e) => update('offlineReconnectLimit', Number(e.target.value))} />
+          </label>
+          <label className="settingsField">
             <span className="settingsFieldLabel">{text(locale, '上下文压缩阈值', 'Compaction threshold')}</span>
             <div className="settingsInputWithSuffix">
               <input

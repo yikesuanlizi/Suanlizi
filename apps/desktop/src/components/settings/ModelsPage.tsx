@@ -3,7 +3,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import type { Locale, SecretSource, RunConfig } from '../../config/config.js';
-import { assignedModelContextTokens, isLegacyGuessedProviderIcon, matchingProviderTabFavicon, modelContextReferenceFor, validProviderIconUrl, type ModelContextReference, type ModelPresetConfig, type ProviderBrowserTab } from '@suanlizi/protocol';
+import { assignedModelContextTokens, isGuessedProviderIcon, matchingProviderTabFavicon, modelContextReferenceFor, validProviderIconUrl, type ModelContextReference, type ModelPresetConfig, type ProviderBrowserTab } from '@suanlizi/protocol';
 import type { ApiKeyState, ModelPreset, ProviderEntry } from '../../shared/types.js';
 import { t } from '../../shared/i18n.js';
 import { Icon } from '../Icon.js';
@@ -376,7 +376,7 @@ export function ModelsPage({
       if (request !== iconRequestRef.current) return;
       setIconTabs(tabs);
       // 匹配 API 站点的 Tab 可以预填；跨站点图标必须由用户亲自点击选择。
-      if (!provider.iconUrl || isLegacyGuessedProviderIcon(provider.baseUrl, provider.iconUrl)) {
+      if (!provider.iconUrl || isGuessedProviderIcon(provider.baseUrl, provider.iconUrl)) {
         const matched = matchingProviderTabFavicon(provider.baseUrl, tabs);
         if (matched) setIconDraft(matched);
       }

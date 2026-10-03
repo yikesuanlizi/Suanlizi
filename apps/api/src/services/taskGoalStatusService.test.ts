@@ -17,6 +17,7 @@ function seedTask(store: FakeTaskStore, overrides: Partial<Task> = {}): Task {
     createdAt: '2026-09-20T00:00:00.000Z',
     updatedAt: '2026-09-20T00:00:00.000Z',
     version: 0,
+    origin: 'explicit_goal',
     interactionMode: 'supervised',
     ...overrides,
   };

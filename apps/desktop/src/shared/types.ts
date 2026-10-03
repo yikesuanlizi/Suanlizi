@@ -28,6 +28,7 @@ export interface McpServerStatus {
 
 export interface ThreadMeta {
   threadId: string;
+  hasWorkspace?: boolean;
   mode?: ThreadMode;
   taskPreset?: ThreadTaskPreset | null;
   title: string;

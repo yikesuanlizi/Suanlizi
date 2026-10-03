@@ -4,6 +4,7 @@ import type { McpConfig } from '../shared/types.js';
 // 默认运行配置（首次启动或配置缺失时使用）
 // Chinese translation: Default runtime config (used on first launch or when settings are missing).
 export const defaultConfig: RunConfig = {
+  hasWorkspace: true,
   provider: 'ollama',
   model: 'qwen2.5-coder:7b',
   baseUrl: '',
@@ -26,7 +27,9 @@ export const defaultConfig: RunConfig = {
   maxParallelReadonlyTools: 2,
   maxSubagentDepth: 1,
   modelTimeoutSeconds: 120,
-  runProfile: 'runtime_os',
+  streamIdleTimeoutSeconds: 300,
+  eventStreamReconnectLimit: 5,
+  offlineReconnectLimit: 5,
   memoryEnabled: true,
   autoExtractMemories: true,
   useColdMemories: true,
@@ -40,7 +43,6 @@ export const defaultConfig: RunConfig = {
   episodeColdAfterDays: 7,
   episodeFtsCandidateLimit: 40,
   episodeRerankEnabled: false,
-  systemMonitorEnabled: false,
   monitorPanelVisible: true,
   systemMonitorSamplingEnabled: false,
   systemMonitorLogRecordingEnabled: false,
@@ -54,7 +56,6 @@ export const defaultConfig: RunConfig = {
     memSevere: 95,
     diskSevereBytes: 500 * 1024 * 1024,
   },
-  maxConcurrency: 4,
   toolTimeoutSeconds: 120,
   memoryThresholdPercent: 85,
   throttleNewTasks: true,

@@ -7,7 +7,7 @@ import { WorkspaceFilesPanel } from '../WorkspaceFilesPanel.js';
 import { Icon } from '../Icon.js';
 import { buildAgentWorkbench } from '../../features/agents/agentWorkbenchModel.js';
 import { buildAgentStageRows, buildSubagentStatusRows } from '../../features/agents/subagents.js';
-import { WorkbenchTabs, type WorkbenchTab } from './WorkbenchTabs.js';
+import { WorkbenchTabs, type PinnableWorkbenchTab, type WorkbenchTab } from './WorkbenchTabs.js';
 import { LiveActivityHud } from './LiveActivityHud.js';
 import { AgentInspector } from './AgentInspector.js';
 import { AgentStagePanel } from '../AgentStagePanel.js';
@@ -31,6 +31,8 @@ export function WorkspaceWorkbench({
   externalPreviewRequest,
   activeTab,
   onTabChange,
+  pinnedTabs,
+  onTogglePinnedTab,
   onJumpToMonitor,
   onInterrupt,
   onResume,
@@ -59,6 +61,8 @@ export function WorkspaceWorkbench({
   externalPreviewRequest?: ExternalPreviewRequest | null;
   activeTab: WorkbenchTab;
   onTabChange(tab: WorkbenchTab): void;
+  pinnedTabs?: PinnableWorkbenchTab[];
+  onTogglePinnedTab?(tab: PinnableWorkbenchTab): void;
   onJumpToMonitor?(opts: { runId?: string; eventId?: string; itemId?: string; threadId?: string }): void;
   onInterrupt?(): void;
   onResume?(): void;
@@ -189,6 +193,8 @@ export function WorkspaceWorkbench({
       <WorkbenchTabs
         activeTab={activeTab}
         onTabChange={handleTabChange}
+        pinnedTabs={pinnedTabs}
+        onTogglePinnedTab={onTogglePinnedTab}
         runningAgentCount={runningAgentCount}
         showOps={opsVisible}
         locale={locale}

@@ -180,7 +180,7 @@ describe('TaskHarnessEngine', () => {
     expect(model.completeOnce).not.toHaveBeenCalled();
   });
 
-  it('P2 取消链：signal abort 后续跑循环立即退出并落 cancelled 可追溯终态', async () => {
+  it('无 reason 的 signal abort 后续跑循环立即退出并落 cancelled 可追溯终态', async () => {
     const controller = new AbortController();
     controller.abort();
     const store = new FakeHarnessStore();
@@ -231,7 +231,7 @@ describe('TaskHarnessEngine', () => {
     expect(statuses.at(-1)).toBe('cancelled');
   });
 
-  it('P2 取消链：abort 引发的 runTurn 抛错收敛为 cancelled 终态，不产生未捕获拒绝', async () => {
+  it('无 reason 的 abort 引发的 runTurn 抛错收敛为 cancelled 终态，不产生未捕获拒绝', async () => {
     const controller = new AbortController();
     const store = new FakeHarnessStore();
     const agentLoop: HarnessAgentLoop = {
@@ -263,7 +263,7 @@ describe('TaskHarnessEngine', () => {
     expect(store.tags['activeHarnessRunId']).toBe('');
   });
 
-  it('P2 取消链：非取消异常仍向上抛出，但 finally 补写 blocked 终态（不留 active 孤儿）', async () => {
+  it('非取消异常仍向上抛出，但 finally 补写 blocked 终态（不留 active 孤儿）', async () => {
     const store = new FakeHarnessStore();
     const agentLoop: HarnessAgentLoop = {
       runTurn: vi.fn(async () => { throw new Error('model exploded'); }),
@@ -289,8 +289,7 @@ describe('TaskHarnessEngine', () => {
     expect(store.tags['activeHarnessRunId']).toBe('');
   });
 
-  it('P2 生命周期修复：pause 的 suspend signal abort 不落 cancelled，保持 active 等待 resume', async () => {
-    const suspendController = new AbortController();
+  it('pause 的 suspend abort reason 不落 cancelled，保持 active 等待 resume', async () => {
     const controller = new AbortController();
     const store = new FakeHarnessStore();
     const persist = vi.spyOn(store, 'updateThreadMetadata');
@@ -324,14 +323,12 @@ describe('TaskHarnessEngine', () => {
         acceptanceCriteria: ['修改 src/example.ts 并通过测试'],
         maxContinuations: 5,
         signal: controller.signal,
-        suspendSignal: suspendController.signal,
         harnessRunId: 'hrun-suspend',
       },
     );
     await new Promise((resolve) => setTimeout(resolve, 10));
-    // 模拟 pause：suspend signal 先 abort，随后真正 abort 收口。
-    suspendController.abort();
-    controller.abort();
+    // 模拟 pause：registry 通过 abort reason 传入 suspend 意图。
+    controller.abort({ type: 'suanlizi-harness-suspend' });
     const result = await resultPromise;
 
     // suspend 意图：状态保持 active，activeHarnessRunId tag 保留，resume 可续跑。
@@ -353,7 +350,7 @@ describe('TaskHarnessEngine', () => {
     });
     expect(resumed.harnessRunId).toBe('hrun-suspend');
   });
-  it('P2 取消链：resumeHarness 的续跑循环 abort 后退出并 persist cancelled', async () => {
+  it('resumeHarness 的续跑循环 abort 后退出并 persist cancelled', async () => {
     const store = new FakeHarnessStore();
     const seeded = new GoalTracker('thread-harness-resume-abort', 'hrun-resume');
     seeded.setGoal('修改 src/example.ts 并通过测试', ['修改 src/example.ts 并通过测试'], {

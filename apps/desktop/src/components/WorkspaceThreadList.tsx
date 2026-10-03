@@ -110,7 +110,7 @@ export function WorkspaceThreadList({
     return (
       <section className="threadListPanel collapsed" aria-label={t(locale, 'conversations')}>
         <button className="sidebarBrandButton" type="button" title={t(locale, 'title')} onClick={onToggleSidebar}>
-          <span aria-hidden="true">N</span>
+          <svg aria-hidden="true" viewBox="0 0 16 16"><path d="M14.5001 8C14.5 9.28552 14.1188 10.5422 13.4045 11.611C12.6903 12.6799 11.6752 13.5129 10.4875 14.0049C9.29982 14.4968 7.99295 14.6255 6.73212 14.3747C5.4713 14.124 4.31314 13.505 3.4041 12.596C2.49514 11.687 1.87614 10.5288 1.62537 9.26798C1.37459 8.00716 1.50331 6.70028 1.99525 5.51261C2.48719 4.32494 3.32025 3.30981 4.3891 2.59557C5.45795 1.88134 6.71458 1.50008 8.0001 1.5C9.9001 1.5 11.7001 2.3 13.0001 3.6L14.5001 5.1" /><path d="M14.4999 1.5V5.1H10.8999" /></svg>
         </button>
         <button className="miniIconButton" type="button" title={t(locale, 'settings')} onClick={onOpenSettings}>
           <Icon name="gear" />
@@ -355,7 +355,6 @@ function ThreadModuleView({
             <ThreadRow
               activity={activity}
               active={thread.threadId === activeThreadId}
-              iconName="messages"
               remoteBindings={remoteBindingsForThread(remoteBindings, thread.threadId)}
               key={thread.threadId}
               locale={locale}
@@ -423,7 +422,6 @@ function WorkflowProjectList({
           <ThreadRow
             activity={threadActivityFor(thread, activeThreadId, busy, runningTurnIds)}
             active={thread.threadId === activeThreadId}
-            iconName="workflow"
             remoteBindings={remoteBindingsForThread(remoteBindings, thread.threadId)}
             key={thread.threadId}
             locale={locale}
@@ -508,7 +506,6 @@ function WorkspaceGroupView({
               <ThreadRow
                 activity={activity}
                 active={thread.threadId === activeThreadId}
-              iconName="messages"
                 remoteBindings={remoteBindingsForThread(remoteBindings, thread.threadId)}
                 key={thread.threadId}
                 locale={locale}
@@ -535,7 +532,6 @@ function WorkspaceGroupView({
 function ThreadRow({
   activity,
   active,
-  iconName,
   locale,
   remoteBindings,
   thread,
@@ -545,7 +541,6 @@ function ThreadRow({
 }: {
   activity: ThreadActivityState;
   active: boolean;
-  iconName: SidebarIconName;
   locale: Locale;
   remoteBindings: RemoteThreadBinding[];
   thread: ThreadMeta;
@@ -556,7 +551,6 @@ function ThreadRow({
   return (
     <div className={active ? 'workspaceThreadRow active' : 'workspaceThreadRow'}>
       <button className="workspaceThreadMain" type="button" title={thread.title} onClick={() => onSelectThread(thread.threadId)}>
-        <SidebarIcon className="row-icon" name={iconName} />
         <span className="workspaceThreadTitle">{thread.title || t(locale, 'untitled')}</span>
         <small className="workspaceThreadTimestamp" title={formatTimestamp(thread.updatedAt, locale)}>
           {formatTimestamp(thread.updatedAt, locale)}

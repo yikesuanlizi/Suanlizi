@@ -53,8 +53,6 @@ export interface KnowledgeChunkRecord {
   chunkId: string;
   snapshotId: string;
   documentId: string;
-  /** Legacy workspace discriminator. Ops knowledge is intentionally workspace-independent. */
-  workspaceId?: string;
   relativePath: string;
   ordinal: number;
   text: string;
@@ -118,13 +116,6 @@ export interface KnowledgeWikiPageRecord {
 export interface KnowledgeSnapshotRecord {
   snapshotId: string;
   knowledgeBaseId: string;
-  /** Legacy catalog metadata; personal knowledge is not partitioned by tenant. */
-  tenantId?: string;
-  /** `ops` snapshots are tenant-level and have no workspace binding. */
-  scope?: 'workspace' | 'ops';
-  sourceRoot?: string;
-  workspaceId?: string;
-  workspaceRoot?: string;
   status: 'building' | 'ready' | 'failed';
   immutable: true;
   contentHash: string;
@@ -150,20 +141,12 @@ export interface KnowledgeSnapshotRecord {
 
 export interface KnowledgeBaseRecord {
   knowledgeBaseId: string;
-  /** Legacy catalog metadata; personal knowledge is not partitioned by tenant. */
-  tenantId?: string;
-  /** Knowledge bases are independent entities. `workspace` is retained only for legacy catalogs. */
-  scope?: 'workspace' | 'ops';
-  sourceRoot?: string;
-  workspaceId?: string;
-  workspaceRoot?: string;
   name: string;
   status: 'active' | 'syncing' | 'blocked' | 'deleted';
   currentSnapshotId?: string;
   createdAt: string;
   updatedAt: string;
   version: number;
-  /** Canonical user-authorized directory. sourceRoot is retained for old catalogs only. */
   source?: { kind: 'directory'; grantId?: string; canonicalPath: string; authorizedAt: string };
 }
 
@@ -181,9 +164,6 @@ export interface KnowledgeSourceGrant {
 
 export interface KnowledgeQueryReceipt {
   receiptId: string;
-  /** Legacy receipt metadata; personal knowledge is not partitioned by tenant. */
-  tenantId?: string;
-  workspaceId?: string;
   knowledgeBaseIds: string[];
   snapshotIds: string[];
   normalizedQueryHash: string;
@@ -204,28 +184,22 @@ export interface CatalogState {
   jobs: Record<string, KnowledgeCompileJob>;
 }
 
+function tenantKey(): string {
+  return PERSONAL_CATALOG_KEY;
+}
+
 function emptyState(): CatalogState {
   return { bases: {}, snapshots: {}, receipts: {}, grants: {}, jobs: {} };
 }
 
-function tenantKey(store: ThreadStore, tenantId?: string, legacyWorkspace = false): string {
-  // Knowledge is personal in the single-user desktop. Keep tenantId on legacy
-  // records, but never create a separate knowledge catalog for a workspace or
-  // request header.
-  if (legacyWorkspace) return tenantId ?? store.tenantId ?? 'default';
-  void tenantId;
-  void store;
-  return PERSONAL_CATALOG_KEY;
-}
-
-export async function loadState(store: ThreadStore, tenantId?: string, legacyWorkspace = false): Promise<CatalogState> {
+export async function loadState(store: ThreadStore): Promise<CatalogState> {
   const sqlite = store.knowledgeSqlite;
   if (sqlite) {
     ensureKnowledgeSqliteSchema(sqlite);
-    const stored = readKnowledgeCatalog<CatalogState>(sqlite, tenantKey(store, tenantId, legacyWorkspace));
+    const stored = readKnowledgeCatalog<CatalogState>(sqlite, tenantKey());
     if (stored) return normalizeState(stored);
   }
-  const raw = await store.getSetting<Partial<CatalogState>>(`${STATE_KEY}:${tenantKey(store, tenantId, legacyWorkspace)}`);
+  const raw = await store.getSetting<Partial<CatalogState>>(`${STATE_KEY}:${tenantKey()}`);
   if (!raw || typeof raw !== 'object') return emptyState();
   return normalizeState({
     bases: raw.bases && typeof raw.bases === 'object' ? raw.bases as Record<string, KnowledgeBaseRecord> : {},
@@ -240,10 +214,7 @@ function normalizeState(state: CatalogState): CatalogState {
   return {
     bases: Object.fromEntries(Object.entries(state.bases ?? {}).map(([id, base]) => [id, {
       ...base,
-      sourceRoot: base.sourceRoot ?? base.workspaceRoot,
-      source: base.source ?? (base.sourceRoot || base.workspaceRoot
-        ? { kind: 'directory', canonicalPath: base.sourceRoot ?? base.workspaceRoot!, authorizedAt: base.createdAt }
-        : undefined),
+      source: base.source,
     }])),
     snapshots: Object.fromEntries(
       Object.entries(state.snapshots ?? {}).map(([id, snapshot]) => [id, {
@@ -264,7 +235,6 @@ function normalizeState(state: CatalogState): CatalogState {
           malformedFrontmatter: page.malformedFrontmatter ?? false,
         })),
         graph: snapshot.graph ?? { nodes: [], edges: [] },
-        sourceRoot: snapshot.sourceRoot ?? snapshot.workspaceRoot,
         chunks: snapshot.chunks ?? [],
         indexStats: snapshot.indexStats ?? {
           indexedFiles: snapshot.sources?.length ?? 0,
@@ -283,13 +253,13 @@ function normalizeState(state: CatalogState): CatalogState {
   };
 }
 
-export async function saveState(store: ThreadStore, state: CatalogState, tenantId?: string, legacyWorkspace = false, options: { rebuildIndex?: boolean; appendSnapshotId?: string; removeSnapshotIds?: string[] } = { rebuildIndex: false }): Promise<void> {
+export async function saveState(store: ThreadStore, state: CatalogState, options: { rebuildIndex?: boolean; appendSnapshotId?: string; removeSnapshotIds?: string[] } = { rebuildIndex: false }): Promise<void> {
   const sqlite = store.knowledgeSqlite;
   if (sqlite) {
-    writeKnowledgeCatalog(sqlite, tenantKey(store, tenantId, legacyWorkspace), state, options);
+    writeKnowledgeCatalog(sqlite, tenantKey(), state, options);
     return;
   }
-  await store.setSetting(`${STATE_KEY}:${tenantKey(store, tenantId, legacyWorkspace)}`, state);
+  await store.setSetting(`${STATE_KEY}:${tenantKey()}`, state);
 }
 
 export function hash(value: string): string {
@@ -309,10 +279,6 @@ function pruneSnapshots(state: CatalogState, knowledgeBaseId: string): string[] 
   const removed = snapshots.filter((snapshot) => !keep.has(snapshot.snapshotId)).map((snapshot) => snapshot.snapshotId);
   for (const snapshotId of removed) delete state.snapshots[snapshotId];
   return removed;
-}
-
-function workspaceIdFor(tenantId: string, workspaceRoot: string): string {
-  return `workspace_${hash(`${tenantId}:${workspaceRoot}`).slice(0, 24)}`;
 }
 
 export function isWithinRoot(root: string, candidate: string): boolean {
@@ -451,10 +417,7 @@ export async function ensureKnowledgeBaseFromSource(
   if (!canonicalRoot || !(await stat(canonicalRoot).catch(() => null))?.isDirectory()) {
     throw new Error('Knowledge source directory does not exist or is not a directory');
   }
-  const scope = options.scope;
-  const legacyWorkspace = scope === 'workspace';
-  const state = await loadState(store, tenantId, legacyWorkspace);
-  const workspaceId = scope === 'workspace' ? workspaceIdFor(tenantId, canonicalRoot) : undefined;
+  const state = await loadState(store);
   let base = options.knowledgeBaseId
     ? state.bases[options.knowledgeBaseId]
     : options.create
@@ -467,10 +430,6 @@ export async function ensureKnowledgeBaseFromSource(
     const now = new Date().toISOString();
     base = {
       knowledgeBaseId: `kb_${randomUUID()}`,
-      ...(legacyWorkspace ? { tenantId } : {}),
-      ...(scope ? { scope } : {}),
-      ...(legacyWorkspace ? { sourceRoot: canonicalRoot } : {}),
-      ...(workspaceId ? { workspaceId, workspaceRoot: canonicalRoot } : {}),
       source: options.sourceGrant
         ? { kind: 'directory', grantId: options.sourceGrant.grantId, canonicalPath: canonicalRoot, authorizedAt: options.sourceGrant.authorizedAt }
         : { kind: 'directory', canonicalPath: canonicalRoot, authorizedAt: new Date().toISOString() },
@@ -481,14 +440,10 @@ export async function ensureKnowledgeBaseFromSource(
       version: 1,
     };
     state.bases[base.knowledgeBaseId] = base;
-  } else if (scope === 'workspace' && base.workspaceId !== workspaceId) {
-    // Migrate catalog entries created before workspace scope was explicit.
-    base = { ...base, scope: base.scope ?? scope, sourceRoot: base.sourceRoot ?? canonicalRoot, workspaceId, workspaceRoot: canonicalRoot };
-    state.bases[base.knowledgeBaseId] = base;
   }
   if (options.sync === false && base.currentSnapshotId) {
     const current = state.snapshots[base.currentSnapshotId];
-    if (current?.status === 'ready' && current.immutable === true && current.sourceRoot === canonicalRoot) {
+    if (current?.status === 'ready' && current.immutable === true) {
       return { base, snapshot: current };
     }
   }
@@ -564,7 +519,6 @@ export async function ensureKnowledgeBaseFromSource(
         chunkId: `chunk_${hash(`${snapshotId}:${documentId}:${ordinal}`).slice(0, 20)}`,
         snapshotId,
         documentId,
-        ...(workspaceId ? { workspaceId } : {}),
         relativePath: file.relativePath,
         ordinal,
         text,
@@ -579,10 +533,6 @@ export async function ensureKnowledgeBaseFromSource(
   const snapshot: KnowledgeSnapshotRecord = {
     snapshotId,
     knowledgeBaseId: base.knowledgeBaseId,
-    ...(legacyWorkspace ? { tenantId } : {}),
-    sourceRoot: canonicalRoot,
-    ...(scope ? { scope } : {}),
-    ...(workspaceId ? { workspaceId, workspaceRoot: canonicalRoot } : {}),
     status: 'ready',
     immutable: true,
     contentHash: hash([
@@ -614,30 +564,20 @@ export async function ensureKnowledgeBaseFromSource(
   base.updatedAt = new Date().toISOString();
   base.version += 1;
   state.bases[base.knowledgeBaseId] = base;
-  await saveState(store, state, tenantId, legacyWorkspace, { appendSnapshotId: snapshotId, removeSnapshotIds: removedSnapshotIds });
+  await saveState(store, state, { appendSnapshotId: snapshotId, removeSnapshotIds: removedSnapshotIds });
   return { base, snapshot };
 }
 
-/** Legacy entry point: deliberately refuses to manufacture a default personal catalog. */
+/** Ops callers must select an explicit knowledge base. */
 export async function ensureOpsKnowledgeBase(
   store: ThreadStore,
   tenantId: string,
-  options: { sourceRoot?: string; sync?: boolean } = {},
+  options: object = {},
 ): Promise<{ base: KnowledgeBaseRecord; snapshot: KnowledgeSnapshotRecord }> {
   void store;
   void tenantId;
   void options;
   throw new Error('Knowledge base selection is required; no default Ops knowledge base is created');
-}
-
-/** @deprecated Legacy workspace compatibility only; personal callers must use createKnowledgeBase. */
-export async function ensureWorkspaceKnowledgeBase(
-  store: ThreadStore,
-  tenantId: string,
-  workspaceRoot: string,
-  options: { sync?: boolean } = {},
-): Promise<{ base: KnowledgeBaseRecord; snapshot: KnowledgeSnapshotRecord }> {
-  return ensureKnowledgeBaseFromSource(store, tenantId, workspaceRoot, { ...options, scope: 'workspace' });
 }
 
 /** Persist a directory selected by the native picker as an explicit local grant. */
@@ -651,7 +591,7 @@ export async function authorizeKnowledgeDirectory(
     throw new Error('Selected knowledge directory does not exist or is not a directory');
   }
   return withCatalogLock(store, async () => {
-    const state = await loadState(store, tenantId);
+    const state = await loadState(store);
     const existing = Object.values(state.grants).find((grant) => !grant.revokedAt && grant.canonicalPath === canonicalPath);
     if (existing) return existing;
     const grant: KnowledgeSourceGrant = {
@@ -661,7 +601,7 @@ export async function authorizeKnowledgeDirectory(
       authorizedAt: new Date().toISOString(),
     };
     state.grants[grant.grantId] = grant;
-    await saveState(store, state, tenantId, false, { rebuildIndex: false });
+    await saveState(store, state, { rebuildIndex: false });
     return grant;
   });
 }
@@ -677,7 +617,7 @@ export async function createKnowledgeBase(
   const sourceGrantId = input.sourceGrantId?.trim();
   if (!sourceGrantId) throw new Error('A native-picker directory grant is required');
   return withCatalogLock(store, async () => {
-    const state = await loadState(store, tenantId);
+    const state = await loadState(store);
     const grant = state.grants[sourceGrantId];
     if (!grant || grant.revokedAt) throw new Error('Knowledge directory authorization is unavailable');
     return ensureKnowledgeBaseFromSource(store, tenantId, grant.canonicalPath, { create: true, name, sourceGrant: grant });
@@ -691,14 +631,12 @@ export async function syncKnowledgeBase(
   knowledgeBaseId: string,
 ): Promise<{ base: KnowledgeBaseRecord; snapshot: KnowledgeSnapshotRecord }> {
   return withCatalogLock(store, async () => {
-    const state = await loadState(store, tenantId);
+    const state = await loadState(store);
     const base = state.bases[knowledgeBaseId];
     if (!base || base.status === 'deleted') throw new Error('KnowledgeBase not found');
     const grantId = base.source?.grantId;
     const grant = grantId ? state.grants[grantId] : undefined;
-    // Existing catalogs created before grants remain readable until users recreate
-    // them. New catalog entries cannot reach this compatibility path.
-    const sourceRoot = grant?.canonicalPath ?? (!grantId ? base.source?.canonicalPath ?? base.sourceRoot : undefined);
+    const sourceRoot = grant?.canonicalPath ?? (!grantId ? base.source?.canonicalPath : undefined);
     if (!sourceRoot || (grantId && (!grant || grant.revokedAt))) {
       throw new Error('Knowledge directory authorization is unavailable');
     }
@@ -715,19 +653,19 @@ export async function renameKnowledgeBase(store: ThreadStore, tenantId: string, 
   const nextName = name.trim();
   if (!nextName) throw new Error('KnowledgeBase name is required');
   return withCatalogLock(store, async () => {
-    const state = await loadState(store, tenantId);
+    const state = await loadState(store);
     const base = state.bases[knowledgeBaseId];
     if (!base || base.status === 'deleted') throw new Error('KnowledgeBase not found');
     const updated = { ...base, name: nextName, updatedAt: new Date().toISOString(), version: base.version + 1 };
     state.bases[knowledgeBaseId] = updated;
-    await saveState(store, state, tenantId);
+    await saveState(store, state);
     return updated;
   });
 }
 
 export async function deleteKnowledgeBase(store: ThreadStore, tenantId: string, knowledgeBaseId: string): Promise<void> {
   await withCatalogLock(store, async () => {
-    const state = await loadState(store, tenantId);
+    const state = await loadState(store);
     const base = state.bases[knowledgeBaseId];
     if (!base || base.status === 'deleted') throw new Error('KnowledgeBase not found');
     const deletedAt = new Date().toISOString();
@@ -737,34 +675,30 @@ export async function deleteKnowledgeBase(store: ThreadStore, tenantId: string, 
       }
     }
     state.bases[knowledgeBaseId] = { ...base, status: 'deleted', updatedAt: deletedAt, version: base.version + 1 };
-    await saveState(store, state, tenantId);
+    await saveState(store, state);
   });
 }
 
 export async function listKnowledgeBases(store: ThreadStore, tenantId?: string): Promise<KnowledgeBaseRecord[]> {
-  const state = await loadState(store, tenantId);
-  // The personal catalog has one owner and one list. Legacy scope metadata is
-  // intentionally not a selector: it cannot hide, choose, or reorder bases.
+  const state = await loadState(store);
+  // The personal catalog has one owner and one list.
   return Object.values(state.bases).filter((item) => item.status !== 'deleted');
 }
 
 export async function getKnowledgeBase(store: ThreadStore, id: string, tenantId?: string): Promise<KnowledgeBaseRecord | null> {
-  let state = await loadState(store, tenantId);
-  if (!state.bases[id]) state = await loadState(store, tenantId, true);
+  const state = await loadState(store);
   const base = state.bases[id] ?? null;
   return base && base.status !== 'deleted' ? base : null;
 }
 
 export async function getSnapshot(store: ThreadStore, id: string, tenantId?: string): Promise<KnowledgeSnapshotRecord | null> {
-  let state = await loadState(store, tenantId);
-  if (!state.snapshots[id]) state = await loadState(store, tenantId, true);
+  const state = await loadState(store);
   const snapshot = state.snapshots[id] ?? null;
   return snapshot ?? null;
 }
 
 export async function getKnowledgeReceipt(store: ThreadStore, id: string, tenantId?: string): Promise<KnowledgeQueryReceipt | null> {
-  let state = await loadState(store, tenantId);
-  if (!state.receipts[id]) state = await loadState(store, tenantId, true);
+  const state = await loadState(store);
   const receipt = state.receipts[id] ?? null;
   return receipt ?? null;
 }
@@ -774,8 +708,7 @@ export async function listKnowledgePages(
   knowledgeBaseId: string,
   tenantId: string,
 ): Promise<KnowledgeWikiPageRecord[]> {
-  let state = await loadState(store, tenantId);
-  if (!state.bases[knowledgeBaseId]) state = await loadState(store, tenantId, true);
+  const state = await loadState(store);
   const base = state.bases[knowledgeBaseId];
   if (!base || !base.currentSnapshotId) return [];
   const snapshot = state.snapshots[base.currentSnapshotId];
@@ -789,8 +722,7 @@ export async function getKnowledgePage(
   pageId: string,
   tenantId: string,
 ): Promise<(KnowledgeWikiPageRecord & { body: string }) | null> {
-  let state = await loadState(store, tenantId);
-  if (!state.bases[knowledgeBaseId]) state = await loadState(store, tenantId, true);
+  const state = await loadState(store);
   const base = state.bases[knowledgeBaseId];
   if (!base || !base.currentSnapshotId) return null;
   const snapshot = state.snapshots[base.currentSnapshotId];
@@ -811,12 +743,10 @@ export async function getKnowledgePage(
 export async function queryKnowledge(
   store: ThreadStore,
   tenantId: string,
-  input: { knowledgeBaseIds: string[]; snapshotIds?: string[]; workspaceId?: string; query: string; maxHits?: number },
+  input: { knowledgeBaseIds: string[]; snapshotIds?: string[]; query: string; maxHits?: number },
 ): Promise<{ receipt: KnowledgeQueryReceipt; hits: KnowledgeChunkRecord[] }> {
   return withCatalogLock(store, async () => {
-  let state = await loadState(store, tenantId);
-  const legacyWorkspace = !input.knowledgeBaseIds.some((id) => state.bases[id]);
-  if (legacyWorkspace) state = await loadState(store, tenantId, true);
+  const state = await loadState(store);
   const bases = input.knowledgeBaseIds.map((id) => state.bases[id]).filter((item): item is KnowledgeBaseRecord => Boolean(
     item && item.status !== 'deleted',
   ));
@@ -833,7 +763,7 @@ export async function queryKnowledge(
   const terms = tokenizeWikiQuery(input.query);
   const candidates = snapshotIds.flatMap((id) => state.snapshots[id]?.chunks ?? []);
   const ftsIds = terms.length > 0 && store.knowledgeSqlite
-    ? searchKnowledgeChunkIds(store.knowledgeSqlite, legacyWorkspace ? (tenantId ?? store.tenantId ?? 'default') : PERSONAL_CATALOG_KEY, terms)
+    ? searchKnowledgeChunkIds(store.knowledgeSqlite, PERSONAL_CATALOG_KEY, terms)
     : null;
   const indexedCandidates = ftsIds === null
     ? candidates
@@ -867,13 +797,10 @@ export async function queryKnowledge(
     })));
   const maxHits = Math.max(1, Math.min(input.maxHits ?? 20, 100));
   const selected = scored.slice(0, maxHits);
-  const workspaceId = legacyWorkspace ? (input.workspaceId ?? bases[0]?.workspaceId) : undefined;
   const indexVersions = snapshotIds.map((id) => state.snapshots[id]?.indexVersion).filter((value): value is string => Boolean(value));
   const indexVersion = indexVersions.length === 1 ? indexVersions[0] : hash(indexVersions.sort().join('|')).slice(0, 24);
   const receipt: KnowledgeQueryReceipt = {
     receiptId: `receipt_${randomUUID()}`,
-    ...(legacyWorkspace ? { tenantId } : {}),
-    ...(workspaceId ? { workspaceId } : {}),
     knowledgeBaseIds: bases.map((base) => base.knowledgeBaseId),
     snapshotIds,
     normalizedQueryHash: hash(terms.join(' ')),
@@ -886,7 +813,7 @@ export async function queryKnowledge(
     createdAt: new Date().toISOString(),
   };
   state.receipts[receipt.receiptId] = receipt;
-  await saveState(store, state, tenantId, legacyWorkspace, { rebuildIndex: false });
+  await saveState(store, state, { rebuildIndex: false });
   return { receipt, hits: selected.map((item) => item.chunk) };
   });
 }
@@ -900,14 +827,13 @@ export async function replayKnowledgeReceipt(
   tenantId: string,
   receiptId: string,
 ): Promise<{ receipt: KnowledgeQueryReceipt; hits: KnowledgeChunkRecord[] } | null> {
-  let state = await loadState(store, tenantId);
-  if (!state.receipts[receiptId]) state = await loadState(store, tenantId, true);
+  const state = await loadState(store);
   const receipt = state.receipts[receiptId];
-  if (!receipt || (receipt.workspaceId && receipt.tenantId && receipt.tenantId !== tenantId)) return null;
+  if (!receipt) return null;
   const chunksById = new Map<string, KnowledgeChunkRecord>();
   for (const snapshotId of receipt.snapshotIds) {
     const snapshot = state.snapshots[snapshotId];
-    if (!snapshot || snapshot.status !== 'ready' || (receipt.workspaceId && snapshot.workspaceId !== receipt.workspaceId)) continue;
+    if (!snapshot || snapshot.status !== 'ready') continue;
     for (const chunk of snapshot.chunks) chunksById.set(chunk.chunkId, chunk);
   }
   const hits = [...receipt.orderedHits]

@@ -79,7 +79,7 @@ import { shouldEnableWebSearch, type WebSearchMode } from './webSearchPolicy.js'
 import { parseMcpNamespacedToolName } from './mcpClient.js';
 import { buildPromptCacheShape, comparePromptCacheShape, type PromptCacheShape } from './cacheShape.js';
 import { buildFreshnessPreflightNotice } from './fileFreshnessPreflight.js';
-import { compactionOptionsForModelContext, contextBudgetForRunProfile, normalizeRunProfile, type RunProfile } from './runProfile.js';
+import { compactionOptionsForModelContext, contextBudget } from './compactionPolicy.js';
 import { leaksToolProtocol, validateThreadItemsForPersistence } from './modelOutput.js';
 import { SuanliziRuntimeError, isRecoverableStreamError, toSuanliziErrorInfo } from './runtimeError.js';
 import type { RunTurnOptions, HarnessItemFields, HarnessResult } from './harness/types.js';
@@ -216,6 +216,8 @@ export type AgentRoleProfiles = Record<string, AgentRoleProfile>;
 // ─── Config ─────────────────────────────────────────────────────────────────
 // 中文注释：运行时配置接口。
 export interface AgentConfig {
+  // 中文注释：工作区认证只看这个布尔标记；workspaceRoot 只是位置数据。
+  hasWorkspace?: boolean;
   // 中文注释：文件操作的工作区根目录。
   /** Workspace root for file operations. */
   workspaceRoot: string;
@@ -270,7 +272,6 @@ export interface AgentConfig {
   webProvider?: WebProviderRouterOptions;
   // 中文注释：运行时权衡配置（缓存命中稳定性或长期追踪可追溯性）。
   /** Runtime trade-off profile: cache hit stability or long-running traceability. */
-  runProfile?: RunProfile;
   /** Current model context window in tokens. Used for compaction pressure and UI pressure events. */
   modelContextTokens?: number;
   /** Maximum completion tokens reserved in the model context window. */
@@ -448,6 +449,7 @@ export class AgentLoop {
     this.i18n = createI18n(locale);
     this.stateManager = stateManager ?? ThreadStateManager.instance();
     this.config = {
+      hasWorkspace: config.hasWorkspace !== false,
       workspaceRoot: config.workspaceRoot,
       sandbox: config.sandbox,
       accessPolicy: buildRuntimeAccessPolicy(config.accessPolicy ?? {
@@ -474,7 +476,6 @@ export class AgentLoop {
       locale,
       webSearchMode: config.webSearchMode ?? 'auto',
       webProvider: config.webProvider ?? { provider: 'native_fetch' },
-      runProfile: normalizeRunProfile(config.runProfile),
       modelContextTokens: positiveInteger(config.modelContextTokens),
       modelMaxOutputTokens: positiveInteger(config.modelMaxOutputTokens),
       maxSubagents: config.maxSubagents ?? 4,
@@ -549,9 +550,8 @@ export class AgentLoop {
       providers.push(this.projectBrainProvider);
     }
 
-    const contextBudget = contextBudgetForRunProfile(this.config.runProfile);
     this._contextEngine = createContextEngine({
-      totalBudget: contextBudget,
+      totalBudget: contextBudget(),
       providers,
     });
 
@@ -663,7 +663,7 @@ export class AgentLoop {
         getExecutableSkillsBlock: () => buildSkillsIndexBlock(this.loadedSkills),
         getAgentContext: (threadId) => this.getOrCreateAgentContext(threadId),
         setAgentContext: (threadId, ctx) => this.agentContextByThread.set(threadId, ctx),
-        contextBudget,
+        contextBudget: contextBudget(),
         emit: (event) => this.emit(event),
       }),
       createExperienceWritebackMiddleware({
@@ -1176,7 +1176,7 @@ export class AgentLoop {
     const recentItems = await this.config.store.getRecentItems(threadId, 200);
     const thread = await this.config.store.getThread(threadId);
     const effectiveRecentItems = filterEffectiveCompactionItems(recentItems, thread?.tags?.compactedRanges);
-    const compactionOptions = compactionOptionsForModelContext(this.config.runProfile, this.config.modelContextTokens);
+    const compactionOptions = compactionOptionsForModelContext(this.config.modelContextTokens);
     const rolloutPressure = getCompactionPressure(effectiveRecentItems, compactionOptions);
     const estimatedTokens = rolloutPressure.estimatedTokens;
     const ratio = rolloutPressure.maxTokens > 0 ? estimatedTokens / rolloutPressure.maxTokens : 1;
@@ -1651,7 +1651,7 @@ export class AgentLoop {
 
   /**
    * 发 task.runtime.updated 事件（第 2 步事件骨架）。
-   * 只发 phase/status/runProfile 等元数据，不发完整 prompt。
+   * 只发 phase/status 等元数据，不发完整 prompt。
    * 普通 /turn 也会发，但不代表进入 harness —— harness 只是 runtime 底座里的约束/证据/验收层。
    * — English: emit task.runtime.updated skeleton event, metadata only.
    */
@@ -1667,7 +1667,6 @@ export class AgentLoop {
       turnId,
       phase,
       status,
-      runProfile: this.config.runProfile,
       timestamp: new Date().toISOString(),
     });
   }
@@ -1741,7 +1740,7 @@ export class AgentLoop {
         firstHumanMessage: truncateMonitorText(userInputToText(options.userInput)),
         startedAt: now,
         updatedAt: now,
-        metadata: { locale: this.config.locale, runProfile: this.config.runProfile },
+        metadata: { locale: this.config.locale },
       };
       await this.config.store.createRunRecord?.(record);
     });
@@ -2423,13 +2422,14 @@ export class AgentLoop {
 
   // ─── Public API ───────────────────────────────────────────────────────────
   /** Start a new thread. */
-  async startThread(title?: string, options: { workspaceRoot?: string; tags?: Record<string, string> } = {}): Promise<ThreadMeta> {
+  async startThread(title?: string, options: { hasWorkspace?: boolean; workspaceRoot?: string; tags?: Record<string, string> } = {}): Promise<ThreadMeta> {
     const threadId = generateId();
     const now = new Date().toISOString();
     const meta: ThreadMeta = {
       threadId,
       tenantId: this.config.tenantId,
       title: title ?? 'Untitled',
+      hasWorkspace: options.hasWorkspace ?? this.config.hasWorkspace !== false,
       workspaceRoot: options.workspaceRoot ?? this.config.workspaceRoot,
       status: 'active',
       turnCount: 0,
@@ -2867,8 +2867,7 @@ export class AgentLoop {
     threadId: ThreadId,
     options?: {
       signal?: AbortSignal;
-      suspendSignal?: AbortSignal;
-      harnessRunId?: string;
+            harnessRunId?: string;
       workflow?: import('./harness/taskHarness.js').HarnessWorkflowOptions;
     },
   ): Promise<HarnessResult> {
@@ -5108,8 +5107,7 @@ export class AgentLoop {
         hooks: this.config.hooks,
         locale: this.config.locale,
         webSearchMode: this.config.webSearchMode,
-        runProfile: this.config.runProfile,
-        accessPolicy: this.runtimeAccessPolicy,
+          accessPolicy: this.runtimeAccessPolicy,
         maxSubagents: activeRoleProfile?.maxSubagents ?? this.config.maxSubagents,
         maxSubagentDepth: activeRoleProfile?.maxSubagentDepth ?? this.config.maxSubagentDepth,
         spawnModelFactory: this.config.spawnModelFactory,
@@ -5762,7 +5760,7 @@ export class AgentLoop {
     const recentItems = await this.config.store.getRecentItems(threadId, 200);
     const thread = await this.config.store.getThread(threadId);
     const effectiveRecentItems = filterEffectiveCompactionItems(recentItems, thread?.tags?.compactedRanges);
-    const compactionOptions = compactionOptionsForModelContext(this.config.runProfile, this.config.modelContextTokens);
+    const compactionOptions = compactionOptionsForModelContext(this.config.modelContextTokens);
     const rolloutPressure = getCompactionPressure(effectiveRecentItems, compactionOptions);
     const visibleInputTokens = visibleMessages ? estimateRuntimeChatTokens(visibleMessages).inputTokens : 0;
     const estimatedTokens = Math.max(rolloutPressure.estimatedTokens, visibleInputTokens);
@@ -5955,7 +5953,6 @@ export class AgentLoop {
       userInput,
       workspaceRoot: this.config.workspaceRoot,
       locale: this.config.locale,
-      runProfile: this.config.runProfile,
       webSearchMode: this.config.webSearchMode,
       runtimeState: {
         ...runtimeState,
@@ -6393,7 +6390,7 @@ function normalizeFileChanges(data: unknown): Array<{
       ? candidate.hunks.flatMap((hunk) => {
           if (!hunk || typeof hunk !== 'object') return [];
           const typed = hunk as Record<string, unknown>;
-          // 中文注释：旧数据无 addedLinesContent/removedLinesContent 时降级为空数组
+          // 中文注释：缺失的行内容字段解析为空数组
           const addedLinesContent = Array.isArray(typed.addedLinesContent)
             ? typed.addedLinesContent.filter((line): line is string => typeof line === 'string')
             : [];
@@ -6668,14 +6665,8 @@ const BUILTIN_AGENT_ROLE_PROFILES: AgentRoleProfiles = {
       'Keep edits scoped, preserve unrelated user changes, and verify the behavior you changed.',
     ].join('\n'),
   },
-  worker: {
-    description: 'General-purpose worker role for compatibility with existing Suanlizi subagent prompts.',
-    instructions: 'Complete the delegated task independently under the inherited runtime constraints.',
-  },
-  subagent: {
-    description: 'Legacy Suanlizi subagent role alias.',
-    instructions: 'Complete the delegated task independently under the inherited runtime constraints.',
-  },
+
+
 };
 
 function normalizeAgentRoleProfiles(profiles?: AgentRoleProfiles): AgentRoleProfiles {

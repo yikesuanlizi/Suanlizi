@@ -22,7 +22,6 @@ function runtimeContext(overrides: Partial<RuntimeTurnContext> = {}): RuntimeTur
     userInput: { type: 'text', text: 'hello' },
     workspaceRoot: process.cwd(),
     locale: 'zh',
-    runProfile: 'runtime_os',
     webSearchMode: 'auto',
     runtimeState: { threadId: 'thread-middleware', status: 'idle', resumable: false, stale: false, checkpoint: null },
     checkpoint: {

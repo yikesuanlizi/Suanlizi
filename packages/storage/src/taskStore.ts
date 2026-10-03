@@ -707,6 +707,9 @@ function rowToTask(row: Record<string, unknown>): Task {
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
     version: Number(row.version ?? 0),
+    origin: row.origin === 'explicit_goal' || row.origin === 'explicit_workflow'
+      ? row.origin
+      : 'harness_shadow',
   };
   const currentRunId = row.current_run_id;
   if (currentRunId != null) task.currentRunId = String(currentRunId);
@@ -716,10 +719,6 @@ function rowToTask(row: Record<string, unknown>): Task {
   if (pendingInput) task.pendingInput = pendingInput;
   const completedAt = row.completed_at;
   if (completedAt != null) task.completedAt = String(completedAt);
-  // 旧库无来源/非法来源只按影子记录解释，避免其泄漏进用户入口的运行观察。
-  task.origin = row.origin === 'explicit_goal' || row.origin === 'explicit_workflow'
-    ? row.origin
-    : 'harness_shadow';
   const interactionMode = row.interaction_mode;
   if (interactionMode != null) {
     task.interactionMode = interactionMode as NonNullable<Task['interactionMode']>;

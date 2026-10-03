@@ -15,7 +15,6 @@ export {
   readFileTool,
   writeFileTool,
   shellCommandTool,
-  gitNexusAnalyzeTool,
   searchContentTool,
   webSearchTool,
   webFetchTool,

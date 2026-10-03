@@ -6,7 +6,6 @@ describe('executionMode', () => {
     expect(HIGH_AUTONOMY_OVERRIDES).toEqual({
       permissions: 'danger_full_access',
       reasoningEffort: 'max',
-      runProfile: 'runtime_os',
     });
   });
 

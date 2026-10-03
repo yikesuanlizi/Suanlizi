@@ -69,6 +69,7 @@ function routePath(path: string) {
 }
 
 const runConfig: AgentRunConfig = {
+  hasWorkspace: true,
   workspaceRoot: 'E:\\langchain',
   provider: 'openai',
   model: 'test',
@@ -86,7 +87,6 @@ const runConfig: AgentRunConfig = {
   webProvider: 'native_fetch',
   webProviderKeySource: 'config',
   reasoningEffort: 'medium',
-  runProfile: 'runtime_os',
   themeMode: 'light',
   memoryEnabled: true,
   autoExtractMemories: true,
@@ -101,7 +101,6 @@ const runConfig: AgentRunConfig = {
   episodeColdAfterDays: DEFAULT_EPISODE_MEMORY_SETTINGS.episodeColdAfterDays,
   episodeFtsCandidateLimit: DEFAULT_EPISODE_MEMORY_SETTINGS.episodeFtsCandidateLimit,
   episodeRerankEnabled: DEFAULT_EPISODE_MEMORY_SETTINGS.episodeRerankEnabled,
-  systemMonitorEnabled: false,
       locale: 'zh',
       maxIterations: 100,
 };
@@ -647,7 +646,7 @@ describe('bot route', () => {
       segments: path.segments,
       store: store as unknown as ThreadStore,
       getDefaultRunConfig: async () => runConfig,
-      getThreadRunConfig: async () => ({ ...runConfig, model: 'thread-model', permissions: 'read_only', runProfile: 'cache_first' }),
+      getThreadRunConfig: async () => ({ ...runConfig, model: 'thread-model', permissions: 'read_only' }),
       createAgent,
       createWeixinClient: () => ({ sendMessage: vi.fn() } as never),
       now: () => '2026-06-11T00:00:00.000Z',
@@ -657,7 +656,6 @@ describe('bot route', () => {
     expect(createAgent).toHaveBeenCalledWith(expect.objectContaining({
       model: 'thread-model',
       permissions: 'read_only',
-      runProfile: 'cache_first',
     }));
   });
 

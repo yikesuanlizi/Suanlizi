@@ -20,15 +20,13 @@ export type SecretSource = 'config' | 'env';
 export type ReasoningEffort = 'no' | 'medium' | 'high' | 'xhigh' | 'max';
 // 界面主题：深色 / 浅色 / 跟随系统
 // Chinese translation: UI theme: dark / light / follow system.
-export type ThemeMode = 'dark' | 'light' | 'system';
-// 运行模式已收敛为单一策略：不再让用户在「缓存优先 / 长运行」之间选，
-// 压缩时机改由「上下文压缩阈值」表达。这里保留 RunProfile 仅为旧配置兼容。
-export type RunProfile = 'cache_first' | 'runtime_os';
-// 用户头像预设 id，最后一个为自定义上传
+export type ThemeMode = 'dark' | 'light' | 'system';// 用户头像预设 id，最后一个为自定义上传
 // Chinese translation: User avatar preset IDs, the last one is for custom uploads.
 export type UserAvatarId = 'asteroid' | 'rocket' | 'owl' | 'crystal' | 'paper-plane' | 'fox' | 'lightning' | 'mushroom' | 'custom';
 
 export interface RunConfig {
+  /** 工作区认证只看这个布尔标记；workspaceRoot 只是位置数据。 */
+  hasWorkspace: boolean;
   workspaceRoot: string;
   provider: string;
   model: string;
@@ -48,7 +46,9 @@ export interface RunConfig {
   modelContextTokens?: number;
   modelMaxOutputTokens?: number;
   modelTimeoutSeconds: number;
-  runProfile: RunProfile;
+  streamIdleTimeoutSeconds: number;
+  eventStreamReconnectLimit: number;
+  offlineReconnectLimit: number;
   /** 上下文压缩阈值：占模型上下文窗口的比例（0.3 ~ 0.95）。 */
   compactionThreshold?: number;
   memoryEnabled: boolean;
@@ -66,8 +66,7 @@ export interface RunConfig {
   episodeRerankEnabled: boolean;
   /** Whether system monitor (CPU/memory/disk) throttling is enabled. */
   /** 中文：是否启用系统监控（CPU/内存/磁盘）限流 */
-  systemMonitorEnabled: boolean;
-  /** 仅控制桌面监控抽屉是否可见，不会传给 runtime 作为采样开关。 */
+    /** 仅控制桌面监控抽屉是否可见，不会传给 runtime 作为采样开关。 */
   monitorPanelVisible: boolean;
   systemMonitorSamplingEnabled: boolean;
   systemMonitorLogRecordingEnabled: boolean;
@@ -81,17 +80,18 @@ export interface RunConfig {
     memSevere: number;
     diskSevereBytes: number;
   };
-  maxConcurrency: number;
-  toolTimeoutSeconds: number;
+    toolTimeoutSeconds: number;
   memoryThresholdPercent: number;
   throttleNewTasks: boolean;
   themeMode: ThemeMode;
+  /** 是否全局固定右侧活动/智能体标签；未设置时用对话级 pin 状态。 */
+  workbenchPinnedTabs?: boolean;
   userAvatarId: UserAvatarId;
   customUserAvatarDataUrl: string;
   locale: Locale;
 }
 
-export const RUN_CONFIG_STORAGE_KEY = 'nexus.config';
+export const RUN_CONFIG_STORAGE_KEY = 'suanlizi.config';
 
 const USER_FIELDS: Array<keyof RunConfig> = [
   'provider',
@@ -99,6 +99,7 @@ const USER_FIELDS: Array<keyof RunConfig> = [
   'baseUrl',
   'permissions',
   'locale',
+  'hasWorkspace',
   'workspaceRoot',
   'dataDir',
   'skillsRoot',
@@ -113,7 +114,9 @@ const USER_FIELDS: Array<keyof RunConfig> = [
   'modelContextTokens',
   'modelMaxOutputTokens',
   'modelTimeoutSeconds',
-  'runProfile',
+  'streamIdleTimeoutSeconds',
+  'eventStreamReconnectLimit',
+  'offlineReconnectLimit',
   'compactionThreshold',
   'memoryEnabled',
   'autoExtractMemories',
@@ -128,17 +131,16 @@ const USER_FIELDS: Array<keyof RunConfig> = [
   'episodeColdAfterDays',
   'episodeFtsCandidateLimit',
   'episodeRerankEnabled',
-  'systemMonitorEnabled',
   'monitorPanelVisible',
   'systemMonitorSamplingEnabled',
   'systemMonitorLogRecordingEnabled',
   'systemMonitorGuardEnabled',
   'systemMonitorThresholds',
-  'maxConcurrency',
   'toolTimeoutSeconds',
   'memoryThresholdPercent',
   'throttleNewTasks',
   'themeMode',
+  'workbenchPinnedTabs',
   'userAvatarId',
   'customUserAvatarDataUrl',
 ];
@@ -148,6 +150,7 @@ export function mergeRunConfigDefaults(
   current: Partial<RunConfig>,
 ): RunConfig {
   const merged = {
+    hasWorkspace: true,
     memoryEnabled: true,
     autoExtractMemories: true,
     useColdMemories: true,
@@ -161,7 +164,6 @@ export function mergeRunConfigDefaults(
     episodeColdAfterDays: 7,
     episodeFtsCandidateLimit: 40,
     episodeRerankEnabled: false,
-    systemMonitorEnabled: false,
     monitorPanelVisible: true,
     systemMonitorSamplingEnabled: false,
     systemMonitorLogRecordingEnabled: false,
@@ -180,16 +182,15 @@ export function mergeRunConfigDefaults(
     maxParallelReadonlyTools: 2,
     maxSubagentDepth: 1,
     modelTimeoutSeconds: 120,
-    maxConcurrency: 4,
+    streamIdleTimeoutSeconds: 300,
+    eventStreamReconnectLimit: 5,
+    offlineReconnectLimit: 5,
     toolTimeoutSeconds: 120,
     memoryThresholdPercent: 85,
     throttleNewTasks: true,
     ...current,
     ...serverDefaults,
   } as RunConfig;
-  if (current.maxActiveTasks === undefined && (current.maxConcurrency ?? serverDefaults?.maxConcurrency) !== undefined) {
-    merged.maxActiveTasks = current.maxConcurrency ?? serverDefaults?.maxConcurrency ?? merged.maxActiveTasks;
-  }
   for (const key of USER_FIELDS) {
     // Model limits are persisted by the API and must not be replaced by a
     // stale value restored from a previous thread/localStorage snapshot.

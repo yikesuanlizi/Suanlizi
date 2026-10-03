@@ -142,6 +142,9 @@ function inferErrorInfo(raw: string): SuanliziErrorInfo | undefined {
   if (/econnreset|econnrefused|enotfound|fetch\s+failed|network|socket|connection\s+(?:refused|reset|closed|failed)/.test(lower)) {
     return { kind: 'HttpConnectionFailed', reason: 'network', httpStatusCode: status };
   }
+  if (/MODEL_STREAM_IDLE_TIMEOUT|stream was idle|stream idle timeout/.test(lower)) {
+    return { kind: 'ResponseStreamDisconnected', reason: 'timeout' };
+  }
   if (/stream\s+(?:disconnected|closed|ended)|connection\s+.*stream/.test(lower)) {
     return { kind: 'ResponseStreamDisconnected', httpStatusCode: status };
   }

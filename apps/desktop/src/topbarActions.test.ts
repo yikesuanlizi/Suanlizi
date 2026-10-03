@@ -25,7 +25,7 @@ describe('topbar actions', () => {
     expect(source).not.toContain('disabled={!threadId} title={config.locale === \'zh\' ? \'任务监控\' : \'Task monitor\'}');
   });
 
-  it('does not wire the legacy harness monitor into normal app chrome', () => {
+  it('does not wire the harness monitor into normal app chrome', () => {
     const source = readFileSync(join(here, 'main.tsx'), 'utf-8');
     expect(source).not.toContain('HarnessMonitor');
     expect(source).not.toContain('useHarnessMonitor');
@@ -55,6 +55,6 @@ describe('topbar actions', () => {
 
     expect(dialogs).toContain('核心功能概览');
     expect(dialogs).toContain('运行配置说明');
-    expect(dialogs).toContain('GitNexus');
+    expect(dialogs).toContain('使用小贴士');
   });
 });

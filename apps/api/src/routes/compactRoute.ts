@@ -60,7 +60,6 @@ export async function handleCompactThread(options: {
     if (serverContext) contextTokens = contextTokens ? Math.min(contextTokens, serverContext) : serverContext;
   }
   const compactionOptions = compactionOptionsForModelContext(
-    config.runProfile,
     contextTokens,
   );
   const thread = await options.store.getThread(options.threadId);
